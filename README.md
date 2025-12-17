@@ -1,4 +1,4 @@
-# summarize
+# summarize 🗜️ — Link → clean text → summary. One command.
 
 Personal URL summarization CLI + a small reusable library.
 
