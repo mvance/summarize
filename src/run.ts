@@ -191,6 +191,23 @@ function isUnsupportedAttachmentError(error: unknown): boolean {
   return false
 }
 
+function assertProviderSupportsAttachment({
+  provider,
+  modelId,
+  attachment,
+}: {
+  provider: 'xai' | 'openai' | 'google' | 'anthropic'
+  modelId: string
+  attachment: { part: { type: string }; mediaType: string }
+}) {
+  // xAI via AI SDK currently supports image parts, but not generic file parts (e.g. PDFs).
+  if (provider === 'xai' && attachment.part.type === 'file') {
+    throw new Error(
+      `Model ${modelId} does not support attaching files of type ${attachment.mediaType}. Try a different --model (e.g. google/gemini-2.0-flash).`
+    )
+  }
+}
+
 function attachRichHelp(
   program: Command,
   env: Record<string, string | undefined>,
@@ -644,6 +661,12 @@ export async function runCli(
       )
     }
 
+    assertProviderSupportsAttachment({
+      provider: parsedModel.provider,
+      modelId: parsedModel.canonical,
+      attachment: { part: attachment.part, mediaType: attachment.mediaType },
+    })
+
     const summaryLengthTarget =
       lengthArg.kind === 'preset'
         ? lengthArg.preset
@@ -704,22 +727,32 @@ export async function runCli(
         : null
       let lastFrameAtMs = 0
       try {
-        for await (const delta of streamResult.textStream) {
-          streamed += delta
-          if (shouldStreamSummaryToStdout) {
-            stdout.write(delta)
-            continue
-          }
+        try {
+          for await (const delta of streamResult.textStream) {
+            streamed += delta
+            if (shouldStreamSummaryToStdout) {
+              stdout.write(delta)
+              continue
+            }
 
-          if (liveRenderer) {
-            const now = Date.now()
-            const due = now - lastFrameAtMs >= 120
-            const hasNewline = delta.includes('\n')
-            if (hasNewline || due) {
-              liveRenderer.render(streamed)
-              lastFrameAtMs = now
+            if (liveRenderer) {
+              const now = Date.now()
+              const due = now - lastFrameAtMs >= 120
+              const hasNewline = delta.includes('\n')
+              if (hasNewline || due) {
+                liveRenderer.render(streamed)
+                lastFrameAtMs = now
+              }
             }
           }
+        } catch (error) {
+          if (isUnsupportedAttachmentError(error)) {
+            throw new Error(
+              `Model ${parsedModel.canonical} does not support attaching files of type ${attachment.mediaType}. Try a different --model (e.g. google/gemini-2.0-flash).`,
+              { cause: error }
+            )
+          }
+          throw error
         }
 
         const trimmed = streamed.trim()

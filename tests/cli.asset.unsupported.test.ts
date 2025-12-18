@@ -14,11 +14,24 @@ function noopStream() {
   })
 }
 
-const streamTextMock = vi.fn(() => {
+function createFailingStream(): AsyncIterable<string> {
   const err = new Error("'file part media type application/pdf' functionality not supported.")
   ;(err as unknown as { name?: string }).name = 'UnsupportedFunctionalityError'
-  throw err
-})
+  return {
+    async *[Symbol.asyncIterator]() {
+      throw err
+    },
+  }
+}
+
+const streamTextMock = vi.fn(() => ({
+  textStream: createFailingStream(),
+  totalUsage: Promise.resolve({
+    promptTokens: 10,
+    completionTokens: 0,
+    totalTokens: 10,
+  }),
+}))
 
 const createXaiMock = vi.fn(() => {
   return (_modelId: string) => ({})
@@ -40,7 +53,7 @@ describe('cli asset inputs (unsupported by provider)', () => {
     const pdfPath = join(root, 'test.pdf')
     writeFileSync(pdfPath, Buffer.from('%PDF-1.7\n%âãÏÓ\n1 0 obj\n<<>>\nendobj\n', 'utf8'))
 
-    await expect(
+    const run = () =>
       runCli(
         ['--model', 'xai/grok-4-fast-non-reasoning', '--timeout', '2s', '--stream', 'on', pdfPath],
         {
@@ -52,21 +65,9 @@ describe('cli asset inputs (unsupported by provider)', () => {
           stderr: noopStream(),
         }
       )
-    ).rejects.toThrow(/does not support attaching files/i)
 
-    await expect(
-      runCli(
-        ['--model', 'xai/grok-4-fast-non-reasoning', '--timeout', '2s', '--stream', 'on', pdfPath],
-        {
-          env: { XAI_API_KEY: 'test' },
-          fetch: vi.fn(async () => {
-            throw new Error('unexpected fetch')
-          }) as unknown as typeof fetch,
-          stdout: noopStream(),
-          stderr: noopStream(),
-        }
-      )
-    ).rejects.toThrow(/application\/pdf/i)
+    await expect(run()).rejects.toThrow(/does not support attaching files/i)
+    await expect(run()).rejects.toThrow(/application\/pdf/i)
+    expect(streamTextMock).toHaveBeenCalledTimes(0)
   })
 })
-

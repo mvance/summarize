@@ -21,6 +21,11 @@ export function handlePipeErrors(stream: NodeJS.WritableStream, exit: (code: num
   })
 }
 
+function stripAnsi(input: string): string {
+  // Minimal, good-enough ANSI stripper for error output. We only use this for non-verbose errors.
+  return input.replace(/\u001b\[[0-9;?]*[a-zA-Z]/g, '').replace(/\u001b\][^\u0007]*(\u0007|\u001b\\)/g, '')
+}
+
 export async function runCliMain({
   argv,
   env,
@@ -38,9 +43,8 @@ export async function runCliMain({
   try {
     await runCli(argv, { env, fetch, stdout, stderr })
   } catch (error: unknown) {
-    if ((stderr as unknown as { isTTY?: boolean }).isTTY) {
-      stderr.write('\n')
-    }
+    const isTty = Boolean((stderr as unknown as { isTTY?: boolean }).isTTY)
+    if (isTty) stderr.write('\n')
 
     if (verbose && error instanceof Error && typeof error.stack === 'string') {
       stderr.write(`${error.stack}\n`)
@@ -54,7 +58,7 @@ export async function runCliMain({
 
     const message =
       error instanceof Error ? error.message : error ? String(error) : 'Unknown error'
-    stderr.write(`${message}\n`)
+    stderr.write(`${stripAnsi(message)}\n`)
     setExitCode(1)
   }
 }
