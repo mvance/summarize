@@ -7,7 +7,14 @@ export type TranscriptSource =
   | 'unavailable'
   | 'unknown'
 
+export const CACHE_MODES = ['default', 'bypass'] as const
+export type CacheMode = (typeof CACHE_MODES)[number]
+
+export type CacheStatus = 'hit' | 'miss' | 'expired' | 'bypassed' | 'fallback' | 'unknown'
+
 export interface TranscriptDiagnostics {
+  cacheMode: CacheMode
+  cacheStatus: CacheStatus
   textProvided: boolean
   provider: TranscriptSource | null
   attemptedProviders: TranscriptSource[]
@@ -17,6 +24,8 @@ export interface TranscriptDiagnostics {
 export interface FirecrawlDiagnostics {
   attempted: boolean
   used: boolean
+  cacheMode: CacheMode
+  cacheStatus: CacheStatus
   notes?: string | null
 }
 

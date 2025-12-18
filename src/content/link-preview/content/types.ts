@@ -1,12 +1,21 @@
-import type { ContentFetchDiagnostics, TranscriptDiagnostics, TranscriptSource } from '../types.js'
+import type {
+  CacheMode,
+  ContentFetchDiagnostics,
+  TranscriptDiagnostics,
+  TranscriptSource,
+} from '../types.js'
 
 export const DEFAULT_TIMEOUT_MS = 120_000
+export const DEFAULT_MAX_CONTENT_CHARACTERS = 8000
+export const DEFAULT_CACHE_MODE: CacheMode = 'default'
 export type YoutubeTranscriptMode = 'auto' | 'web' | 'apify'
 export type FirecrawlMode = 'off' | 'auto' | 'always'
 export type ContentFormat = 'text' | 'markdown'
 
 export interface FetchLinkContentOptions {
   timeoutMs?: number
+  maxCharacters?: number
+  cacheMode?: CacheMode
   youtubeTranscript?: YoutubeTranscriptMode
   firecrawl?: FirecrawlMode
   format?: ContentFormat
@@ -24,6 +33,7 @@ export interface ExtractedLinkContent {
   description: string | null
   siteName: string | null
   content: string
+  truncated: boolean
   totalCharacters: number
   wordCount: number
   transcriptCharacters: number | null
@@ -35,6 +45,7 @@ export interface ExtractedLinkContent {
 export interface FinalizationArguments {
   url: string
   baseContent: string
+  maxCharacters: number | null
   title: string | null
   description: string | null
   siteName: string | null

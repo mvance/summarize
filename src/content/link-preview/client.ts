@@ -1,6 +1,6 @@
 import { fetchLinkContent } from './content/index.js'
 import type { ExtractedLinkContent, FetchLinkContentOptions } from './content/types.js'
-import type { ConvertHtmlToMarkdown, ScrapeWithFirecrawl } from './deps.js'
+import type { ConvertHtmlToMarkdown, ScrapeWithFirecrawl, TranscriptCache } from './deps.js'
 
 export interface LinkPreviewClient {
   fetchLinkContent(url: string, options?: FetchLinkContentOptions): Promise<ExtractedLinkContent>
@@ -11,6 +11,7 @@ export interface LinkPreviewClientOptions {
   scrapeWithFirecrawl?: ScrapeWithFirecrawl | null
   apifyApiToken?: string | null
   convertHtmlToMarkdown?: ConvertHtmlToMarkdown | null
+  transcriptCache?: TranscriptCache | null
 }
 
 export function createLinkPreviewClient(options: LinkPreviewClientOptions = {}): LinkPreviewClient {
@@ -19,6 +20,7 @@ export function createLinkPreviewClient(options: LinkPreviewClientOptions = {}):
   const scrape: ScrapeWithFirecrawl | null = options.scrapeWithFirecrawl ?? null
   const apifyApiToken = typeof options.apifyApiToken === 'string' ? options.apifyApiToken : null
   const convertHtmlToMarkdown: ConvertHtmlToMarkdown | null = options.convertHtmlToMarkdown ?? null
+  const transcriptCache: TranscriptCache | null = options.transcriptCache ?? null
 
   return {
     fetchLinkContent: (url: string, contentOptions?: FetchLinkContentOptions) =>
@@ -27,6 +29,7 @@ export function createLinkPreviewClient(options: LinkPreviewClientOptions = {}):
         scrapeWithFirecrawl: scrape,
         apifyApiToken,
         convertHtmlToMarkdown,
+        transcriptCache,
       }),
   }
 }

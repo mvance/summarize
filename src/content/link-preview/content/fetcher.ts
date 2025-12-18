@@ -1,6 +1,6 @@
 import type { FirecrawlScrapeResult, ScrapeWithFirecrawl } from '../deps.js'
 import { isYouTubeUrl } from '../transcript/utils.js'
-import type { FirecrawlDiagnostics } from '../types.js'
+import type { CacheMode, FirecrawlDiagnostics } from '../types.js'
 
 import { appendNote } from './utils.js'
 
@@ -60,11 +60,15 @@ export async function fetchHtmlDocument(
 export async function fetchWithFirecrawl(
   url: string,
   scrapeWithFirecrawl: ScrapeWithFirecrawl | null,
-  { timeoutMs }: { timeoutMs?: number } = {}
+  options: { timeoutMs?: number; cacheMode?: CacheMode } = {}
 ): Promise<FirecrawlFetchResult> {
+  const timeoutMs = options.timeoutMs
+  const cacheMode: CacheMode = options.cacheMode ?? 'default'
   const diagnostics: FirecrawlDiagnostics = {
     attempted: false,
     used: false,
+    cacheMode,
+    cacheStatus: cacheMode === 'bypass' ? 'bypassed' : 'unknown',
     notes: null,
   }
 
@@ -81,7 +85,7 @@ export async function fetchWithFirecrawl(
   diagnostics.attempted = true
 
   try {
-    const payload = await scrapeWithFirecrawl(url, { timeoutMs })
+    const payload = await scrapeWithFirecrawl(url, { timeoutMs, cacheMode })
     if (!payload) {
       diagnostics.notes = appendNote(diagnostics.notes, 'Firecrawl returned no content payload')
       return { payload: null, diagnostics }

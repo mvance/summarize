@@ -4,6 +4,8 @@ export {
   type LinkPreviewClientOptions,
 } from './link-preview/client.js'
 export {
+  DEFAULT_CACHE_MODE,
+  DEFAULT_MAX_CONTENT_CHARACTERS,
   DEFAULT_TIMEOUT_MS,
   type ExtractedLinkContent,
   type FetchLinkContentOptions,
@@ -12,5 +14,6 @@ export type {
   FirecrawlScrapeResult,
   LinkPreviewDeps,
   ScrapeWithFirecrawl,
+  TranscriptCache,
 } from './link-preview/deps.js'
 export type { TranscriptSource } from './link-preview/types.js'

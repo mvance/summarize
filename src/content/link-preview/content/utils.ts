@@ -1,6 +1,8 @@
-import type { TranscriptDiagnostics } from '../types.js'
-import { normalizeCandidate, normalizeForPrompt } from './cleaner.js'
+import type { CacheMode, TranscriptDiagnostics } from '../types.js'
+import { applyContentBudget, normalizeCandidate, normalizeForPrompt } from './cleaner.js'
 import {
+  DEFAULT_CACHE_MODE,
+  DEFAULT_MAX_CONTENT_CHARACTERS,
   DEFAULT_TIMEOUT_MS,
   type ExtractedLinkContent,
   type FetchLinkContentOptions,
@@ -12,6 +14,21 @@ import {
 const WWW_PREFIX_PATTERN = /^www\./i
 const TRANSCRIPT_LINE_SPLIT_PATTERN = /\r?\n/
 const WORD_SPLIT_PATTERN = /\s+/g
+
+export function resolveCacheMode(options?: FetchLinkContentOptions) {
+  return options?.cacheMode ?? DEFAULT_CACHE_MODE
+}
+
+export function resolveMaxCharacters(options?: FetchLinkContentOptions): number | null {
+  const candidate = options?.maxCharacters
+  if (typeof candidate !== 'number' || !Number.isFinite(candidate) || candidate <= 0) {
+    return null
+  }
+  if (candidate <= DEFAULT_MAX_CONTENT_CHARACTERS) {
+    return DEFAULT_MAX_CONTENT_CHARACTERS
+  }
+  return Math.floor(candidate)
+}
 
 export function resolveTimeoutMs(options?: FetchLinkContentOptions): number {
   const candidate = options?.timeoutMs
@@ -82,37 +99,50 @@ export function summarizeTranscript(transcriptText: string | null) {
 }
 
 export function ensureTranscriptDiagnostics(
-  resolution: TranscriptResolution
+  resolution: TranscriptResolution,
+  cacheMode: CacheMode
 ): TranscriptDiagnostics {
   if (resolution.diagnostics) {
     return resolution.diagnostics
   }
   const hasText = typeof resolution.text === 'string' && resolution.text.length > 0
+  const cacheStatus = cacheMode === 'bypass' ? 'bypassed' : hasText ? 'miss' : 'unknown'
   return {
+    cacheMode,
+    cacheStatus,
     textProvided: hasText,
     provider: resolution.source,
     attemptedProviders: resolution.source ? [resolution.source] : [],
+    notes: cacheMode === 'bypass' ? 'Cache bypass requested' : null,
   }
 }
 
 export function finalizeExtractedLinkContent({
   url,
   baseContent,
+  maxCharacters,
   title,
   description,
   siteName,
   transcriptResolution,
   diagnostics,
 }: FinalizationArguments): ExtractedLinkContent {
-  const content = normalizeForPrompt(baseContent)
-  const totalCharacters = content.length
-  const wordCount =
-    content.length > 0
-      ? content
-          .split(WORD_SPLIT_PATTERN)
-          .map((value) => value.trim())
-          .filter((value) => value.length > 0).length
-      : 0
+  const normalized = normalizeForPrompt(baseContent)
+  const { content, truncated, totalCharacters, wordCount } =
+    typeof maxCharacters === 'number'
+      ? applyContentBudget(normalized, maxCharacters)
+      : {
+          content: normalized,
+          truncated: false,
+          totalCharacters: normalized.length,
+          wordCount:
+            normalized.length > 0
+              ? normalized
+                  .split(WORD_SPLIT_PATTERN)
+                  .map((value) => value.trim())
+                  .filter((value) => value.length > 0).length
+              : 0,
+        }
   const { transcriptCharacters, transcriptLines } = summarizeTranscript(transcriptResolution.text)
 
   return {
@@ -121,6 +151,7 @@ export function finalizeExtractedLinkContent({
     description,
     siteName,
     content,
+    truncated,
     totalCharacters,
     wordCount,
     transcriptCharacters,

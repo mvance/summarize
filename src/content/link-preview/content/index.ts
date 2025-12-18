@@ -13,7 +13,9 @@ import {
   ensureTranscriptDiagnostics,
   finalizeExtractedLinkContent,
   pickFirstText,
+  resolveCacheMode,
   resolveFirecrawlMode,
+  resolveMaxCharacters,
   resolveTimeoutMs,
   safeHostname,
   selectBaseContent,
@@ -59,6 +61,8 @@ export async function fetchLinkContent(
   deps: LinkPreviewDeps
 ): Promise<ExtractedLinkContent> {
   const timeoutMs = resolveTimeoutMs(options)
+  const cacheMode = resolveCacheMode(options)
+  const maxCharacters = resolveMaxCharacters(options)
   const youtubeTranscriptMode = options?.youtubeTranscript ?? 'auto'
   const firecrawlMode = resolveFirecrawlMode(options)
   const markdownRequested = (options?.format ?? 'text') === 'markdown'
@@ -68,7 +72,13 @@ export async function fetchLinkContent(
 
   let firecrawlAttempted = false
   let firecrawlPayload: FirecrawlScrapeResult | null = null
-  const firecrawlDiagnostics: FirecrawlDiagnostics = { attempted: false, used: false, notes: null }
+  const firecrawlDiagnostics: FirecrawlDiagnostics = {
+    attempted: false,
+    used: false,
+    cacheMode,
+    cacheStatus: cacheMode === 'bypass' ? 'bypassed' : 'unknown',
+    notes: null,
+  }
 
   const attemptFirecrawl = async (reason: string): Promise<ExtractedLinkContent | null> => {
     if (!canUseFirecrawl) {
@@ -76,11 +86,16 @@ export async function fetchLinkContent(
     }
 
     if (!firecrawlAttempted) {
-      const attempt = await fetchWithFirecrawl(url, deps.scrapeWithFirecrawl, { timeoutMs })
+      const attempt = await fetchWithFirecrawl(url, deps.scrapeWithFirecrawl, {
+        timeoutMs,
+        cacheMode,
+      })
       firecrawlAttempted = true
       firecrawlPayload = attempt.payload
       firecrawlDiagnostics.attempted = attempt.diagnostics.attempted
       firecrawlDiagnostics.used = attempt.diagnostics.used
+      firecrawlDiagnostics.cacheMode = attempt.diagnostics.cacheMode
+      firecrawlDiagnostics.cacheStatus = attempt.diagnostics.cacheStatus
       firecrawlDiagnostics.notes = attempt.diagnostics.notes ?? null
     }
 
@@ -93,6 +108,8 @@ export async function fetchLinkContent(
     const firecrawlResult = await buildResultFromFirecrawl({
       url,
       payload: firecrawlPayload,
+      cacheMode,
+      maxCharacters,
       youtubeTranscriptMode,
       firecrawlDiagnostics,
       markdownRequested,
@@ -157,6 +174,8 @@ export async function fetchLinkContent(
   return buildResultFromHtmlDocument({
     url,
     html,
+    cacheMode,
+    maxCharacters,
     youtubeTranscriptMode,
     firecrawlDiagnostics,
     markdownRequested,
@@ -168,6 +187,8 @@ export async function fetchLinkContent(
 async function buildResultFromFirecrawl({
   url,
   payload,
+  cacheMode,
+  maxCharacters,
   youtubeTranscriptMode,
   firecrawlDiagnostics,
   markdownRequested,
@@ -175,6 +196,8 @@ async function buildResultFromFirecrawl({
 }: {
   url: string
   payload: FirecrawlScrapeResult
+  cacheMode: FetchLinkContentOptions['cacheMode']
+  maxCharacters: number | null
   youtubeTranscriptMode: FetchLinkContentOptions['youtubeTranscript']
   firecrawlDiagnostics: FirecrawlDiagnostics
   markdownRequested: boolean
@@ -191,6 +214,7 @@ async function buildResultFromFirecrawl({
 
   const transcriptResolution = await resolveTranscriptForLink(url, payload.html ?? null, deps, {
     youtubeTranscriptMode,
+    cacheMode,
   })
   const baseContent = selectBaseContent(normalizedMarkdown, transcriptResolution.text)
   if (baseContent.length === 0) {
@@ -212,11 +236,15 @@ async function buildResultFromFirecrawl({
 
   firecrawlDiagnostics.used = true
 
-  const transcriptDiagnostics = ensureTranscriptDiagnostics(transcriptResolution)
+  const transcriptDiagnostics = ensureTranscriptDiagnostics(
+    transcriptResolution,
+    cacheMode ?? 'default'
+  )
 
   return finalizeExtractedLinkContent({
     url,
     baseContent,
+    maxCharacters,
     title,
     description,
     siteName,
@@ -237,6 +265,8 @@ async function buildResultFromFirecrawl({
 async function buildResultFromHtmlDocument({
   url,
   html,
+  cacheMode,
+  maxCharacters,
   youtubeTranscriptMode,
   firecrawlDiagnostics,
   markdownRequested,
@@ -245,6 +275,8 @@ async function buildResultFromHtmlDocument({
 }: {
   url: string
   html: string
+  cacheMode: FetchLinkContentOptions['cacheMode']
+  maxCharacters: number | null
   youtubeTranscriptMode: FetchLinkContentOptions['youtubeTranscript']
   firecrawlDiagnostics: FirecrawlDiagnostics
   markdownRequested: boolean
@@ -256,6 +288,7 @@ async function buildResultFromHtmlDocument({
   const normalized = normalizeForPrompt(rawContent)
   const transcriptResolution = await resolveTranscriptForLink(url, html, deps, {
     youtubeTranscriptMode,
+    cacheMode,
   })
 
   const youtubeDescription =
@@ -267,7 +300,10 @@ async function buildResultFromHtmlDocument({
     baseContent = stripLeadingTitle(baseContent, title)
   }
 
-  const transcriptDiagnostics = ensureTranscriptDiagnostics(transcriptResolution)
+  const transcriptDiagnostics = ensureTranscriptDiagnostics(
+    transcriptResolution,
+    cacheMode ?? 'default'
+  )
 
   const markdownDiagnostics: MarkdownDiagnostics = await (async () => {
     if (!markdownRequested) {
@@ -327,6 +363,7 @@ async function buildResultFromHtmlDocument({
   return finalizeExtractedLinkContent({
     url,
     baseContent,
+    maxCharacters,
     title,
     description,
     siteName,
