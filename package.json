@@ -55,7 +55,7 @@
     "mime": "^4.1.0",
     "osc-progress": "^0.1.0",
     "sanitize-html": "^2.17.0",
-    "tokentally": "github:steipete/tokentally#6c11adf31fa171c1218659ab5aa8b2b889c53cd6"
+    "tokentally": "^0.1.0"
   },
   "devDependencies": {
     "@ai-sdk/anthropic": "3.0.0-beta.91",
