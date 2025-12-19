@@ -198,6 +198,52 @@ describe('llm generate/stream', () => {
     ).rejects.toThrow(/ANTHROPIC_API_KEY/i)
   })
 
+  it('wraps anthropic model access errors with a helpful message', async () => {
+    generateTextMock.mockImplementationOnce(async () => {
+      const error = Object.assign(new Error('model: claude-3-5-sonnet-latest'), {
+        statusCode: 404,
+        responseBody: JSON.stringify({
+          type: 'error',
+          error: { type: 'not_found_error', message: 'model: claude-3-5-sonnet-latest' },
+        }),
+      })
+      throw error
+    })
+
+    await expect(
+      generateTextWithModelId({
+        modelId: 'anthropic/claude-3-5-sonnet-latest',
+        apiKeys: { xaiApiKey: null, openaiApiKey: null, googleApiKey: null, anthropicApiKey: 'k' },
+        prompt: 'hi',
+        timeoutMs: 2000,
+        fetchImpl: globalThis.fetch.bind(globalThis),
+        maxOutputTokens: 10,
+      })
+    ).rejects.toThrow(/Anthropic API rejected model "claude-3-5-sonnet-latest"/i)
+
+    streamTextMock.mockImplementationOnce(() => {
+      const error = Object.assign(new Error('model: claude-3-5-sonnet-latest'), {
+        statusCode: 403,
+        responseBody: JSON.stringify({
+          type: 'error',
+          error: { type: 'permission_error', message: 'model: claude-3-5-sonnet-latest' },
+        }),
+      })
+      throw error
+    })
+
+    await expect(
+      streamTextWithModelId({
+        modelId: 'anthropic/claude-3-5-sonnet-latest',
+        apiKeys: { xaiApiKey: null, openaiApiKey: null, googleApiKey: null, anthropicApiKey: 'k' },
+        prompt: 'hi',
+        timeoutMs: 2000,
+        fetchImpl: globalThis.fetch.bind(globalThis),
+        maxOutputTokens: 10,
+      })
+    ).rejects.toThrow(/Anthropic API rejected model "claude-3-5-sonnet-latest"/i)
+  })
+
   it('throws a friendly timeout error on AbortError (streamText)', async () => {
     streamTextMock.mockImplementationOnce(() => {
       throw new DOMException('aborted', 'AbortError')
