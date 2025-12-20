@@ -106,7 +106,7 @@ describe('cli error handling', () => {
 
     await expect(
       runCli(['--extract-only', 'https://x.com/user/status/123'], {
-        env: { SUMMARIZE_BIRD_DISABLED: '1' },
+        env: { PATH: '' },
         fetch: fetchMock as unknown as typeof fetch,
         stdout: noopStream(),
         stderr: noopStream(),

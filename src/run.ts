@@ -1,6 +1,5 @@
 import { accessSync, constants as fsConstants } from 'node:fs'
 import fs from 'node:fs/promises'
-import os from 'node:os'
 import path from 'node:path'
 import type { ModelMessage } from 'ai'
 import { Command, CommanderError, Option } from 'commander'
@@ -92,12 +91,7 @@ function isExecutable(filePath: string): boolean {
 }
 
 function hasBirdCli(env: Record<string, string | undefined>): boolean {
-  if (env.SUMMARIZE_BIRD_DISABLED === '1') return false
   const candidates: string[] = []
-  const home = env.HOME ?? process.env.HOME ?? os.homedir()
-  if (home) {
-    candidates.push(path.join(home, 'Projects', 'bird', 'bird'))
-  }
   const pathEnv = env.PATH ?? process.env.PATH ?? ''
   for (const entry of pathEnv.split(path.delimiter)) {
     if (!entry) continue
