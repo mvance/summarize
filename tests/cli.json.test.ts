@@ -36,7 +36,7 @@ describe('cli --json', () => {
         },
       })
 
-      await runCli(['--json', '--extract-only', '--timeout', '2s', 'https://example.com'], {
+      await runCli(['--json', '--extract', '--timeout', '2s', 'https://example.com'], {
         env: {},
         fetch: fetchMock as unknown as typeof fetch,
         stdout,
@@ -54,7 +54,7 @@ describe('cli --json', () => {
     }
   })
 
-  it('prints JSON with prompt in --extract-only mode (no LLM call)', async () => {
+  it('prints JSON with prompt in --extract mode (no LLM call)', async () => {
     const html =
       '<!doctype html><html><head><title>Ok</title><meta name="description" content="Desc" /></head>' +
       `<body><article><p>${'A'.repeat(260)}</p></article></body></html>`
@@ -83,7 +83,7 @@ describe('cli --json', () => {
       },
     })
 
-    await runCli(['--json', '--extract-only', '--timeout', '2s', 'https://example.com'], {
+    await runCli(['--json', '--extract', '--timeout', '2s', 'https://example.com'], {
       env: {},
       fetch: fetchMock as unknown as typeof fetch,
       stdout,

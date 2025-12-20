@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   parseDurationMs,
+  parseExtractFormat,
   parseFirecrawlMode,
   parseLengthArg,
   parseMarkdownMode,
@@ -37,11 +38,19 @@ describe('cli flag parsing', () => {
     expect(() => parseFirecrawlMode('nope')).toThrow(/Unsupported --firecrawl/)
   })
 
-  it('parses --markdown', () => {
+  it('parses --markdown-mode', () => {
     expect(parseMarkdownMode('off')).toBe('off')
     expect(parseMarkdownMode('auto')).toBe('auto')
     expect(parseMarkdownMode('llm')).toBe('llm')
-    expect(() => parseMarkdownMode('nope')).toThrow(/Unsupported --markdown/)
+    expect(() => parseMarkdownMode('nope')).toThrow(/Unsupported --markdown-mode/)
+  })
+
+  it('parses --format', () => {
+    expect(parseExtractFormat('md')).toBe('markdown')
+    expect(parseExtractFormat('markdown')).toBe('markdown')
+    expect(parseExtractFormat('text')).toBe('text')
+    expect(parseExtractFormat('plain')).toBe('text')
+    expect(() => parseExtractFormat('nope')).toThrow(/Unsupported --format/)
   })
 
   it('parses --stream', () => {

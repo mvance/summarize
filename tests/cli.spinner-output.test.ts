@@ -150,7 +150,7 @@ describe('cli spinner output', () => {
     const stdout = collectStream({ isTTY: true })
     const stderr = collectStream({ isTTY: true })
 
-    await runCli(['--extract-only', '--timeout', '2s', 'https://example.com'], {
+    await runCli(['--extract', '--timeout', '2s', 'https://example.com'], {
       env: { HOME: root, TERM: 'xterm-256color' },
       fetch: vi.fn(async () => {
         return new Response('<html><body><h1>Example</h1></body></html>', {

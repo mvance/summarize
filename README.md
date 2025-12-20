@@ -112,7 +112,8 @@ npx -y @steipete/summarize <input> [flags]
 - `--max-output-tokens <count>`: hard cap for LLM output tokens (optional)
 - `--stream auto|on|off`: stream LLM output (`auto` = TTY only; disabled in `--json` mode)
 - `--render auto|md-live|md|plain`: Markdown rendering (`auto` = best default for TTY)
-- `--extract-only`: print extracted content and exit (no summary) — only for URLs
+- `--extract`: print extracted content and exit (no summary) — only for URLs
+  - Deprecated alias: `--extract-only`
 - `--json`: machine-readable output with diagnostics, prompt, `metrics`, and optional summary
 - `--verbose`: debug/diagnostics on stderr
 - `--metrics off|on|detailed`: metrics output (default `on`; `detailed` prints a breakdown to stderr)
@@ -122,8 +123,9 @@ npx -y @steipete/summarize <input> [flags]
 Non-YouTube URLs go through a “fetch → extract” pipeline. When the direct fetch/extraction is blocked or too thin, `--firecrawl auto` can fall back to Firecrawl (if configured).
 
 - `--firecrawl off|auto|always` (default `auto`)
-- `--markdown off|auto|llm` (default `auto`; only affects `--extract-only` for non-YouTube URLs)
-- Plain-text mode: use `--firecrawl off --markdown off`.
+- `--extract --format md|text` (default `md`)
+- `--markdown-mode off|auto|llm` (default `auto`; only affects `--extract --format md` for non-YouTube URLs)
+- Plain-text mode: use `--extract --format text` (or `--firecrawl off` for plain HTML extraction fallback behavior).
 
 ## YouTube transcripts
 

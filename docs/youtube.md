@@ -31,5 +31,5 @@ YouTube URLs use transcript-first extraction.
 ## Example
 
 ```bash
-pnpm summarize -- --extract-only "https://www.youtube.com/watch?v=I845O57ZSy4&t=11s"
+pnpm summarize -- --extract "https://www.youtube.com/watch?v=I845O57ZSy4&t=11s"
 ```

@@ -54,7 +54,7 @@ describe('cli --metrics off', () => {
       },
     })
 
-    await runCli(['--metrics', 'off', '--extract-only', '--timeout', '2s', 'https://example.com'], {
+    await runCli(['--metrics', 'off', '--extract', '--timeout', '2s', 'https://example.com'], {
       env: { HOME: root },
       fetch: fetchMock as unknown as typeof fetch,
       stdout,

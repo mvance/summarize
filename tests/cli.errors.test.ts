@@ -37,7 +37,7 @@ describe('cli error handling', () => {
 
   it('errors when --firecrawl always is set without a key', async () => {
     await expect(
-      runCli(['--firecrawl', 'always', '--extract-only', 'https://example.com'], {
+      runCli(['--firecrawl', 'always', '--extract', 'https://example.com'], {
         env: {},
         fetch: vi.fn(
           async () => new Response('<html></html>', { status: 200 })
@@ -50,7 +50,7 @@ describe('cli error handling', () => {
 
   it('errors when --markdown llm is set without any LLM keys', async () => {
     await expect(
-      runCli(['--markdown', 'llm', '--extract-only', 'https://example.com'], {
+      runCli(['--markdown-mode', 'llm', '--extract', 'https://example.com'], {
         env: {},
         fetch: vi.fn(
           async () => new Response('<html></html>', { status: 200 })
@@ -58,7 +58,7 @@ describe('cli error handling', () => {
         stdout: noopStream(),
         stderr: noopStream(),
       })
-    ).rejects.toThrow(/--markdown llm requires GEMINI_API_KEY/)
+    ).rejects.toThrow(/--markdown-mode llm requires GEMINI_API_KEY/)
   })
 
   it('does not error for --markdown auto without keys', async () => {
@@ -76,7 +76,7 @@ describe('cli error handling', () => {
       },
     })
 
-    await runCli(['--markdown', 'auto', '--extract-only', 'https://example.com'], {
+    await runCli(['--markdown-mode', 'auto', '--extract', 'https://example.com'], {
       env: {},
       fetch: fetchMock as unknown as typeof fetch,
       stdout,
@@ -84,6 +84,28 @@ describe('cli error handling', () => {
     })
 
     expect(stdoutText.length).toBeGreaterThan(0)
+  })
+
+  it('errors when --format is used without --extract', async () => {
+    await expect(
+      runCli(['--format', 'text', 'https://example.com'], {
+        env: {},
+        fetch: vi.fn() as unknown as typeof fetch,
+        stdout: noopStream(),
+        stderr: noopStream(),
+      })
+    ).rejects.toThrow('--format/--markdown-mode are only supported with --extract')
+  })
+
+  it('errors when --format md conflicts with --markdown-mode off', async () => {
+    await expect(
+      runCli(['--extract', '--format', 'md', '--markdown-mode', 'off', 'https://example.com'], {
+        env: {},
+        fetch: vi.fn() as unknown as typeof fetch,
+        stdout: noopStream(),
+        stderr: noopStream(),
+      })
+    ).rejects.toThrow('--format md conflicts with --markdown-mode off')
   })
 
   it('errors when summarizing without the required model API key', async () => {

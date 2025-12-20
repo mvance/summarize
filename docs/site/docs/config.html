@@ -31,7 +31,7 @@
           <a href="./index.html">Overview</a>
           <a href="./website.html">Website mode</a>
           <a href="./youtube.html">YouTube mode</a>
-          <a href="./extract-only.html">Extract-only</a>
+          <a href="./extract-only.html">Extract</a>
           <a href="./llm.html">LLM</a>
           <a href="./openai.html">OpenAI</a>
           <a href="./firecrawl.html">Firecrawl</a>
@@ -46,7 +46,7 @@
           <h2>Environment variables</h2>
           <ul>
             <li><code>OPENAI_API_KEY</code>, <code>XAI_API_KEY</code>, <code>GEMINI_API_KEY</code> — provider keys (only needed when a mode actually calls an LLM).</li>
-            <li><code>FIRECRAWL_API_KEY</code> — optional extraction fallback for blocked/thin sites.</li>
+            <li><code>FIRECRAWL_API_KEY</code> — optional extraction fallback / preferred Markdown output in extract mode.</li>
           </ul>
 
           <h2>Tips</h2>
@@ -57,7 +57,7 @@
           </ul>
 
           <div class="note">
-            Want the raw content? Use <code>--extract-only</code> (then decide where the summary should happen).
+            Want the raw content? Use <code>--extract</code> (then decide where the summary should happen).
           </div>
         </article>
       </section>

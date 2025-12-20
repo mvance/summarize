@@ -22,6 +22,7 @@ import { createFirecrawlScraper } from './firecrawl.js'
 import {
   parseDurationMs,
   parseFirecrawlMode,
+  parseExtractFormat,
   parseLengthArg,
   parseMarkdownMode,
   parseMaxOutputTokensArg,
@@ -176,6 +177,7 @@ type JsonOutput = {
         url: string
         youtube: string
         firecrawl: string
+        format: string
         markdown: string
       }
     | {
@@ -221,13 +223,25 @@ function buildProgram() {
     )
     .option(
       '--firecrawl <mode>',
-      'Firecrawl usage: off, auto (fallback), always (try Firecrawl first).',
+      'Firecrawl usage: off, auto (fallback), always (try Firecrawl first). Note: in --extract --format md website mode, defaults to always when FIRECRAWL_API_KEY is set.',
       'auto'
     )
     .option(
-      '--markdown <mode>',
-      'Website Markdown output: off, auto (use LLM when configured), llm (force LLM). Only affects --extract-only for non-YouTube URLs.',
-      'auto'
+      '--format <format>',
+      'Extraction output format: md|text. Only affects --extract for URLs. (default: md)',
+      undefined
+    )
+    .addOption(
+      new Option(
+        '--markdown-mode <mode>',
+        'HTML→Markdown conversion: off, auto (prefer Firecrawl when configured, then LLM when configured), llm (force LLM). Only affects --extract --format md for non-YouTube URLs.'
+      ).default('auto')
+    )
+    .addOption(
+      new Option(
+        '--markdown <mode>',
+        'Deprecated alias for --markdown-mode (use --extract --format md --markdown-mode ...)'
+      ).hideHelp()
     )
     .option(
       '--length <length>',
@@ -249,7 +263,10 @@ function buildProgram() {
       'LLM model id (gateway-style): xai/..., openai/..., google/... (default: google/gemini-3-flash-preview)',
       undefined
     )
-    .option('--extract-only', 'Print extracted content and exit (no LLM summary)', false)
+    .option('--extract', 'Print extracted content and exit (no LLM summary)', false)
+    .addOption(
+      new Option('--extract-only', 'Deprecated alias for --extract').hideHelp()
+    )
     .option('--json', 'Output structured JSON (includes prompt + metrics)', false)
     .option(
       '--stream <mode>',
@@ -529,9 +546,10 @@ function attachRichHelp(
     () => `
 ${heading('Examples')}
   ${cmd('summarize "https://example.com"')}
-  ${cmd('summarize "https://example.com" --extract-only')} ${dim('# website markdown (LLM if configured)')}
-  ${cmd('summarize "https://example.com" --extract-only --markdown llm')} ${dim('# website markdown via LLM')}
-  ${cmd('summarize "https://www.youtube.com/watch?v=I845O57ZSy4&t=11s" --extract-only --youtube web')}
+  ${cmd('summarize "https://example.com" --extract')} ${dim('# extracted markdown (prefers Firecrawl when configured)')}
+  ${cmd('summarize "https://example.com" --extract --format text')} ${dim('# extracted plain text')}
+  ${cmd('summarize "https://example.com" --extract --markdown-mode llm')} ${dim('# extracted markdown via LLM')}
+  ${cmd('summarize "https://www.youtube.com/watch?v=I845O57ZSy4&t=11s" --extract --youtube web')}
   ${cmd('summarize "https://example.com" --length 20k --max-output-tokens 2k --timeout 2m --model openai/gpt-5.2')}
   ${cmd('OPENROUTER_API_KEY=... summarize "https://example.com" --model openai/openai/gpt-oss-20b')}
   ${cmd('summarize "https://example.com" --json --verbose')}
@@ -773,7 +791,7 @@ export async function runCli(
     program.opts().maxOutputTokens as string | undefined
   )
   const timeoutMs = parseDurationMs(program.opts().timeout as string)
-  const extractOnly = Boolean(program.opts().extractOnly)
+  const extractMode = Boolean(program.opts().extract) || Boolean(program.opts().extractOnly)
   const json = Boolean(program.opts().json)
   const streamMode = parseStreamMode(program.opts().stream as string)
   const renderMode = parseRenderMode(program.opts().render as string)
@@ -781,11 +799,28 @@ export async function runCli(
   const metricsMode = parseMetricsMode(program.opts().metrics as string)
   const metricsEnabled = metricsMode !== 'off'
   const metricsDetailed = metricsMode === 'detailed'
-  const markdownMode = parseMarkdownMode(program.opts().markdown as string)
+  const markdownMode = parseMarkdownMode(
+    (program.opts().markdownMode as string | undefined) ??
+      (program.opts().markdown as string | undefined) ??
+      'auto'
+  )
 
   const shouldComputeReport = metricsEnabled
 
   const isYoutubeUrl = typeof url === 'string' ? /youtube\.com|youtu\.be/i.test(url) : false
+  const firecrawlExplicitlySet = normalizedArgv.some(
+    (arg) => arg === '--firecrawl' || arg.startsWith('--firecrawl=')
+  )
+  const formatExplicitlySet = normalizedArgv.some(
+    (arg) => arg === '--format' || arg.startsWith('--format=')
+  )
+  const markdownModeExplicitlySet = normalizedArgv.some(
+    (arg) =>
+      arg === '--markdown-mode' ||
+      arg.startsWith('--markdown-mode=') ||
+      arg === '--markdown' ||
+      arg.startsWith('--markdown=')
+  )
   const requestedFirecrawlMode = parseFirecrawlMode(program.opts().firecrawl as string)
   const modelArg =
     typeof program.opts().model === 'string' ? (program.opts().model as string) : null
@@ -835,6 +870,17 @@ export async function runCli(
   const anthropicConfigured = typeof anthropicApiKey === 'string' && anthropicApiKey.length > 0
   const openrouterConfigured = typeof openrouterApiKey === 'string' && openrouterApiKey.length > 0
   const openrouterOptions = openRouterProviders ? { providers: openRouterProviders } : undefined
+
+  const extractFormat = (() => {
+    if (!extractMode) return null
+    const raw = typeof program.opts().format === 'string' ? (program.opts().format as string) : ''
+    if (raw.trim().length > 0) return parseExtractFormat(raw)
+    return markdownMode === 'off' ? 'text' : 'markdown'
+  })()
+
+  if (!extractMode && (formatExplicitlySet || markdownModeExplicitlySet)) {
+    throw new Error('--format/--markdown-mode are only supported with --extract')
+  }
 
   const llmCalls: LlmCall[] = []
   let firecrawlRequests = 0
@@ -947,7 +993,7 @@ export async function runCli(
     if (streamMode !== 'auto') return streamMode
     return isRichTty(stdout) ? 'on' : 'off'
   })()
-  const streamingEnabled = effectiveStreamMode === 'on' && !json && !extractOnly
+  const streamingEnabled = effectiveStreamMode === 'on' && !json && !extractMode
   const effectiveRenderMode = (() => {
     if (renderMode !== 'auto') return renderMode
     if (!isRichTty(stdout)) return 'plain'
@@ -973,8 +1019,8 @@ export async function runCli(
     )
   }
 
-  if (extractOnly && inputTarget.kind !== 'url') {
-    throw new Error('--extract-only is only supported for website/YouTube URLs')
+  if (extractMode && inputTarget.kind !== 'url') {
+    throw new Error('--extract is only supported for website/YouTube URLs')
   }
 
   const progressEnabled = isRichTty(stderr) && !verbose && !json
@@ -1500,13 +1546,29 @@ export async function runCli(
     throw new Error('Only HTTP and HTTPS URLs can be summarized')
   }
 
-  const firecrawlMode = requestedFirecrawlMode
+  const firecrawlMode = (() => {
+    const wantsMarkdown = extractMode && extractFormat === 'markdown'
+    if (
+      extractMode &&
+      wantsMarkdown &&
+      !isYoutubeUrl &&
+      !firecrawlExplicitlySet &&
+      firecrawlConfigured
+    ) {
+      return 'always'
+    }
+    return requestedFirecrawlMode
+  })()
   if (firecrawlMode === 'always' && !firecrawlConfigured) {
     throw new Error('--firecrawl always requires FIRECRAWL_API_KEY')
   }
 
-  const effectiveMarkdownMode = markdownMode
-  const markdownRequested = extractOnly && !isYoutubeUrl && effectiveMarkdownMode !== 'off'
+  const effectiveMarkdownMode = extractMode && extractFormat === 'markdown' ? markdownMode : 'off'
+  const markdownRequested = extractMode && extractFormat === 'markdown' && effectiveMarkdownMode !== 'off'
+
+  if (extractMode && extractFormat === 'markdown' && markdownMode === 'off') {
+    throw new Error('--format md conflicts with --markdown-mode off (use --format text)')
+  }
   const hasKeyForModel =
     parsedModelForLlm.provider === 'xai'
       ? xaiConfigured
@@ -1526,7 +1588,9 @@ export async function runCli(
           : parsedModelForLlm.provider === 'anthropic'
             ? 'ANTHROPIC_API_KEY'
             : 'OPENAI_API_KEY'
-    throw new Error(`--markdown llm requires ${required} for model ${parsedModelForLlm.canonical}`)
+    throw new Error(
+      `--markdown-mode llm requires ${required} for model ${parsedModelForLlm.canonical}`
+    )
   }
 
   writeVerbose(
@@ -1534,7 +1598,7 @@ export async function runCli(
     verbose,
     `config url=${url} timeoutMs=${timeoutMs} youtube=${youtubeMode} firecrawl=${firecrawlMode} length=${
       lengthArg.kind === 'preset' ? lengthArg.preset : `${lengthArg.maxCharacters} chars`
-    } maxOutputTokens=${formatOptionalNumber(maxOutputTokensArg)} json=${json} extractOnly=${extractOnly} markdown=${effectiveMarkdownMode} model=${model} stream=${effectiveStreamMode} render=${effectiveRenderMode}`,
+    } maxOutputTokens=${formatOptionalNumber(maxOutputTokensArg)} json=${json} extract=${extractMode} format=${extractFormat ?? 'n/a'} markdownMode=${effectiveMarkdownMode} model=${model} stream=${effectiveStreamMode} render=${effectiveRenderMode}`,
     verboseColor
   )
   writeVerbose(
@@ -1818,7 +1882,7 @@ export async function runCli(
     if (progressEnabled) {
       websiteProgress?.stop?.()
       spinner.setText(
-        extractOnly
+        extractMode
           ? `Extracted (${extractedContentSize}${viaSourceLabel})`
           : `Summarizing (sent ${extractedContentSize}${viaSourceLabel})…`
       )
@@ -1886,7 +1950,7 @@ export async function runCli(
       shares: [],
     })
 
-    if (extractOnly) {
+    if (extractMode) {
       clearProgressForStdout()
       if (json) {
         const finishReport = shouldComputeReport ? await buildReport() : null
@@ -1897,6 +1961,7 @@ export async function runCli(
             timeoutMs,
             youtube: youtubeMode,
             firecrawl: firecrawlMode,
+            format: extractFormat ?? 'text',
             markdown: effectiveMarkdownMode,
             length:
               lengthArg.kind === 'preset'
@@ -2288,6 +2353,7 @@ export async function runCli(
           timeoutMs,
           youtube: youtubeMode,
           firecrawl: firecrawlMode,
+          format: 'text',
           markdown: effectiveMarkdownMode,
           length:
             lengthArg.kind === 'preset'

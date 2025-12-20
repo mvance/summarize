@@ -37,7 +37,7 @@ describe('--verbose', () => {
       [
         '--json',
         '--verbose',
-        '--extract-only',
+        '--extract',
         '--firecrawl',
         'off',
         '--timeout',
@@ -90,15 +90,12 @@ describe('--verbose', () => {
       },
     })
 
-    await runCli(
-      ['--json', '--verbose', '--extract-only', '--firecrawl', 'off', 'https://example.com'],
-      {
-        env: { TERM: 'xterm-256color' },
-        fetch: fetchMock as unknown as typeof fetch,
-        stdout,
-        stderr,
-      }
-    )
+    await runCli(['--json', '--verbose', '--extract', '--firecrawl', 'off', 'https://example.com'], {
+      env: { TERM: 'xterm-256color' },
+      fetch: fetchMock as unknown as typeof fetch,
+      stdout,
+      stderr,
+    })
 
     expect(stderrText).toContain('\u001b[')
   })

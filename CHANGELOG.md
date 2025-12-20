@@ -1,7 +1,13 @@
 # Changelog
 
-## 0.3.0 - 2025-12-20
+## 0.3.1 - Unreleased
 
+### Changes
+
+- Add URL extraction mode via `--extract` (deprecated alias: `--extract-only`) with `--format md|text`.
+- Rename HTML→Markdown conversion flag to `--markdown-mode` (deprecated alias: `--markdown`).
+
+## 0.3.0 - 2025-12-20
 ### Changes
 
 - Add yt-dlp audio transcription fallback for YouTube; prefer OpenAI Whisper with FAL fallback. Thanks @dougvk.
@@ -94,7 +100,7 @@ First public release.
   - `--max-output-tokens <count>` (optional hard cap)
   - `--timeout <duration>` (default `2m`)
   - `--stream auto|on|off`, `--render auto|md-live|md|plain`
-  - `--extract-only` (URLs only; no summary)
+  - `--extract` (URLs only; no summary; deprecated alias: `--extract-only`)
   - `--json` (structured output incl. input config, prompt, extracted content, LLM metadata, and metrics)
   - `--metrics off|on|detailed` (default `on`)
   - `--verbose`
@@ -103,7 +109,7 @@ First public release.
 
 - Websites: fetch + extract “article-ish” content + normalization for prompts.
 - Firecrawl fallback for blocked/thin sites (`--firecrawl off|auto|always`, via `FIRECRAWL_API_KEY`).
-- Markdown extraction for websites in `--extract-only` mode (`--markdown off|auto|llm`).
+- Markdown extraction for websites in `--extract` mode (`--format md|text`, `--markdown-mode off|auto|llm`).
 - YouTube (`--youtube auto|web|apify`):
   - best-effort transcript endpoints
   - optional Apify fallback (requires `APIFY_API_TOKEN`; single actor `faVsWy9VTSNVIhWpR`)

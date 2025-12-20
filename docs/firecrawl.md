@@ -8,9 +8,9 @@ Firecrawl is a fallback for sites that block direct HTML fetching or don’t ren
 - `auto` (default): use Firecrawl only when HTML extraction looks blocked/thin.
 - `always`: try Firecrawl first (falls back to HTML if Firecrawl is unavailable/empty).
 
-## Extract-only
+## Extract default
 
-Firecrawl is only used when HTML extraction looks blocked/thin (or when forced with `--firecrawl always`).
+When `--extract --format md` is used for non-YouTube URLs and `FIRECRAWL_API_KEY` is configured, the CLI defaults to `--firecrawl always` to return Markdown.
 
 ## API key
 

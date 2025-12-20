@@ -96,7 +96,7 @@ describe('cli config precedence', () => {
 
     const stdout = captureStream()
 
-    await runCli(['--timeout', '2s', '--extract-only', '--json', 'https://example.com'], {
+    await runCli(['--timeout', '2s', '--extract', '--json', 'https://example.com'], {
       env: { HOME: tempRoot, SUMMARIZE_MODEL: 'openai/gpt-5.2' },
       fetch: fetchMock as unknown as typeof fetch,
       stdout: stdout.stream,
@@ -106,7 +106,7 @@ describe('cli config precedence', () => {
     const parsed = JSON.parse(stdout.getText()) as { input: { model: string } }
     expect(parsed.input.model).toBe('openai/gpt-5.2')
 
-    // --extract-only means no LLM calls; ensure we didn't try to init a provider.
+    // --extract means no LLM calls; ensure we didn't try to init a provider.
     expect(createOpenAIMock).toHaveBeenCalledTimes(0)
   })
 })
