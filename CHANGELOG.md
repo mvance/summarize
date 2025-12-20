@@ -9,8 +9,7 @@
 - Reject text files over 10 MB before tokenization.
 - Reject too-small numeric `--length` and `--max-output-tokens` values.
 - Compute cost totals via tokentally’s tally helpers.
-
-## 0.1.2 - 2025-12-20
+- Improve fetch spinner with elapsed time and throughput updates.
 
 ## 0.1.1 - 2025-12-19
 

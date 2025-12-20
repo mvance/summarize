@@ -1430,13 +1430,17 @@ export async function runCli(
       phase: 'fetching' | 'firecrawl' | 'idle'
       htmlDownloadedBytes: number
       htmlTotalBytes: number | null
+      fetchStartedAtMs: number | null
       lastSpinnerUpdateAtMs: number
     } = {
       phase: 'idle',
       htmlDownloadedBytes: 0,
       htmlTotalBytes: null,
+      fetchStartedAtMs: null,
       lastSpinnerUpdateAtMs: 0,
     }
+
+    let ticker: ReturnType<typeof setInterval> | null = null
 
     const updateSpinner = (text: string) => {
       const now = Date.now()
@@ -1445,8 +1449,37 @@ export async function runCli(
       spinner.setText(text)
     }
 
+    const renderFetchLine = () => {
+      const downloaded = formatBytes(state.htmlDownloadedBytes)
+      const total =
+        typeof state.htmlTotalBytes === 'number' ? `/${formatBytes(state.htmlTotalBytes)}` : ''
+      const elapsedMs =
+        typeof state.fetchStartedAtMs === 'number' ? Date.now() - state.fetchStartedAtMs : 0
+      const elapsed = formatElapsedMs(elapsedMs)
+      const rate =
+        elapsedMs > 0 && state.htmlDownloadedBytes > 0
+          ? `, ${formatBytes(state.htmlDownloadedBytes / (elapsedMs / 1000))}/s`
+          : ''
+      return `Fetching website (${downloaded}${total}, ${elapsed}${rate})…`
+    }
+
+    const startTicker = () => {
+      if (ticker) return
+      ticker = setInterval(() => {
+        if (state.phase !== 'fetching') return
+        updateSpinner(renderFetchLine())
+      }, 1000)
+    }
+
+    const stopTicker = () => {
+      if (!ticker) return
+      clearInterval(ticker)
+      ticker = null
+    }
+
     return {
       getHtmlDownloadedBytes: () => state.htmlDownloadedBytes,
+      stop: stopTicker,
       onProgress: (
         event:
           | { kind: 'fetch-html-start'; url: string }
@@ -1475,6 +1508,8 @@ export async function runCli(
           state.phase = 'fetching'
           state.htmlDownloadedBytes = 0
           state.htmlTotalBytes = null
+          state.fetchStartedAtMs = Date.now()
+          startTicker()
           updateSpinner('Fetching website (connecting)…')
           return
         }
@@ -1483,21 +1518,20 @@ export async function runCli(
           state.phase = 'fetching'
           state.htmlDownloadedBytes = event.downloadedBytes
           state.htmlTotalBytes = event.totalBytes
-          const downloaded = formatBytes(event.downloadedBytes)
-          const total =
-            typeof event.totalBytes === 'number' ? `/${formatBytes(event.totalBytes)}` : ''
-          updateSpinner(`Fetching website (${downloaded}${total})…`)
+          updateSpinner(renderFetchLine())
           return
         }
 
         if (event.kind === 'firecrawl-start') {
           state.phase = 'firecrawl'
+          stopTicker()
           updateSpinner('Firecrawl: scraping…')
           return
         }
 
         if (event.kind === 'firecrawl-done') {
           state.phase = 'firecrawl'
+          stopTicker()
           if (event.ok && typeof event.markdownBytes === 'number') {
             updateSpinner(`Firecrawl: got ${formatBytes(event.markdownBytes)}…`)
             return
@@ -1519,6 +1553,7 @@ export async function runCli(
   const stopProgress = () => {
     if (stopped) return
     stopped = true
+    websiteProgress?.stop?.()
     spinner.stopAndClear()
     stopOscProgress()
   }
@@ -1534,6 +1569,7 @@ export async function runCli(
     const extractedContentSize = formatBytes(extractedContentBytes)
     const viaFirecrawl = extracted.diagnostics.firecrawl.used ? ', Firecrawl' : ''
     if (progressEnabled) {
+      websiteProgress?.stop?.()
       spinner.setText(
         extractOnly
           ? `Extracted (${extractedContentSize})`
