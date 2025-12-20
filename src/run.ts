@@ -897,14 +897,6 @@ export async function runCli(
     const parsedModelEffective = parseGatewayStyleModelId(effectiveModelId)
     const streamingEnabledForCall = streamingEnabled && !modelResolution.forceStreamOff
 
-    const summaryLengthTarget =
-      lengthArg.kind === 'preset' ? lengthArg.preset : { maxCharacters: lengthArg.maxCharacters }
-
-    const promptText = buildFileSummaryPrompt({
-      filename: attachment.filename,
-      mediaType: attachment.mediaType,
-      summaryLength: summaryLengthTarget,
-    })
     const maxOutputTokensForCall = await resolveMaxOutputTokensForCall(
       parsedModelEffective.canonical
     )
@@ -914,6 +906,14 @@ export async function runCli(
         `Text file too large (${formatBytes(textContent.bytes)}). Limit is ${formatBytes(MAX_TEXT_BYTES_DEFAULT)}.`
       )
     }
+    const summaryLengthTarget =
+      lengthArg.kind === 'preset' ? lengthArg.preset : { maxCharacters: lengthArg.maxCharacters }
+    const promptText = buildFileSummaryPrompt({
+      filename: attachment.filename,
+      mediaType: attachment.mediaType,
+      summaryLength: summaryLengthTarget,
+      contentLength: textContent?.content.length ?? null,
+    })
 
     const promptPayload = buildAssetPromptPayload({ promptText, attachment, textContent })
     const maxInputTokensForCall = await resolveMaxInputTokensForCall(parsedModelEffective.canonical)

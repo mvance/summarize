@@ -63,6 +63,8 @@ const resolveSummaryDirective = (
   SUMMARY_LENGTH_DIRECTIVES[length]
 
 const formatCount = (value: number): string => value.toLocaleString()
+const PRESET_ORDER: SummaryLength[] = ['short', 'medium', 'long', 'xl', 'xxl']
+const presetIndex = (preset: SummaryLength): number => PRESET_ORDER.indexOf(preset)
 
 export type ShareContextEntry = {
   author: string
@@ -95,6 +97,7 @@ export function buildLinkSummaryPrompt({
   summaryLength: SummaryLengthTarget
   shares: ShareContextEntry[]
 }): string {
+  const contentCharacters = content.length
   const contextLines: string[] = [`Source URL: ${url}`]
 
   if (title) {
@@ -119,15 +122,29 @@ export function buildLinkSummaryPrompt({
     ? 'You summarize online videos for curious Twitter users who want to know whether the clip is worth watching.'
     : 'You summarize online articles for curious Twitter users who want the gist before deciding to dive in.'
 
-  const preset =
+  const inferredPreset =
+    contentCharacters > 0 ? pickSummaryLengthForCharacters(contentCharacters) : null
+  const effectiveSummaryLength: SummaryLengthTarget =
     typeof summaryLength === 'string'
-      ? summaryLength
-      : pickSummaryLengthForCharacters(summaryLength.maxCharacters)
+      ? inferredPreset && presetIndex(inferredPreset) < presetIndex(summaryLength)
+        ? inferredPreset
+        : summaryLength
+      : contentCharacters > 0 && summaryLength.maxCharacters > contentCharacters
+        ? { maxCharacters: contentCharacters }
+        : summaryLength
+  const preset =
+    typeof effectiveSummaryLength === 'string'
+      ? effectiveSummaryLength
+      : pickSummaryLengthForCharacters(effectiveSummaryLength.maxCharacters)
   const directive = resolveSummaryDirective(preset)
   const maxCharactersLine =
-    typeof summaryLength === 'string'
+    typeof effectiveSummaryLength === 'string'
       ? ''
-      : `Target length: around ${formatCount(summaryLength.maxCharacters)} characters total (including Markdown and whitespace). This is a soft guideline; prioritize clarity and completeness.`
+      : `Target length: around ${formatCount(effectiveSummaryLength.maxCharacters)} characters total (including Markdown and whitespace). This is a soft guideline; prioritize clarity and completeness.`
+  const contentLengthLine =
+    contentCharacters > 0
+      ? `Extracted content length: ${formatCount(contentCharacters)} characters. Do not exceed the extracted content length; if the requested length is larger, keep the summary at or below the extracted content length and do not add details.`
+      : ''
 
   const shareLines = shares.map((share) => {
     const handle = share.handle && share.handle.length > 0 ? `@${share.handle}` : share.author
@@ -153,7 +170,7 @@ export function buildLinkSummaryPrompt({
 
   const sharesBlock = shares.length > 0 ? `Tweets from sharers:\n${shareLines.join('\n')}\n\n` : ''
 
-  return `${audienceLine} ${directive.guidance} ${directive.formatting} ${maxCharactersLine} Keep the response compact by avoiding blank lines between sentences or list items; use only the single newlines required by the formatting instructions. Do not use emojis, disclaimers, or speculation. Write in direct, factual language. Format the answer in Markdown and obey the length-specific formatting above. Base everything strictly on the provided content and never invent details. ${shareGuidance}
+  return `${audienceLine} ${directive.guidance} ${directive.formatting} ${maxCharactersLine} ${contentLengthLine} Keep the response compact by avoiding blank lines between sentences or list items; use only the single newlines required by the formatting instructions. Do not use emojis, disclaimers, or speculation. Write in direct, factual language. Format the answer in Markdown and obey the length-specific formatting above. Base everything strictly on the provided content and never invent details. ${shareGuidance}
 
 ${contextHeader}
 

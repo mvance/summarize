@@ -20,10 +20,12 @@ describe('buildFileSummaryPrompt', () => {
       filename: null,
       mediaType: null,
       summaryLength: { maxCharacters: 20_000 },
+      contentLength: 120,
     })
 
     expect(prompt).toContain('Target length:')
     expect(prompt).toContain('soft guideline')
+    expect(prompt).toContain('Extracted content length: 120 characters')
     expect(prompt).not.toContain('Filename:')
     expect(prompt).not.toContain('Media type:')
   })
