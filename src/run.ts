@@ -819,12 +819,11 @@ function createRetryLogger({
           : typeof (notice.error as { message?: unknown } | null)?.message === 'string'
             ? String((notice.error as { message?: unknown }).message)
             : ''
-    const reason =
-      /empty summary/i.test(message)
-        ? 'empty output'
-        : /timed out/i.test(message)
-          ? 'timeout'
-          : 'error'
+    const reason = /empty summary/i.test(message)
+      ? 'empty output'
+      : /timed out/i.test(message)
+        ? 'timeout'
+        : 'error'
     writeVerbose(
       stderr,
       verbose,
