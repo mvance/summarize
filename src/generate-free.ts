@@ -15,6 +15,29 @@ type GenerateFreeOptions = {
   timeoutMs: number
 }
 
+function supportsColor(
+  stream: NodeJS.WritableStream,
+  env: Record<string, string | undefined>
+): boolean {
+  if (env.NO_COLOR) return false
+  if (env.FORCE_COLOR && env.FORCE_COLOR !== '0') return true
+  if (!Boolean((stream as unknown as { isTTY?: boolean }).isTTY)) return false
+  const term = env.TERM?.toLowerCase()
+  if (!term || term === 'dumb') return false
+  return true
+}
+
+function ansi(code: string, input: string, enabled: boolean): string {
+  if (!enabled) return input
+  return `\u001b[${code}m${input}\u001b[0m`
+}
+
+function formatMs(ms: number): string {
+  if (!Number.isFinite(ms)) return `${ms}`
+  if (ms < 1000) return `${Math.round(ms)}ms`
+  return `${Math.round(ms / 100) / 10}s`
+}
+
 function assertNoComments(raw: string, path: string): void {
   let inString: '"' | "'" | null = null
   let escaped = false
@@ -130,6 +153,11 @@ export async function generateFree({
   verbose?: boolean
   options?: Partial<GenerateFreeOptions>
 }): Promise<void> {
+  const color = supportsColor(stderr, env)
+  const okLabel = (text: string) => ansi('1;32', text, color)
+  const dim = (text: string) => ansi('2', text, color)
+  const heading = (text: string) => ansi('1;36', text, color)
+
   const openrouterKey =
     typeof env.OPENROUTER_API_KEY === 'string' && env.OPENROUTER_API_KEY.trim().length > 0
       ? env.OPENROUTER_API_KEY.trim()
@@ -153,7 +181,7 @@ export async function generateFree({
   const TIMEOUT_MS = Math.max(1, Math.floor(resolved.timeoutMs))
   const TARGET_WORKING = Math.max(MAX_CANDIDATES, MAX_CANDIDATES * 3)
 
-  stderr.write(`OpenRouter: fetching models…\n`)
+  stderr.write(`${heading('OpenRouter')}: fetching models…\n`)
   const response = await fetchImpl('https://openrouter.ai/api/v1/models', {
     headers: { Accept: 'application/json' },
   })
@@ -223,7 +251,7 @@ export async function generateFree({
   const freeIds = smartSorted.map((m) => m.id)
 
   stderr.write(
-    `OpenRouter: found ${freeIds.length} :free models; testing (runs=${RUNS}, concurrency=${CONCURRENCY}, timeout=${Math.round(TIMEOUT_MS / 100) / 10}s)…\n`
+    `${heading('OpenRouter')}: found ${freeIds.length} :free models; testing (runs=${RUNS}, concurrency=${CONCURRENCY}, timeout=${formatMs(TIMEOUT_MS)})…\n`
   )
 
   const apiKeys: LlmApiKeys = {
@@ -236,7 +264,9 @@ export async function generateFree({
 
   type Ok = {
     openrouterModelId: string
+    initialLatencyMs: number
     medianLatencyMs: number
+    totalLatencyMs: number
     successCount: number
     contextLength: number | null
     maxCompletionTokens: number | null
@@ -301,12 +331,14 @@ export async function generateFree({
         progress('tested')
 
         const meta = idToMeta.get(openrouterModelId) ?? null
-        note(`ok ${openrouterModelId} (${latencyMs}ms)`)
+        note(`${okLabel('ok')} ${openrouterModelId} ${dim(`(${formatMs(latencyMs)})`)}`)
         return {
           ok: true,
           value: {
             openrouterModelId,
+            initialLatencyMs: latencyMs,
             medianLatencyMs: latencyMs,
+            totalLatencyMs: latencyMs,
             successCount: 1,
             contextLength: meta?.contextLength ?? null,
             maxCompletionTokens: meta?.maxCompletionTokens ?? null,
@@ -388,12 +420,14 @@ export async function generateFree({
   // Pass 2: refine timing for selected candidates only (RUNS total)
   const refined = ok.slice()
   if (RUNS > 1 && selectedIdsInitial.length > 0) {
-    stderr.write(`OpenRouter: refining ${selectedIdsInitial.length} candidates (runs=${RUNS})…\n`)
+    stderr.write(
+      `${heading('OpenRouter')}: refining ${selectedIdsInitial.length} candidates (runs=${RUNS})…\n`
+    )
     const byId = new Map(refined.map((m) => [m.openrouterModelId, m] as const))
     for (const openrouterModelId of selectedIdsInitial) {
       const entry = byId.get(openrouterModelId)
       if (!entry) continue
-      const latencies = [entry.medianLatencyMs]
+      const latencies = [entry.initialLatencyMs]
       let successCountForModel = entry.successCount
       let lastError: unknown = null
 
@@ -412,7 +446,9 @@ export async function generateFree({
             retries: 0,
           })
           successCountForModel += 1
-          latencies.push(Date.now() - runStartedAt)
+          const latencyMs = Date.now() - runStartedAt
+          entry.totalLatencyMs += latencyMs
+          latencies.push(latencyMs)
         } catch (error) {
           lastError = error
         }
@@ -435,7 +471,7 @@ export async function generateFree({
     selectedIds.length > 0
       ? selectedIds.map((id) => `openrouter/${id}`)
       : refined.slice(0, MAX_CANDIDATES).map((r) => `openrouter/${r.openrouterModelId}`)
-  stderr.write(`OpenRouter: selected ${selected.length} candidates.\n`)
+  stderr.write(`${heading('OpenRouter')}: selected ${selected.length} candidates.\n`)
 
   const configPath = resolveConfigPath(env)
   let root: Record<string, unknown> = {}
@@ -471,4 +507,15 @@ export async function generateFree({
   await rename(tmp, configPath)
 
   stdout.write(`Wrote ${configPath} (models.free)\n`)
+
+  const refinedById = new Map(refined.map((m) => [m.openrouterModelId, m] as const))
+  stderr.write(`\n${heading('Selected')} (sorted, avg latency)\n`)
+  for (const modelId of selectedIds) {
+    const r = refinedById.get(modelId)
+    if (!r) continue
+    const avg = r.successCount > 0 ? r.totalLatencyMs / r.successCount : r.medianLatencyMs
+    stderr.write(
+      `- ${modelId} ${dim(`avg ${formatMs(avg)} (n=${r.successCount})`)}\n`
+    )
+  }
 }
