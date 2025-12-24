@@ -49,5 +49,5 @@ jobs:
             echo "No pack artifact found in _pack" >&2
             exit 1
           fi
-          tar -tf "$TARBALL" | head -200
+          tar -tf "$TARBALL" | sed -n '1,200p'
           tar -tf "$TARBALL" | grep -E '^package/dist/cli\.cjs$'
