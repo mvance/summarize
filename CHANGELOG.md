@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.5.1 - Unreleased
+## 0.6.0 - Unreleased
 
 - Add `zai/...` model alias with Z.AI base URL + chat completions by default.
 - Add `OPENAI_USE_CHAT_COMPLETIONS` + `openai.useChatCompletions` config toggle.
