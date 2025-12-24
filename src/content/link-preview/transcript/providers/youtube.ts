@@ -1,3 +1,4 @@
+import { isWhisperCppReady } from '../../../../transcription/whisper.js'
 import { normalizeTranscriptText } from '../normalize.js'
 import type {
   ProviderContext,
@@ -26,14 +27,17 @@ export const fetchTranscript = async (
   const notes: string[] = []
   const { html, url } = context
   const mode = options.youtubeTranscriptMode
-  const hasYtDlpCredentials = Boolean(options.openaiApiKey || options.falApiKey)
+  const hasLocalWhisper = await isWhisperCppReady()
+  const hasYtDlpCredentials = Boolean(options.openaiApiKey || options.falApiKey || hasLocalWhisper)
   const canRunYtDlp = Boolean(options.ytDlpPath && hasYtDlpCredentials)
 
   if (mode === 'yt-dlp' && !options.ytDlpPath) {
     throw new Error('Missing YT_DLP_PATH for --youtube yt-dlp')
   }
   if (mode === 'yt-dlp' && !hasYtDlpCredentials) {
-    throw new Error('Missing OPENAI_API_KEY or FAL_KEY for --youtube yt-dlp')
+    throw new Error(
+      'Missing transcription provider for --youtube yt-dlp (install whisper-cpp or set OPENAI_API_KEY/FAL_KEY)'
+    )
   }
 
   if (!html) {

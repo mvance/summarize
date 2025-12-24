@@ -4,6 +4,7 @@ import { promises as fs } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
+  isWhisperCppReady,
   type TranscriptionProvider,
   transcribeMediaFileWithWhisper,
 } from '../../../../../transcription/whisper.js'
@@ -36,11 +37,13 @@ export const fetchTranscriptWithYtDlp = async ({
   if (!ytDlpPath) {
     return { text: null, provider: null, error: new Error('YT_DLP_PATH is not configured'), notes }
   }
-  if (!openaiApiKey && !falApiKey) {
+  if (!openaiApiKey && !falApiKey && !(await isWhisperCppReady())) {
     return {
       text: null,
       provider: null,
-      error: new Error('OPENAI_API_KEY or FAL_KEY is required for yt-dlp transcription'),
+      error: new Error(
+        'No transcription providers available (install whisper-cpp or set OPENAI_API_KEY or FAL_KEY)'
+      ),
       notes,
     }
   }

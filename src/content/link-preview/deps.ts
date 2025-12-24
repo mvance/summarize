@@ -65,7 +65,7 @@ export type LinkPreviewProgressEvent =
       kind: 'transcript-whisper-start'
       url: string
       service: 'youtube' | 'podcast' | 'generic'
-      providerHint: 'openai' | 'fal' | 'openai->fal' | 'unknown'
+      providerHint: 'cpp' | 'openai' | 'fal' | 'openai->fal' | 'unknown'
       totalDurationSeconds: number | null
       parts: number | null
     }

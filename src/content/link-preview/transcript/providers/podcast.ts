@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   isFfmpegAvailable,
+  isWhisperCppReady,
   MAX_OPENAI_UPLOAD_BYTES,
   probeMediaDurationSecondsWithFfprobe,
   transcribeMediaFileWithWhisper,
@@ -75,13 +76,14 @@ export const fetchTranscript = async (
   const notes: string[] = []
 
   const hasTranscriptionKeys = Boolean(options.openaiApiKey || options.falApiKey)
-  if (!hasTranscriptionKeys) {
+  const hasLocalWhisper = await isWhisperCppReady()
+  if (!hasTranscriptionKeys && !hasLocalWhisper) {
     return {
       text: null,
       source: null,
       attemptedProviders,
       metadata: { provider: 'podcast', reason: 'missing_transcription_keys' },
-      notes: 'Missing OPENAI_API_KEY or FAL_KEY for Whisper transcription',
+      notes: 'Missing transcription provider (install whisper-cpp or set OPENAI_API_KEY/FAL_KEY)',
     }
   }
 
@@ -985,14 +987,16 @@ async function transcribeMediaUrl({
   } | null
 }): Promise<{ text: string | null; provider: string | null; error: Error | null }> {
   const canChunk = await isFfmpegAvailable()
-  const providerHint: 'openai' | 'fal' | 'openai->fal' | 'unknown' =
-    openaiApiKey && falApiKey
-      ? 'openai->fal'
-      : openaiApiKey
-        ? 'openai'
-        : falApiKey
-          ? 'fal'
-          : 'unknown'
+  const providerHint: 'cpp' | 'openai' | 'fal' | 'openai->fal' | 'unknown' =
+    (await isWhisperCppReady())
+      ? 'cpp'
+      : openaiApiKey && falApiKey
+        ? 'openai->fal'
+        : openaiApiKey
+          ? 'openai'
+          : falApiKey
+            ? 'fal'
+            : 'unknown'
 
   const head = await probeRemoteMedia(fetchImpl, url)
   if (head.contentLength !== null && head.contentLength > MAX_REMOTE_MEDIA_BYTES) {

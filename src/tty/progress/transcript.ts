@@ -21,7 +21,7 @@ export function createTranscriptProgressRenderer({
     downloadedBytes: number
     totalBytes: number | null
     startedAtMs: number | null
-    whisperProviderHint: 'openai' | 'fal' | 'openai->fal' | 'unknown'
+    whisperProviderHint: 'cpp' | 'openai' | 'fal' | 'openai->fal' | 'unknown'
     whisperProcessedSeconds: number | null
     whisperTotalSeconds: number | null
     whisperPartIndex: number | null
@@ -82,6 +82,7 @@ export function createTranscriptProgressRenderer({
   }
 
   const formatProvider = (hint: typeof state.whisperProviderHint) => {
+    if (hint === 'cpp') return 'Whisper.cpp'
     if (hint === 'openai') return 'Whisper/OpenAI'
     if (hint === 'fal') return 'Whisper/FAL'
     if (hint === 'openai->fal') return 'Whisper/OpenAI→FAL'
