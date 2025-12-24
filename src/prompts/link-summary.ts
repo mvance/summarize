@@ -1,4 +1,6 @@
 import type { SummaryLength } from '../shared/contracts.js'
+import type { OutputLanguage } from '../language.js'
+import { formatOutputLanguageInstruction } from '../language.js'
 
 const SUMMARY_LENGTH_DIRECTIVES: Record<SummaryLength, { guidance: string; formatting: string }> = {
   short: {
@@ -93,14 +95,10 @@ export function buildLinkSummaryPrompt({
   content: string
   truncated: boolean
   hasTranscript: boolean
-  outputLanguage: string
   summaryLength: SummaryLengthTarget
+  outputLanguage?: OutputLanguage | null
   shares: ShareContextEntry[]
 }): string {
-  const languageInstruction =
-    outputLanguage === 'auto'
-      ? 'Write the response in the same language as the source content.'
-      : `Write the response in ${outputLanguage}.`
   const contentCharacters = content.length
   const contextLines: string[] = [`Source URL: ${url}`]
 
@@ -169,8 +167,9 @@ export function buildLinkSummaryPrompt({
       : 'You are not given any quotes from people who shared this link. Do not fabricate reactions or add a "What sharers are saying" subsection.'
 
   const sharesBlock = shares.length > 0 ? `Tweets from sharers:\n${shareLines.join('\n')}\n\n` : ''
+  const languageInstruction = formatOutputLanguageInstruction(outputLanguage ?? { kind: 'auto' })
 
-  return `${audienceLine} ${languageInstruction} ${directive.guidance} ${directive.formatting} ${maxCharactersLine} ${contentLengthLine} Keep the response compact by avoiding blank lines between sentences or list items; use only the single newlines required by the formatting instructions. Do not use emojis, disclaimers, or speculation. Write in direct, factual language. Format the answer in Markdown and obey the length-specific formatting above. Base everything strictly on the provided content and never invent details. ${shareGuidance}
+  return `${audienceLine} ${directive.guidance} ${directive.formatting} ${maxCharactersLine} ${contentLengthLine} ${languageInstruction} Keep the response compact by avoiding blank lines between sentences or list items; use only the single newlines required by the formatting instructions. Do not use emojis, disclaimers, or speculation. Write in direct, factual language. Format the answer in Markdown and obey the length-specific formatting above. Base everything strictly on the provided content and never invent details. ${shareGuidance}
 
 ${contextHeader}
 

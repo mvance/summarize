@@ -142,6 +142,7 @@ npx -y @steipete/summarize <input> [flags]
 - `--timeout <duration>`: `30s`, `2m`, `5000ms` (default `2m`)
 - `--retries <count>`: LLM retry attempts on timeout (default `1`)
 - `--length short|medium|long|xl|xxl|<chars>`
+- `--language, --lang <language>`: output language (`auto` = match source; or `en`, `de`, `english`, `german`, ...)
 - `--max-output-tokens <count>`: hard cap for LLM output tokens (optional; only sent when set)
 - `--cli [provider]`: use a CLI provider (case-insensitive; equivalent to `--model cli/<provider>`). If omitted, uses auto selection with CLI enabled.
 - `--stream auto|on|off`: stream LLM output (`auto` = TTY only; disabled in `--json` mode)

@@ -17,14 +17,13 @@ For `model`:
 3. Config file `model`
 4. Built-in default (`auto`)
 
-For `language`:
+For output language:
 
 1. CLI flag `--language` / `--lang`
-2. Config file `language`
-3. Built-in default (`auto` = same as source content)
+2. Config file `output.language` (preferred) or `language` (legacy)
+3. Built-in default (`auto` = match source content language)
 
 See `docs/language.md` for supported values.
-
 ## Format
 
 `~/.summarize/config.json`:
@@ -32,7 +31,7 @@ See `docs/language.md` for supported values.
 ```json
 {
   "model": { "id": "google/gemini-3-flash-preview" },
-  "language": "en"
+  "output": { "language": "auto" }
 }
 ```
 
@@ -138,6 +137,23 @@ Notes:
 - `model.rules` is optional. If omitted, built-in defaults apply.
 - `model.rules[].when` (optional) must be an array (e.g. `["video","youtube"]`).
 - `model.rules[]` must use either `candidates` or `bands`.
+
+## Output language
+
+Set a default output language for summaries:
+
+```json
+{
+  "output": { "language": "auto" }
+}
+```
+
+Examples:
+
+- `"auto"` (default): match the source language.
+- `"en"`, `"de"`: common shorthands.
+- `"english"`, `"german"`: common names.
+- `"en-US"`, `"pt-BR"`: BCP-47-ish tags.
 
 ## CLI config
 

@@ -17,6 +17,7 @@ Use this for non-YouTube URLs.
 
 - `--firecrawl off|auto|always`
 - `--format md|text` (default: `text`)
+- `--language, --lang <language>` (default: `auto`; match source language)
 - `--markdown-mode off|auto|llm` (default: `auto`; only affects `--format md` for non-YouTube URLs)
 - `--preprocess off|auto|always` (default: `auto`; controls markitdown usage; `always` only affects file inputs)
 - `--video-mode auto|transcript|understand` (only affects video inputs / video-only pages)

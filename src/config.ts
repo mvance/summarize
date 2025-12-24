@@ -82,6 +82,15 @@ export type SummarizeConfig = {
   media?: {
     videoMode?: VideoMode
   }
+  output?: {
+    /**
+     * Output language for the summary (e.g. "auto", "en", "de", "English").
+     *
+     * - "auto": match the source language (default behavior when unset)
+     * - otherwise: translate the output into the requested language
+     */
+    language?: string
+  }
   cli?: CliConfig
   openai?: OpenAiConfig
 }
@@ -562,6 +571,19 @@ export function loadSummarizeConfig({ env }: { env: Record<string, string | unde
       : undefined
   })()
 
+  const output = (() => {
+    const value = (parsed as Record<string, unknown>).output
+    if (typeof value === 'undefined') return undefined
+    if (!isRecord(value)) {
+      throw new Error(`Invalid config file ${path}: "output" must be an object.`)
+    }
+    const language =
+      typeof value.language === 'string' && value.language.trim().length > 0
+        ? value.language.trim()
+        : undefined
+    return typeof language === 'string' ? { language } : undefined
+  })()
+
   const openai = (() => {
     const value = parsed.openai
     if (typeof value === 'undefined') return undefined
@@ -592,6 +614,7 @@ export function loadSummarizeConfig({ env }: { env: Record<string, string | unde
       ...(language ? { language } : {}),
       ...(models ? { models } : {}),
       ...(media ? { media } : {}),
+      ...(output ? { output } : {}),
       ...(cli ? { cli } : {}),
       ...(openai ? { openai } : {}),
     },

@@ -1,4 +1,6 @@
 import type { SummaryLengthTarget } from './link-summary.js'
+import type { OutputLanguage } from '../language.js'
+import { formatOutputLanguageInstruction } from '../language.js'
 
 function formatTargetLength(summaryLength: SummaryLengthTarget): string {
   if (typeof summaryLength === 'string') return ''
@@ -18,13 +20,9 @@ export function buildPathSummaryPrompt({
   filePath: string
   filename: string | null
   mediaType: string | null
-  outputLanguage: string
   summaryLength: SummaryLengthTarget
+  outputLanguage?: OutputLanguage | null
 }): string {
-  const languageInstruction =
-    outputLanguage === 'auto'
-      ? 'Write the response in the same language as the source content.'
-      : `Write the response in ${outputLanguage}.`
   const headerLines = [
     `Path: ${filePath}`,
     filename ? `Filename: ${filename}` : null,
@@ -32,7 +30,8 @@ export function buildPathSummaryPrompt({
   ].filter(Boolean)
 
   const maxCharactersLine = formatTargetLength(summaryLength)
-  return `You summarize ${kindLabel === 'image' ? 'images' : 'files'} for curious users. ${languageInstruction} Summarize the ${kindLabel} at the path below. Be factual and do not invent details. Format the answer in Markdown. Do not use emojis. ${maxCharactersLine}
+  const languageInstruction = formatOutputLanguageInstruction(outputLanguage ?? { kind: 'auto' })
+  return `You summarize ${kindLabel === 'image' ? 'images' : 'files'} for curious users. Summarize the ${kindLabel} at the path below. Be factual and do not invent details. Format the answer in Markdown. Do not use emojis. ${maxCharactersLine} ${languageInstruction}
 
 ${headerLines.length > 0 ? `${headerLines.join('\n')}\n\n` : ''}Return only the summary.`
 }

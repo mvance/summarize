@@ -1,22 +1,38 @@
-# Language
+# Output language
 
-Summarize supports forcing the **output language** for summaries.
+By default, `summarize` writes the summary in the **same language as the source content** (`--language auto`).
 
-This affects the language of the generated summary text (not the extraction/transcription step).
-
-Default: `auto` (match the source content language).
+This affects the language of the generated summary text (not extraction/transcription).
 
 ## CLI
 
 ```bash
-summarize --language auto https://example.com
-summarize --language de https://example.com
-summarize --lang german https://example.com
+summarize <input> --language auto
+summarize <input> --language en
+summarize <input> --language de
+summarize <input> --language english
+summarize <input> --lang german
 ```
 
-## Config
+Supported inputs (best-effort):
 
-`~/.summarize/config.json`:
+- `auto` (default): match the source language
+- Common shorthands: `en`, `de`, `es`, `fr`, ...
+- Common names: `english`, `german`/`deutsch`, `spanish`, ...
+- BCP-47-ish tags: `en-US`, `pt-BR`, ...
+- Free-form hints: `German, formal`
+
+## Config default
+
+Preferred:
+
+```json
+{
+  "output": { "language": "auto" }
+}
+```
+
+Legacy (still supported):
 
 ```json
 {
@@ -24,12 +40,4 @@ summarize --lang german https://example.com
 }
 ```
 
-## Supported values
-
-Best effort:
-
-- Special: `auto` (match the source content language)
-- Shorthand: `en`, `de`, `es`, `fr`, `pt-BR`, …
-- Names: `english`, `german`/`deutsch`, `spanish`, …
-
-Unknown strings are passed through to the model (sanitized). Example: `"language": "Swiss German"`.
+Unknown values are passed through to the model (sanitized).

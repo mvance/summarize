@@ -1,4 +1,6 @@
 import type { SummaryLengthTarget } from './link-summary.js'
+import type { OutputLanguage } from '../language.js'
+import { formatOutputLanguageInstruction } from '../language.js'
 
 export function buildFileSummaryPrompt({
   filename,
@@ -9,14 +11,10 @@ export function buildFileSummaryPrompt({
 }: {
   filename: string | null
   mediaType: string | null
-  outputLanguage: string
   summaryLength: SummaryLengthTarget
   contentLength?: number | null
+  outputLanguage?: OutputLanguage | null
 }): string {
-  const languageInstruction =
-    outputLanguage === 'auto'
-      ? 'Write the response in the same language as the source content.'
-      : `Write the response in ${outputLanguage}.`
   const contentCharacters = typeof contentLength === 'number' ? contentLength : null
   const effectiveSummaryLength =
     typeof summaryLength === 'string'
@@ -40,7 +38,9 @@ export function buildFileSummaryPrompt({
     mediaType ? `Media type: ${mediaType}` : null,
   ].filter(Boolean)
 
-  const prompt = `You summarize files for curious users. ${languageInstruction} Summarize the attached file. Be factual and do not invent details. Format the answer in Markdown. Do not use emojis. ${maxCharactersLine} ${contentLengthLine}
+  const languageInstruction = formatOutputLanguageInstruction(outputLanguage ?? { kind: 'auto' })
+  const prompt = `You summarize files for curious users. Summarize the attached file. Be factual and do not invent details. Format the answer in Markdown. Do not use emojis. ${maxCharactersLine} ${contentLengthLine}
+${languageInstruction}
 
 ${headerLines.length > 0 ? `${headerLines.join('\n')}\n\n` : ''}Return only the summary.`
 
@@ -58,14 +58,10 @@ export function buildFileTextSummaryPrompt({
   filename: string | null
   originalMediaType: string | null
   contentMediaType: string
-  outputLanguage: string
   summaryLength: SummaryLengthTarget
   contentLength: number
+  outputLanguage?: OutputLanguage | null
 }): string {
-  const languageInstruction =
-    outputLanguage === 'auto'
-      ? 'Write the response in the same language as the source content.'
-      : `Write the response in ${outputLanguage}.`
   const effectiveSummaryLength =
     typeof summaryLength === 'string'
       ? summaryLength
@@ -84,7 +80,8 @@ export function buildFileTextSummaryPrompt({
     `Extracted content length: ${contentLength.toLocaleString()} characters. Hard limit: never exceed this length. If the requested length is larger, do not pad—finish early rather than adding filler.`,
   ].filter(Boolean)
 
-  return `You summarize files for curious users. ${languageInstruction} Summarize the file content below. Be factual and do not invent details. Format the answer in Markdown. Do not use emojis. ${maxCharactersLine}
+  const languageInstruction = formatOutputLanguageInstruction(outputLanguage ?? { kind: 'auto' })
+  return `You summarize files for curious users. Summarize the file content below. Be factual and do not invent details. Format the answer in Markdown. Do not use emojis. ${maxCharactersLine} ${languageInstruction}
 
 ${headerLines.length > 0 ? `${headerLines.join('\n')}\n\n` : ''}Return only the summary.`
 }
