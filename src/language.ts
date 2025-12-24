@@ -105,10 +105,11 @@ function normalizeLanguageTag(value: string): string {
     .map((p) => p.trim())
     .filter(Boolean)
   if (parts.length === 0) return value
-  const head = parts[0]!.toLowerCase()
-  const tail = parts
-    .slice(1)
-    .map((p) => (p.length === 2 ? p.toUpperCase() : p.slice(0, 1).toUpperCase() + p.slice(1)))
+  const [headRaw, ...rest] = parts
+  const head = headRaw.toLowerCase()
+  const tail = rest.map((p) =>
+    p.length === 2 ? p.toUpperCase() : p.slice(0, 1).toUpperCase() + p.slice(1)
+  )
   return [head, ...tail].join('-')
 }
 
@@ -167,4 +168,3 @@ export function formatOutputLanguageForJson(
     ? { mode: 'auto' }
     : { mode: 'fixed', tag: language.tag, label: language.label }
 }
-

@@ -1,3 +1,4 @@
+import type { ChildProcess } from 'node:child_process'
 import { describe, expect, it } from 'vitest'
 
 import { runCliModel } from '../src/llm/cli.js'
@@ -21,7 +22,7 @@ describe('llm/cli extra branches', () => {
           ].join('\n'),
           ''
         )
-        return { stdin: { write() {}, end() {} } } as any
+        return { stdin: { write() {}, end() {} } } as unknown as ChildProcess
       },
     })
 
@@ -43,12 +44,13 @@ describe('llm/cli extra branches', () => {
       execFileImpl: (_cmd, _args, _opts, cb) => {
         cb(
           null,
-          ['{ this is not json', '{"result":"OK","usage":{"input_tokens":1,"output_tokens":2}}'].join(
-            '\n'
-          ),
+          [
+            '{ this is not json',
+            '{"result":"OK","usage":{"input_tokens":1,"output_tokens":2}}',
+          ].join('\n'),
           ''
         )
-        return { stdin: { write() {}, end() {} } } as any
+        return { stdin: { write() {}, end() {} } } as unknown as ChildProcess
       },
     })
 
@@ -58,4 +60,3 @@ describe('llm/cli extra branches', () => {
     expect(result.usage?.totalTokens).toBe(3)
   })
 })
-

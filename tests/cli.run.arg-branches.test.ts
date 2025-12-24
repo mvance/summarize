@@ -44,14 +44,24 @@ describe('cli run.ts arg parsing branches', () => {
   it('prints help and exits', async () => {
     const stdout = collectStream()
     const stderr = collectStream()
-    await runCli(['--help'], { env: {}, fetch: vi.fn() as any, stdout: stdout.stream, stderr: stderr.stream })
+    await runCli(['--help'], {
+      env: {},
+      fetch: vi.fn() as unknown as typeof fetch,
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+    })
     expect(stdout.getText() + stderr.getText()).toContain('Usage:')
   })
 
   it('prints version and exits', async () => {
     const stdout = collectStream()
     const stderr = collectStream()
-    await runCli(['--version'], { env: {}, fetch: vi.fn() as any, stdout: stdout.stream, stderr: stderr.stream })
+    await runCli(['--version'], {
+      env: {},
+      fetch: vi.fn() as unknown as typeof fetch,
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+    })
     expect(stdout.getText().trim()).toMatch(/^\d+\.\d+\.\d+/)
     expect(stderr.getText()).toBe('')
   })
@@ -84,7 +94,12 @@ describe('cli run.ts arg parsing branches', () => {
     const stdout = collectStream()
     const stderr = collectStream()
     await expect(
-      runCli(['--extract', '--timeout', '2s'], { env: {}, fetch: vi.fn() as any, stdout: stdout.stream, stderr: stderr.stream })
+      runCli(['--extract', '--timeout', '2s'], {
+        env: {},
+        fetch: vi.fn() as unknown as typeof fetch,
+        stdout: stdout.stream,
+        stderr: stderr.stream,
+      })
     ).rejects.toThrow(/Usage: summarize <url-or-file>/)
   })
 

@@ -1,6 +1,11 @@
 import type { LinkPreviewProgressEvent } from '../../content/link-preview/deps.js'
 
-import { formatBytes, formatBytesPerSecond, formatDurationSecondsSmart, formatElapsedMs } from '../format.js'
+import {
+  formatBytes,
+  formatBytesPerSecond,
+  formatDurationSecondsSmart,
+  formatElapsedMs,
+} from '../format.js'
 
 export function createTranscriptProgressRenderer({
   spinner,
@@ -71,7 +76,8 @@ export function createTranscriptProgressRenderer({
       elapsedMs > 0 && state.downloadedBytes > 0
         ? `, ${formatBytesPerSecond(state.downloadedBytes / (elapsedMs / 1000))}`
         : ''
-    const svc = state.service === 'podcast' ? 'podcast' : state.service === 'youtube' ? 'youtube' : 'media'
+    const svc =
+      state.service === 'podcast' ? 'podcast' : state.service === 'youtube' ? 'youtube' : 'media'
     return `Downloading audio (${svc}, ${downloaded}${total}, ${elapsed}${rate})…`
   }
 
@@ -84,7 +90,8 @@ export function createTranscriptProgressRenderer({
 
   const renderWhisperLine = () => {
     const provider = formatProvider(state.whisperProviderHint)
-    const svc = state.service === 'podcast' ? 'podcast' : state.service === 'youtube' ? 'youtube' : 'media'
+    const svc =
+      state.service === 'podcast' ? 'podcast' : state.service === 'youtube' ? 'youtube' : 'media'
     const elapsedMs = typeof state.startedAtMs === 'number' ? Date.now() - state.startedAtMs : 0
     const elapsed = formatElapsedMs(elapsedMs)
 

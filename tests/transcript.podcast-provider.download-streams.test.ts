@@ -9,14 +9,14 @@ async function importPodcastProviderWithFfmpeg(plan: SpawnPlan) {
   vi.doMock('node:child_process', () => ({
     spawn: (_cmd: string, args: string[]) => {
       if (_cmd === 'ffprobe') {
-        const handlers = new Map<string, (value?: any) => void>()
-        const proc: any = {
-          stdout: { setEncoding: () => proc, on: (_event: string, _handler: any) => proc },
-          on(event: string, handler: (value?: any) => void) {
+        const handlers = new Map<string, (value?: unknown) => void>()
+        const proc = {
+          stdout: { setEncoding: () => proc, on: (_event: string, _handler: unknown) => proc },
+          on(event: string, handler: (value?: unknown) => void) {
             handlers.set(event, handler)
             return proc
           },
-        }
+        } as unknown
         queueMicrotask(() => handlers.get('error')?.(new Error('spawn ENOENT')))
         return proc
       }
@@ -24,13 +24,13 @@ async function importPodcastProviderWithFfmpeg(plan: SpawnPlan) {
       if (_cmd !== 'ffmpeg' || !args.includes('-version')) {
         throw new Error(`Unexpected spawn: ${_cmd} ${args.join(' ')}`)
       }
-      const handlers = new Map<string, (value?: any) => void>()
-      const proc: any = {
-        on(event: string, handler: (value?: any) => void) {
+      const handlers = new Map<string, (value?: unknown) => void>()
+      const proc = {
+        on(event: string, handler: (value?: unknown) => void) {
           handlers.set(event, handler)
           return proc
         },
-      }
+      } as unknown
       queueMicrotask(() => {
         if (plan === 'ffmpeg-ok') handlers.get('close')?.(0)
         else handlers.get('error')?.(new Error('spawn ENOENT'))
@@ -44,7 +44,7 @@ async function importPodcastProviderWithFfmpeg(plan: SpawnPlan) {
 
 const baseOptions = {
   fetch: vi.fn() as unknown as typeof fetch,
-  scrapeWithFirecrawl: null as unknown as ((...args: any[]) => any) | null,
+  scrapeWithFirecrawl: null as unknown as ((...args: unknown[]) => unknown) | null,
   apifyApiToken: null,
   youtubeTranscriptMode: 'auto' as const,
   ytDlpPath: null,
@@ -63,9 +63,9 @@ describe('podcast transcript provider - streaming download branches', () => {
       return {
         async read() {
           i += 1
-          if (i === 1) return { done: false, value: undefined as any }
+          if (i === 1) return { done: false, value: undefined as unknown as Uint8Array }
           if (i === 2) return { done: false, value: new Uint8Array(MAX_OPENAI_UPLOAD_BYTES + 10) }
-          return { done: true, value: undefined as any }
+          return { done: true, value: undefined as unknown as Uint8Array }
         },
         async cancel() {
           throw new Error('cancel failed')
@@ -120,9 +120,9 @@ describe('podcast transcript provider - streaming download branches', () => {
       return {
         async read() {
           i += 1
-          if (i === 1) return { done: false, value: undefined as any }
+          if (i === 1) return { done: false, value: undefined as unknown as Uint8Array }
           if (i === 2) return { done: false, value: new Uint8Array([1, 2, 3]) }
-          return { done: true, value: undefined as any }
+          return { done: true, value: undefined as unknown as Uint8Array }
         },
         async cancel() {
           throw new Error('cancel failed')

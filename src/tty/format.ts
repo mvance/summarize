@@ -63,4 +63,3 @@ export function formatDurationSecondsSmart(value: number): string {
   if (seconds > 0 || parts.length === 0) parts.push(`${seconds}s`)
   return parts.join(' ')
 }
-

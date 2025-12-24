@@ -7,7 +7,7 @@ describe('podcast transcript provider - invalid URL branches', () => {
     const result = await fetchTranscript(
       { url: 'not a url', html: null, resourceKey: null },
       {
-        fetch: vi.fn() as any,
+        fetch: vi.fn() as unknown as typeof fetch,
         scrapeWithFirecrawl: null,
         apifyApiToken: null,
         youtubeTranscriptMode: 'auto',
@@ -21,4 +21,3 @@ describe('podcast transcript provider - invalid URL branches', () => {
     expect(result.metadata?.reason).toBe('no_enclosure_and_no_yt_dlp')
   })
 })
-

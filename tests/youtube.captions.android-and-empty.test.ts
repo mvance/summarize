@@ -19,11 +19,14 @@ describe('YouTube captionTracks Android fallback + empty-body branches', () => {
       return Promise.reject(new Error(`Unexpected fetch call: ${url}`))
     })
 
-    const transcript = await fetchTranscriptFromCaptionTracks(fetchMock as unknown as typeof fetch, {
-      html,
-      originalUrl: 'https://www.youtube.com/watch?v=abcdefghijk',
-      videoId: 'abcdefghijk',
-    })
+    const transcript = await fetchTranscriptFromCaptionTracks(
+      fetchMock as unknown as typeof fetch,
+      {
+        html,
+        originalUrl: 'https://www.youtube.com/watch?v=abcdefghijk',
+        videoId: 'abcdefghijk',
+      }
+    )
 
     expect(transcript).toBeNull()
   })
@@ -42,11 +45,14 @@ describe('YouTube captionTracks Android fallback + empty-body branches', () => {
       return Promise.reject(new Error(`Unexpected fetch call: ${url}`))
     })
 
-    const transcript = await fetchTranscriptFromCaptionTracks(fetchMock as unknown as typeof fetch, {
-      html,
-      originalUrl: 'https://www.youtube.com/watch?v=abcdefghijk',
-      videoId: 'abcdefghijk',
-    })
+    const transcript = await fetchTranscriptFromCaptionTracks(
+      fetchMock as unknown as typeof fetch,
+      {
+        html,
+        originalUrl: 'https://www.youtube.com/watch?v=abcdefghijk',
+        videoId: 'abcdefghijk',
+      }
+    )
 
     expect(transcript).toBeNull()
   })
@@ -92,13 +98,15 @@ describe('YouTube captionTracks Android fallback + empty-body branches', () => {
       return Promise.reject(new Error(`Unexpected fetch call: ${url}`))
     })
 
-    const transcript = await fetchTranscriptFromCaptionTracks(fetchMock as unknown as typeof fetch, {
-      html,
-      originalUrl: 'https://www.youtube.com/watch?v=abcdefghijk',
-      videoId: 'abcdefghijk',
-    })
+    const transcript = await fetchTranscriptFromCaptionTracks(
+      fetchMock as unknown as typeof fetch,
+      {
+        html,
+        originalUrl: 'https://www.youtube.com/watch?v=abcdefghijk',
+        videoId: 'abcdefghijk',
+      }
+    )
 
     expect(transcript).toBe('From xml\nagain')
   })
 })
-

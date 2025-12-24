@@ -1,8 +1,8 @@
 import { spawn } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
 import { promises as fs } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { randomUUID } from 'node:crypto'
 import { createFalClient } from '@fal-ai/client'
 
 const TRANSCRIPTION_TIMEOUT_MS = 600_000
@@ -103,7 +103,12 @@ export async function transcribeMediaWithWhisper({
         // is the most reliable cross-format fallback (and also reduces upload size).
         notes.push('OpenAI could not decode media; transcoding via ffmpeg and retrying')
         const mp3Bytes = await transcodeBytesToMp3(bytes)
-        const retried = await transcribeWithOpenAi(mp3Bytes, 'audio/mpeg', 'audio.mp3', openaiApiKey)
+        const retried = await transcribeWithOpenAi(
+          mp3Bytes,
+          'audio/mpeg',
+          'audio.mp3',
+          openaiApiKey
+        )
         if (retried) {
           return { text: retried, provider: 'openai', error: null, notes }
         }
@@ -317,7 +322,9 @@ export async function transcribeMediaFileWithWhisper({
   return { ...result, notes }
 }
 
-export async function probeMediaDurationSecondsWithFfprobe(filePath: string): Promise<number | null> {
+export async function probeMediaDurationSecondsWithFfprobe(
+  filePath: string
+): Promise<number | null> {
   // ffprobe is part of the ffmpeg suite. We keep this optional (best-effort) so environments
   // without ffmpeg still work; it only powers nicer progress output.
   return new Promise((resolve) => {
@@ -577,7 +584,9 @@ async function runFfmpegTranscodeToMp3({
         return
       }
       const detail = stderr.trim()
-      reject(new Error(`ffmpeg transcode failed (${code ?? 'unknown'}): ${detail || 'unknown error'}`))
+      reject(
+        new Error(`ffmpeg transcode failed (${code ?? 'unknown'}): ${detail || 'unknown error'}`)
+      )
     })
   })
 }

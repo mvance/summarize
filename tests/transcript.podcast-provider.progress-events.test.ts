@@ -18,27 +18,28 @@ async function importPodcastProvider({
     notes: [],
   }))
 
-  const transcribeMediaFileWithWhisper = vi.fn(async (args: any) => {
+  const transcribeMediaFileWithWhisper = vi.fn(async (args: unknown) => {
+    const record = args as { onProgress?: ((event: unknown) => void) | null }
     if (transcribePlan === 'file') {
-      args?.onProgress?.({
+      record.onProgress?.({
         partIndex: null,
         parts: 3,
         processedDurationSeconds: null,
         totalDurationSeconds: null,
       })
-      args?.onProgress?.({
+      record.onProgress?.({
         partIndex: 1,
         parts: 3,
         processedDurationSeconds: null,
         totalDurationSeconds: null,
       })
-      args?.onProgress?.({
+      record.onProgress?.({
         partIndex: 2,
         parts: 3,
         processedDurationSeconds: null,
         totalDurationSeconds: null,
       })
-      args?.onProgress?.({
+      record.onProgress?.({
         partIndex: 3,
         parts: 3,
         processedDurationSeconds: null,
@@ -62,7 +63,7 @@ async function importPodcastProvider({
 
 const baseOptions = {
   fetch: vi.fn() as unknown as typeof fetch,
-  scrapeWithFirecrawl: null as unknown as ((...args: any[]) => any) | null,
+  scrapeWithFirecrawl: null as unknown as ((...args: unknown[]) => unknown) | null,
   apifyApiToken: null,
   youtubeTranscriptMode: 'auto' as const,
   ytDlpPath: null as string | null,
@@ -76,9 +77,10 @@ describe('podcast provider progress events', () => {
     const enclosureUrl = 'https://example.com/episode.mp3'
     const xml = `<rss><channel><item><enclosure url="${enclosureUrl}" type="audio/mpeg"/></item></channel></rss>`
 
-    const events: any[] = []
+    const events: Array<{ kind: string }> = []
     const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof _input === 'string' ? _input : _input instanceof URL ? _input.toString() : _input.url
+      const url =
+        typeof _input === 'string' ? _input : _input instanceof URL ? _input.toString() : _input.url
       const method = (init?.method ?? 'GET').toUpperCase()
       if (method === 'HEAD') {
         return new Response(null, {
@@ -98,7 +100,7 @@ describe('podcast provider progress events', () => {
       {
         ...baseOptions,
         fetch: fetchImpl as unknown as typeof fetch,
-        onProgress: (e) => events.push(e),
+        onProgress: (e) => events.push(e as { kind: string }),
       }
     )
 
@@ -118,9 +120,10 @@ describe('podcast provider progress events', () => {
     const enclosureUrl = 'https://example.com/episode.mp3'
     const xml = `<rss><channel><item><enclosure url="${enclosureUrl}" type="audio/mpeg"/></item></channel></rss>`
 
-    const events: any[] = []
+    const events: Array<{ kind: string }> = []
     const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof _input === 'string' ? _input : _input instanceof URL ? _input.toString() : _input.url
+      const url =
+        typeof _input === 'string' ? _input : _input instanceof URL ? _input.toString() : _input.url
       const method = (init?.method ?? 'GET').toUpperCase()
       if (method === 'HEAD') {
         return new Response(null, {
@@ -145,7 +148,7 @@ describe('podcast provider progress events', () => {
       {
         ...baseOptions,
         fetch: fetchImpl as unknown as typeof fetch,
-        onProgress: (e) => events.push(e),
+        onProgress: (e) => events.push(e as { kind: string }),
       }
     )
 

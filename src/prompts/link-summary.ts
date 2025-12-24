@@ -1,6 +1,6 @@
-import type { SummaryLength } from '../shared/contracts.js'
 import type { OutputLanguage } from '../language.js'
 import { formatOutputLanguageInstruction } from '../language.js'
+import type { SummaryLength } from '../shared/contracts.js'
 
 const SUMMARY_LENGTH_DIRECTIVES: Record<SummaryLength, { guidance: string; formatting: string }> = {
   short: {

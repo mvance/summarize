@@ -8,15 +8,15 @@ async function importPodcastProvider({ spawnPlan }: { spawnPlan: SpawnPlan }) {
   vi.doMock('node:child_process', () => ({
     spawn: (_cmd: string, args: string[]) => {
       if (_cmd === 'ffprobe') {
-        const handlers = new Map<string, (value?: any) => void>()
-        const proc: any = {
-          on(event: string, handler: (value?: any) => void) {
+        const handlers = new Map<string, (value?: unknown) => void>()
+        const proc = {
+          on(event: string, handler: (value?: unknown) => void) {
             handlers.set(event, handler)
             if (event === 'error') queueMicrotask(() => handler(new Error('spawn ENOENT')))
             return proc
           },
           stdout: { setEncoding: () => proc, on: () => proc },
-        }
+        } as unknown
         return proc
       }
 
@@ -24,9 +24,9 @@ async function importPodcastProvider({ spawnPlan }: { spawnPlan: SpawnPlan }) {
         throw new Error(`Unexpected spawn: ${_cmd} ${args.join(' ')}`)
       }
 
-      const handlers = new Map<string, (value?: any) => void>()
-      const proc: any = {
-        on(event: string, handler: (value?: any) => void) {
+      const handlers = new Map<string, (value?: unknown) => void>()
+      const proc = {
+        on(event: string, handler: (value?: unknown) => void) {
           handlers.set(event, handler)
           if (spawnPlan === 'ffmpeg-missing' && event === 'error') {
             queueMicrotask(() => handler(new Error('spawn ENOENT')))
@@ -39,7 +39,7 @@ async function importPodcastProvider({ spawnPlan }: { spawnPlan: SpawnPlan }) {
           }
           return proc
         },
-      }
+      } as unknown
       return proc
     },
   }))
@@ -50,7 +50,7 @@ async function importPodcastProvider({ spawnPlan }: { spawnPlan: SpawnPlan }) {
 
 const baseOptions = {
   fetch: vi.fn() as unknown as typeof fetch,
-  scrapeWithFirecrawl: null as unknown as ((...args: any[]) => any) | null,
+  scrapeWithFirecrawl: null as unknown as ((...args: unknown[]) => unknown) | null,
   apifyApiToken: null,
   youtubeTranscriptMode: 'auto' as const,
   ytDlpPath: null as string | null,
@@ -65,7 +65,8 @@ describe('podcast provider - transcribeMediaUrl branch coverage', () => {
     const xml = `<rss><channel><item><enclosure url="${enclosureUrl}" type="audio/mpeg"/></item></channel></rss>`
 
     const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
       const method = (init?.method ?? 'GET').toUpperCase()
       if (method === 'HEAD') {
         return new Response(null, {
@@ -110,7 +111,8 @@ describe('podcast provider - transcribeMediaUrl branch coverage', () => {
     const xml = `<rss><channel><item><enclosure url="${enclosureUrl}" type="audio/mpeg"/></item></channel></rss>`
 
     const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
       const method = (init?.method ?? 'GET').toUpperCase()
       if (method === 'HEAD') {
         throw new Error('no head')

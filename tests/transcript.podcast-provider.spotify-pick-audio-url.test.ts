@@ -5,13 +5,13 @@ vi.mock('node:child_process', () => ({
     if (_cmd !== 'ffmpeg' || !args.includes('-version')) {
       throw new Error(`Unexpected spawn: ${_cmd} ${args.join(' ')}`)
     }
-    const handlers = new Map<string, (value?: any) => void>()
-    const proc: any = {
-      on(event: string, handler: (value?: any) => void) {
+    const handlers = new Map<string, (value?: unknown) => void>()
+    const proc = {
+      on(event: string, handler: (value?: unknown) => void) {
         handlers.set(event, handler)
         return proc
       },
-    }
+    } as unknown
     queueMicrotask(() => handlers.get('close')?.(0))
     return proc
   },
@@ -35,16 +35,23 @@ describe('podcast transcript provider - spotify audio url selection branches', (
     })}</script>`
 
     const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
       const method = (init?.method ?? 'GET').toUpperCase()
       if (url === 'https://open.spotify.com/embed/episode/abc') {
         return new Response(embedHtml, { status: 200, headers: { 'content-type': 'text/html' } })
       }
       if (url === 'https://cdn.example.com/a.mp4' && method === 'HEAD') {
-        return new Response(null, { status: 200, headers: { 'content-type': 'audio/mp4', 'content-length': '1024' } })
+        return new Response(null, {
+          status: 200,
+          headers: { 'content-type': 'audio/mp4', 'content-length': '1024' },
+        })
       }
       if (url === 'https://cdn.example.com/a.mp4' && method === 'GET') {
-        return new Response(new Uint8Array([1, 2, 3]), { status: 200, headers: { 'content-type': 'audio/mp4' } })
+        return new Response(new Uint8Array([1, 2, 3]), {
+          status: 200,
+          headers: { 'content-type': 'audio/mp4' },
+        })
       }
       throw new Error(`Unexpected fetch: ${url} ${method}`)
     })
@@ -80,4 +87,3 @@ describe('podcast transcript provider - spotify audio url selection branches', (
     }
   })
 })
-

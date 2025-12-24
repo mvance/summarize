@@ -11,9 +11,10 @@ vi.mock('ai', () => ({
 }))
 
 const createOpenAIMock = vi.fn(() => {
-  const fn: any = (_modelId: string) => ({ kind: 'responses' })
-  fn.chat = (_modelId: string) => ({ kind: 'chat' })
-  return fn
+  const base = (_modelId: string) => ({ kind: 'responses' as const })
+  return Object.assign(base, {
+    chat: (_modelId: string) => ({ kind: 'chat' as const }),
+  })
 })
 
 vi.mock('@ai-sdk/openai', () => ({
@@ -26,13 +27,15 @@ vi.mock('@ai-sdk/anthropic', () => ({
 
 describe('llm/generate-text extra branches', () => {
   it('streamTextWithModelId resolves usage=null when totalUsage rejects and iterator cleanup rejects', async () => {
-    streamTextMock.mockImplementationOnce((_args: any) => {
+    streamTextMock.mockImplementationOnce((_args: unknown) => {
       const stream = {
         async *[Symbol.asyncIterator]() {
           yield 'ok'
         },
       }
-      const iterator: any = stream[Symbol.asyncIterator]()
+      const iterator = stream[Symbol.asyncIterator]() as AsyncIterator<string> & {
+        return: () => Promise<IteratorResult<string>>
+      }
       iterator.return = () => Promise.reject(new Error('cleanup failed'))
       return {
         textStream: { [Symbol.asyncIterator]: () => iterator },
@@ -63,8 +66,12 @@ describe('llm/generate-text extra branches', () => {
 
   it('streamTextWithModelId normalizes anthropic access errors via onError', async () => {
     let capturedOnError: ((event: { error: unknown }) => void) | null = null
-    streamTextMock.mockImplementationOnce((args: any) => {
-      capturedOnError = typeof args.onError === 'function' ? args.onError : null
+    streamTextMock.mockImplementationOnce((args: unknown) => {
+      const record = args as { onError?: unknown }
+      capturedOnError =
+        typeof record.onError === 'function'
+          ? (record.onError as (event: { error: unknown }) => void)
+          : null
       return {
         textStream: {
           async *[Symbol.asyncIterator]() {
@@ -101,7 +108,9 @@ describe('llm/generate-text extra branches', () => {
     })
 
     const err = result.lastError()
-    expect(err instanceof Error ? err.message : String(err)).toMatch(/Anthropic API rejected model/i)
+    expect(err instanceof Error ? err.message : String(err)).toMatch(
+      /Anthropic API rejected model/i
+    )
   })
 
   it('generateTextWithModelId retries on timeout-like errors', async () => {
@@ -164,4 +173,3 @@ describe('llm/generate-text extra branches', () => {
     ).rejects.toThrow(/Missing OPENAI_API_KEY/i)
   })
 })
-

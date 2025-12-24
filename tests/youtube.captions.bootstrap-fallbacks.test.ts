@@ -31,16 +31,21 @@ describe('YouTube captionTracks bootstrap fallbacks', () => {
         }
       }
       if (url.startsWith('https://example.com/captions') && url.includes('fmt=json3')) {
-        return Promise.resolve(new Response(JSON.stringify({ events: [{ segs: [{ utf8: 'OK' }] }] }), { status: 200 }))
+        return Promise.resolve(
+          new Response(JSON.stringify({ events: [{ segs: [{ utf8: 'OK' }] }] }), { status: 200 })
+        )
       }
       throw new Error(`Unexpected fetch call: ${url}`)
     })
 
-    const transcript = await fetchTranscriptFromCaptionTracks(fetchMock as unknown as typeof fetch, {
-      html,
-      originalUrl: 'https://www.youtube.com/watch?v=abcdefghijk',
-      videoId: 'abcdefghijk',
-    })
+    const transcript = await fetchTranscriptFromCaptionTracks(
+      fetchMock as unknown as typeof fetch,
+      {
+        html,
+        originalUrl: 'https://www.youtube.com/watch?v=abcdefghijk',
+        videoId: 'abcdefghijk',
+      }
+    )
 
     expect(transcript).toBe('OK')
   })
@@ -71,16 +76,21 @@ describe('YouTube captionTracks bootstrap fallbacks', () => {
         }
       }
       if (url.startsWith('https://example.com/captions') && url.includes('fmt=json3')) {
-        return Promise.resolve(new Response(JSON.stringify({ events: [{ segs: [{ utf8: 'OK' }] }] }), { status: 200 }))
+        return Promise.resolve(
+          new Response(JSON.stringify({ events: [{ segs: [{ utf8: 'OK' }] }] }), { status: 200 })
+        )
       }
       throw new Error(`Unexpected fetch call: ${url}`)
     })
 
-    const transcript = await fetchTranscriptFromCaptionTracks(fetchMock as unknown as typeof fetch, {
-      html,
-      originalUrl: 'https://www.youtube.com/watch?v=abcdefghijk',
-      videoId: 'abcdefghijk',
-    })
+    const transcript = await fetchTranscriptFromCaptionTracks(
+      fetchMock as unknown as typeof fetch,
+      {
+        html,
+        originalUrl: 'https://www.youtube.com/watch?v=abcdefghijk',
+        videoId: 'abcdefghijk',
+      }
+    )
 
     expect(transcript).toBe('OK')
   })
@@ -100,19 +110,23 @@ describe('YouTube captionTracks bootstrap fallbacks', () => {
       }
       if (url === 'https://example.com/captions?lang=en') {
         return Promise.resolve(
-          new Response(JSON.stringify({ events: [{ segs: [{ utf8: 'From xml json' }] }] }), { status: 200 })
+          new Response(JSON.stringify({ events: [{ segs: [{ utf8: 'From xml json' }] }] }), {
+            status: 200,
+          })
         )
       }
       throw new Error(`Unexpected fetch call: ${url}`)
     })
 
-    const transcript = await fetchTranscriptFromCaptionTracks(fetchMock as unknown as typeof fetch, {
-      html,
-      originalUrl: 'https://www.youtube.com/watch?v=abcdefghijk',
-      videoId: 'abcdefghijk',
-    })
+    const transcript = await fetchTranscriptFromCaptionTracks(
+      fetchMock as unknown as typeof fetch,
+      {
+        html,
+        originalUrl: 'https://www.youtube.com/watch?v=abcdefghijk',
+        videoId: 'abcdefghijk',
+      }
+    )
 
     expect(transcript).toBe('From xml json')
   })
 })
-

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import type { ScrapeWithFirecrawl } from '../src/content/link-preview/deps.js'
 
 async function importPodcastProvider() {
   vi.resetModules()
@@ -44,7 +45,8 @@ describe('podcast provider extra branches (spotify/apple/transcribe)', () => {
     const embedUrl = `https://open.spotify.com/embed/episode/${episodeId}`
 
     const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
       const method = (init?.method ?? 'GET').toUpperCase()
       if (url === embedUrl && method === 'GET') {
         return new Response('no', { status: 503, headers: { 'content-type': 'text/html' } })
@@ -68,10 +70,14 @@ describe('podcast provider extra branches (spotify/apple/transcribe)', () => {
     const embedUrl = `https://open.spotify.com/embed/episode/${episodeId}`
 
     const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
       const method = (init?.method ?? 'GET').toUpperCase()
       if (url === embedUrl && method === 'GET') {
-        return new Response('<html>captcha</html>', { status: 200, headers: { 'content-type': 'text/html' } })
+        return new Response('<html>captcha</html>', {
+          status: 200,
+          headers: { 'content-type': 'text/html' },
+        })
       }
       throw new Error(`Unexpected fetch: ${method} ${url}`)
     })
@@ -83,7 +89,7 @@ describe('podcast provider extra branches (spotify/apple/transcribe)', () => {
       {
         ...baseOptions,
         fetch: fetchImpl as unknown as typeof fetch,
-        scrapeWithFirecrawl: scrapeWithFirecrawl as any,
+        scrapeWithFirecrawl: scrapeWithFirecrawl as unknown as ScrapeWithFirecrawl,
       }
     )
 
@@ -98,22 +104,29 @@ describe('podcast provider extra branches (spotify/apple/transcribe)', () => {
     const embedUrl = `https://open.spotify.com/embed/episode/${episodeId}`
 
     const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
       const method = (init?.method ?? 'GET').toUpperCase()
       if (url === embedUrl && method === 'GET') {
-        return new Response('<html>captcha</html>', { status: 200, headers: { 'content-type': 'text/html' } })
+        return new Response('<html>captcha</html>', {
+          status: 200,
+          headers: { 'content-type': 'text/html' },
+        })
       }
       throw new Error(`Unexpected fetch: ${method} ${url}`)
     })
 
-    const scrapeWithFirecrawl = vi.fn(async () => ({ html: '<html>recaptcha</html>', markdown: 'x' }))
+    const scrapeWithFirecrawl = vi.fn(async () => ({
+      html: '<html>recaptcha</html>',
+      markdown: 'x',
+    }))
 
     const result = await fetchTranscript(
       { url: pageUrl, html: null, resourceKey: null },
       {
         ...baseOptions,
         fetch: fetchImpl as unknown as typeof fetch,
-        scrapeWithFirecrawl: scrapeWithFirecrawl as any,
+        scrapeWithFirecrawl: scrapeWithFirecrawl as unknown as ScrapeWithFirecrawl,
       }
     )
 
@@ -131,14 +144,24 @@ describe('podcast provider extra branches (spotify/apple/transcribe)', () => {
 
     const embedHtml = `<!doctype html><script id="__NEXT_DATA__" type="application/json">${JSON.stringify(
       {
-        props: { pageProps: { state: { data: { entity: { subtitle: 'Show', title: 'Ep', duration: 60_000 }, defaultAudioFileObject: { url: [] } } } } },
+        props: {
+          pageProps: {
+            state: {
+              data: {
+                entity: { subtitle: 'Show', title: 'Ep', duration: 60_000 },
+                defaultAudioFileObject: { url: [] },
+              },
+            },
+          },
+        },
       }
     )}</script>`
 
     const rss = `<rss><channel><item><title>Ep</title><enclosure url="${enclosureUrl}" type="audio/mpeg"/><itunes:duration>60</itunes:duration></item></channel></rss>`
 
     const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
       const method = (init?.method ?? 'GET').toUpperCase()
 
       if (url === embedUrl && method === 'GET') return new Response(embedHtml, { status: 200 })
@@ -160,7 +183,10 @@ describe('podcast provider extra branches (spotify/apple/transcribe)', () => {
       }
 
       if (url === enclosureUrl && method === 'GET') {
-        return new Response(new Uint8Array([1, 2, 3]), { status: 200, headers: { 'content-type': 'audio/mpeg' } })
+        return new Response(new Uint8Array([1, 2, 3]), {
+          status: 200,
+          headers: { 'content-type': 'audio/mpeg' },
+        })
       }
 
       throw new Error(`Unexpected fetch: ${method} ${url}`)
@@ -184,7 +210,8 @@ describe('podcast provider extra branches (spotify/apple/transcribe)', () => {
     const newerUrl = 'https://cdn.example/newer.mp3'
 
     const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
       const method = (init?.method ?? 'GET').toUpperCase()
 
       if (url === lookupUrl && method === 'GET') {
@@ -192,8 +219,18 @@ describe('podcast provider extra branches (spotify/apple/transcribe)', () => {
           JSON.stringify({
             results: [
               { wrapperType: 'track', kind: 'podcast', feedUrl: 'https://example.com/feed.xml' },
-              { wrapperType: 'podcastEpisode', trackId: 1, episodeUrl: olderUrl, releaseDate: '2025-01-01T00:00:00Z' },
-              { wrapperType: 'podcastEpisode', trackId: 2, episodeUrl: newerUrl, releaseDate: '2025-12-01T00:00:00Z' },
+              {
+                wrapperType: 'podcastEpisode',
+                trackId: 1,
+                episodeUrl: olderUrl,
+                releaseDate: '2025-01-01T00:00:00Z',
+              },
+              {
+                wrapperType: 'podcastEpisode',
+                trackId: 2,
+                episodeUrl: newerUrl,
+                releaseDate: '2025-12-01T00:00:00Z',
+              },
             ],
           }),
           { status: 200, headers: { 'content-type': 'application/json' } }
@@ -201,10 +238,16 @@ describe('podcast provider extra branches (spotify/apple/transcribe)', () => {
       }
 
       if (url === newerUrl && method === 'HEAD') {
-        return new Response(null, { status: 200, headers: { 'content-type': 'audio/mpeg', 'content-length': '10' } })
+        return new Response(null, {
+          status: 200,
+          headers: { 'content-type': 'audio/mpeg', 'content-length': '10' },
+        })
       }
       if (url === newerUrl && method === 'GET') {
-        return new Response(new Uint8Array([1, 2, 3]), { status: 200, headers: { 'content-type': 'audio/mpeg' } })
+        return new Response(new Uint8Array([1, 2, 3]), {
+          status: 200,
+          headers: { 'content-type': 'audio/mpeg' },
+        })
       }
 
       throw new Error(`Unexpected fetch: ${method} ${url}`)
@@ -216,7 +259,8 @@ describe('podcast provider extra branches (spotify/apple/transcribe)', () => {
     )
 
     expect(result.source).toBe('whisper')
-    expect((result.metadata as any)?.episodeUrl).toBe(newerUrl)
+    const meta = result.metadata as unknown as { episodeUrl?: string }
+    expect(meta.episodeUrl).toBe(newerUrl)
   })
 
   it('transcribes via temp file when HEAD has no content-length', async () => {
@@ -225,13 +269,17 @@ describe('podcast provider extra branches (spotify/apple/transcribe)', () => {
     const xml = `<rss><channel><item><enclosure url="${enclosureUrl}" type="audio/mpeg"/></item></channel></rss>`
 
     const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
       const method = (init?.method ?? 'GET').toUpperCase()
       if (method === 'HEAD') {
         return new Response(null, { status: 200, headers: { 'content-type': 'audio/mpeg' } })
       }
       if (url === enclosureUrl && method === 'GET') {
-        return new Response(new Uint8Array([1, 2, 3, 4, 5]), { status: 200, headers: { 'content-type': 'audio/mpeg' } })
+        return new Response(new Uint8Array([1, 2, 3, 4, 5]), {
+          status: 200,
+          headers: { 'content-type': 'audio/mpeg' },
+        })
       }
       throw new Error(`Unexpected fetch: ${method} ${url}`)
     })
@@ -251,10 +299,14 @@ describe('podcast provider extra branches (spotify/apple/transcribe)', () => {
     const xml = `<rss><channel><item><enclosure url="${enclosureUrl}" type="audio/mpeg"/></item></channel></rss>`
 
     const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
       const method = (init?.method ?? 'GET').toUpperCase()
       if (method === 'HEAD') {
-        return new Response(null, { status: 200, headers: { 'content-type': 'audio/mpeg', 'content-length': '10' } })
+        return new Response(null, {
+          status: 200,
+          headers: { 'content-type': 'audio/mpeg', 'content-length': '10' },
+        })
       }
       if (url === enclosureUrl && method === 'GET') {
         return new Response('nope', { status: 403 })

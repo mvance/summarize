@@ -4,7 +4,7 @@ import { fetchTranscript } from '../src/content/link-preview/transcript/provider
 
 const baseOptions = {
   fetch: vi.fn() as unknown as typeof fetch,
-  scrapeWithFirecrawl: null as unknown as ((...args: any[]) => any) | null,
+  scrapeWithFirecrawl: null as unknown as ((...args: unknown[]) => unknown) | null,
   apifyApiToken: null,
   youtubeTranscriptMode: 'auto' as const,
   ytDlpPath: null,
@@ -27,12 +27,12 @@ describe('podcast transcript provider module', () => {
   })
 
   it('extracts RSS enclosure URL and decodes &amp;', async () => {
-    const enclosureUrl =
-      'https://example.com/episode.mp3?p=1&amp;t=podcast&amp;size=123'
+    const enclosureUrl = 'https://example.com/episode.mp3?p=1&amp;t=podcast&amp;size=123'
     const xml = `<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><item><itunes:duration>12:34</itunes:duration><enclosure url="${enclosureUrl}" type="audio/mpeg"/></item></channel></rss>`
 
     const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
       expect(url).toBe('https://example.com/episode.mp3?p=1&t=podcast&size=123')
       return new Response(new Uint8Array([0, 1, 2, 3]), {
         status: 200,
@@ -67,7 +67,8 @@ describe('podcast transcript provider module', () => {
       '<html><head></head><body><script>{"playAction":{"episodeOffer":{"streamUrl":"https://example.com/episode.mp3?x=1\\u0026y=2"}}}</script></body></html>'
 
     const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
       const method = (init?.method ?? 'GET').toUpperCase()
       if (method === 'HEAD') {
         return new Response(null, {
@@ -162,7 +163,10 @@ describe('podcast transcript provider module', () => {
       }
 
       if (url === feedUrl) {
-        return new Response(feedXml, { status: 200, headers: { 'content-type': 'application/xml' } })
+        return new Response(feedXml, {
+          status: 200,
+          headers: { 'content-type': 'application/xml' },
+        })
       }
 
       if (url === enclosureUrl) {
@@ -241,7 +245,10 @@ describe('podcast transcript provider module', () => {
       const method = (init?.method ?? 'GET').toUpperCase()
 
       if (url === 'https://open.spotify.com/embed/episode/abc') {
-        return new Response(blockedEmbedHtml, { status: 200, headers: { 'content-type': 'text/html' } })
+        return new Response(blockedEmbedHtml, {
+          status: 200,
+          headers: { 'content-type': 'text/html' },
+        })
       }
 
       if (url.startsWith('https://itunes.apple.com/search')) {
@@ -255,7 +262,10 @@ describe('podcast transcript provider module', () => {
       }
 
       if (url === feedUrl) {
-        return new Response(feedXml, { status: 200, headers: { 'content-type': 'application/xml' } })
+        return new Response(feedXml, {
+          status: 200,
+          headers: { 'content-type': 'application/xml' },
+        })
       }
 
       if (url === enclosureUrl) {
@@ -292,7 +302,8 @@ describe('podcast transcript provider module', () => {
         {
           ...baseOptions,
           fetch: fetchImpl as unknown as typeof fetch,
-          scrapeWithFirecrawl: scrapeWithFirecrawl as unknown as typeof baseOptions.scrapeWithFirecrawl,
+          scrapeWithFirecrawl:
+            scrapeWithFirecrawl as unknown as typeof baseOptions.scrapeWithFirecrawl,
         }
       )
 
@@ -304,16 +315,16 @@ describe('podcast transcript provider module', () => {
     }
   })
 
-  it('extracts Apple Podcasts feedUrl from HTML and uses Atom <link rel=\"enclosure\">', async () => {
+  it('extracts Apple Podcasts feedUrl from HTML and uses Atom <link rel="enclosure">', async () => {
     const feedUrl = 'https://example.com/feed.xml'
     const enclosureUrl = 'https://example.com/episode.ogg'
-    const html =
-      `<html><body><script>{"episode":{"feedUrl":"${feedUrl}"}}</script></body></html>`
+    const html = `<html><body><script>{"episode":{"feedUrl":"${feedUrl}"}}</script></body></html>`
 
     const atom = `<?xml version="1.0" encoding="UTF-8"?><feed xmlns="http://www.w3.org/2005/Atom"><title>Test</title><itunes:duration>59</itunes:duration><link rel="enclosure" href="${enclosureUrl}" /></feed>`
 
     const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
       const method = (init?.method ?? 'GET').toUpperCase()
 
       if (url === feedUrl) {
@@ -360,7 +371,8 @@ describe('podcast transcript provider module', () => {
   it('returns a structured Spotify error when the embed page lacks __NEXT_DATA__', async () => {
     const html = '<html><head></head><body></body></html>'
     const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
       if (url === 'https://open.spotify.com/embed/episode/abc') {
         return new Response('<html><body>ok but no data</body></html>', {
           status: 200,
@@ -387,7 +399,8 @@ describe('podcast transcript provider module', () => {
     const html = `<html><head><meta property="og:audio" content="${ogAudioUrl}"/></head><body></body></html>`
 
     const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
       const method = (init?.method ?? 'GET').toUpperCase()
       if (url === ogAudioUrl) {
         if (method === 'HEAD') {
@@ -443,7 +456,8 @@ describe('podcast transcript provider module', () => {
     const xml = `<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><itunes:duration>02:03</itunes:duration><enclosure url="${enclosureUrl}" type="audio/mpeg"/></channel></rss>`
 
     const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
       const method = (init?.method ?? 'GET').toUpperCase()
       if (method === 'HEAD') {
         return new Response(null, {

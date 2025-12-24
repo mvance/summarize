@@ -84,12 +84,23 @@ describe('cli run.ts CLI provider model path', () => {
     const stderr = collectStream()
     ;(stderr.stream as unknown as { isTTY?: boolean }).isTTY = false
 
-    await runCli(['--model', 'cli/codex/gpt-5.2', '--metrics', 'detailed', '--timeout', '2s', 'https://example.com'], {
-      env: {},
-      fetch: vi.fn() as any,
-      stdout: stdout.stream,
-      stderr: stderr.stream,
-    })
+    await runCli(
+      [
+        '--model',
+        'cli/codex/gpt-5.2',
+        '--metrics',
+        'detailed',
+        '--timeout',
+        '2s',
+        'https://example.com',
+      ],
+      {
+        env: {},
+        fetch: vi.fn() as unknown as typeof fetch,
+        stdout: stdout.stream,
+        stderr: stderr.stream,
+      }
+    )
 
     expect(stdout.getText()).toContain('CLI summary')
     expect(mocks.runCliModel).toHaveBeenCalled()

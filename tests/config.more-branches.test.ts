@@ -19,9 +19,9 @@ describe('config extra branches', () => {
     expect(() => loadSummarizeConfig({ env: { HOME: root } })).toThrow(/must be provider-prefixed/i)
   })
 
-  it('rejects model.name \"auto\" in object form', () => {
+  it('rejects model.name "auto" in object form', () => {
     const root = writeJsonConfig({ model: { name: 'auto' } })
-    expect(() => loadSummarizeConfig({ env: { HOME: root } })).toThrow(/must not be \"auto\"/i)
+    expect(() => loadSummarizeConfig({ env: { HOME: root } })).toThrow(/must not be "auto"/i)
   })
 
   it('rejects invalid models keys (duplicates, spaces, slashes)', () => {
@@ -31,7 +31,9 @@ describe('config extra branches', () => {
     expect(() => loadSummarizeConfig({ env: { HOME: rootDup } })).toThrow(/duplicate model name/i)
 
     const rootSpace = writeJsonConfig({ models: { 'my preset': { id: 'openai/gpt-5.2' } } })
-    expect(() => loadSummarizeConfig({ env: { HOME: rootSpace } })).toThrow(/must not contain spaces/i)
+    expect(() => loadSummarizeConfig({ env: { HOME: rootSpace } })).toThrow(
+      /must not contain spaces/i
+    )
 
     const rootSlash = writeJsonConfig({ models: { 'a/b': { id: 'openai/gpt-5.2' } } })
     expect(() => loadSummarizeConfig({ env: { HOME: rootSlash } })).toThrow(/must not include/i)
@@ -39,7 +41,9 @@ describe('config extra branches', () => {
 
   it('rejects models entries that reference another model by name', () => {
     const root = writeJsonConfig({ models: { fast: { name: 'other' } } })
-    expect(() => loadSummarizeConfig({ env: { HOME: root } })).toThrow(/must not reference another model/i)
+    expect(() => loadSummarizeConfig({ env: { HOME: root } })).toThrow(
+      /must not reference another model/i
+    )
   })
 
   it('rejects cli.disabled and per-provider enabled keys', () => {
@@ -61,7 +65,9 @@ describe('config extra branches', () => {
     )
 
     const rootUnknown = writeJsonConfig({ cli: { enabled: ['nope'] } })
-    expect(() => loadSummarizeConfig({ env: { HOME: rootUnknown } })).toThrow(/unknown CLI provider/i)
+    expect(() => loadSummarizeConfig({ env: { HOME: rootUnknown } })).toThrow(
+      /unknown CLI provider/i
+    )
 
     const rootExtraArgs = writeJsonConfig({ cli: { extraArgs: [1] } })
     expect(() => loadSummarizeConfig({ env: { HOME: rootExtraArgs } })).toThrow(
@@ -71,11 +77,15 @@ describe('config extra branches', () => {
 
   it('rejects non-object openai config', () => {
     const root = writeJsonConfig({ openai: 1 })
-    expect(() => loadSummarizeConfig({ env: { HOME: root } })).toThrow(/\"openai\" must be an object/i)
+    expect(() => loadSummarizeConfig({ env: { HOME: root } })).toThrow(
+      /"openai" must be an object/i
+    )
   })
 
   it('rejects non-object output config', () => {
     const root = writeJsonConfig({ output: 1 })
-    expect(() => loadSummarizeConfig({ env: { HOME: root } })).toThrow(/\"output\" must be an object/i)
+    expect(() => loadSummarizeConfig({ env: { HOME: root } })).toThrow(
+      /"output" must be an object/i
+    )
   })
 })

@@ -19,4 +19,3 @@ describe('fetchHtmlDocument', () => {
     expect(out).toContain('<rss')
   })
 })
-

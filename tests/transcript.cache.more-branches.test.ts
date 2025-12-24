@@ -1,15 +1,25 @@
 import { describe, expect, it, vi } from 'vitest'
-
-import { NEGATIVE_TTL_MS, DEFAULT_TTL_MS, mapCachedSource, readTranscriptCache, writeTranscriptCache } from '../src/content/link-preview/transcript/cache.js'
+import type { TranscriptCache } from '../src/content/link-preview/deps.js'
+import {
+  DEFAULT_TTL_MS,
+  mapCachedSource,
+  NEGATIVE_TTL_MS,
+  readTranscriptCache,
+  writeTranscriptCache,
+} from '../src/content/link-preview/transcript/cache.js'
 
 describe('transcript cache - more branches', () => {
   it('reads cache miss / bypass / expired / hit', async () => {
-    const miss = await readTranscriptCache({ url: 'u', cacheMode: 'default', transcriptCache: null })
+    const miss = await readTranscriptCache({
+      url: 'u',
+      cacheMode: 'default',
+      transcriptCache: null,
+    })
     expect(miss.cached).toBeNull()
     expect(miss.diagnostics.cacheStatus).toBe('miss')
 
-    const cache = {
-      get: vi.fn(async () => ({
+    const cache: TranscriptCache = {
+      get: vi.fn(async (_args: { url: string }) => ({
         content: 'hi',
         source: 'youtubei',
         expired: false,
@@ -18,7 +28,11 @@ describe('transcript cache - more branches', () => {
       set: vi.fn(async () => {}),
     }
 
-    const bypass = await readTranscriptCache({ url: 'u', cacheMode: 'bypass', transcriptCache: cache as any })
+    const bypass = await readTranscriptCache({
+      url: 'u',
+      cacheMode: 'bypass',
+      transcriptCache: cache,
+    })
     expect(bypass.cached).not.toBeNull()
     expect(bypass.resolution).toBeNull()
     expect(bypass.diagnostics.cacheStatus).toBe('bypassed')
@@ -30,7 +44,11 @@ describe('transcript cache - more branches', () => {
       expired: true,
       metadata: null,
     })
-    const expired = await readTranscriptCache({ url: 'u', cacheMode: 'default', transcriptCache: cache as any })
+    const expired = await readTranscriptCache({
+      url: 'u',
+      cacheMode: 'default',
+      transcriptCache: cache,
+    })
     expect(expired.diagnostics.cacheStatus).toBe('expired')
     expect(expired.resolution).toBeNull()
 
@@ -40,7 +58,11 @@ describe('transcript cache - more branches', () => {
       expired: false,
       metadata: null,
     })
-    const hit = await readTranscriptCache({ url: 'u', cacheMode: 'default', transcriptCache: cache as any })
+    const hit = await readTranscriptCache({
+      url: 'u',
+      cacheMode: 'default',
+      transcriptCache: cache,
+    })
     expect(hit.diagnostics.cacheStatus).toBe('hit')
     expect(hit.resolution?.text).toBe('hi')
     expect(hit.resolution?.source).toBe('captionTracks')
@@ -51,7 +73,11 @@ describe('transcript cache - more branches', () => {
       expired: false,
       metadata: null,
     })
-    const empty = await readTranscriptCache({ url: 'u', cacheMode: 'default', transcriptCache: cache as any })
+    const empty = await readTranscriptCache({
+      url: 'u',
+      cacheMode: 'default',
+      transcriptCache: cache,
+    })
     expect(empty.diagnostics.textProvided).toBe(false)
     expect(empty.resolution?.source).toBe('unknown')
   })
@@ -63,7 +89,10 @@ describe('transcript cache - more branches', () => {
   })
 
   it('writes cache entries with correct TTL + resolved source', async () => {
-    const cache = { set: vi.fn(async () => {}) }
+    const cache: TranscriptCache = {
+      get: vi.fn(async () => null),
+      set: vi.fn(async () => {}),
+    }
 
     await writeTranscriptCache({
       url: 'u',
@@ -78,7 +107,7 @@ describe('transcript cache - more branches', () => {
       service: 'svc',
       resourceKey: null,
       result: { text: null, source: null },
-      transcriptCache: cache as any,
+      transcriptCache: cache,
     })
     expect(cache.set).not.toHaveBeenCalled()
 
@@ -87,7 +116,7 @@ describe('transcript cache - more branches', () => {
       service: 'svc',
       resourceKey: null,
       result: { text: null, source: 'youtubei' },
-      transcriptCache: cache as any,
+      transcriptCache: cache,
     })
     expect(cache.set).toHaveBeenCalledWith(
       expect.objectContaining({ ttlMs: NEGATIVE_TTL_MS, source: 'youtubei', content: null })
@@ -98,10 +127,15 @@ describe('transcript cache - more branches', () => {
       service: 'svc',
       resourceKey: null,
       result: { text: 'hi', source: null, metadata: { x: 1 } },
-      transcriptCache: cache as any,
+      transcriptCache: cache,
     })
     expect(cache.set).toHaveBeenCalledWith(
-      expect.objectContaining({ ttlMs: DEFAULT_TTL_MS, source: 'unknown', content: 'hi', metadata: { x: 1 } })
+      expect.objectContaining({
+        ttlMs: DEFAULT_TTL_MS,
+        source: 'unknown',
+        content: 'hi',
+        metadata: { x: 1 },
+      })
     )
   })
 })

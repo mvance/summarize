@@ -1,5 +1,4 @@
-import { mkdtempSync } from 'node:fs'
-import { promises as fs } from 'node:fs'
+import { promises as fs, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
@@ -28,7 +27,9 @@ describe('podcast transcript provider - helper branches', () => {
   it('detects blocked HTML (but treats __NEXT_DATA__ as not blocked)', () => {
     expect(__test__.looksLikeBlockedHtml('<html><body>captcha</body></html>')).toBe(true)
     expect(
-      __test__.looksLikeBlockedHtml('<script id="__NEXT_DATA__">{"ok":true}</script><body>captcha</body>')
+      __test__.looksLikeBlockedHtml(
+        '<script id="__NEXT_DATA__">{"ok":true}</script><body>captcha</body>'
+      )
     ).toBe(false)
   })
 
@@ -54,7 +55,10 @@ describe('podcast transcript provider - helper branches', () => {
 </channel></rss>`.trim()
 
     const match = __test__.extractEnclosureForEpisode(feed, 'Hello - World')
-    expect(match).toEqual({ enclosureUrl: 'https://example.com/ep.mp3?x=1&amp;y=2', durationSeconds: 62 })
+    expect(match).toEqual({
+      enclosureUrl: 'https://example.com/ep.mp3?x=1&amp;y=2',
+      durationSeconds: 62,
+    })
     expect(__test__.extractEnclosureForEpisode(feed, 'Other')).toBeNull()
   })
 
@@ -65,7 +69,10 @@ describe('podcast transcript provider - helper branches', () => {
         headers: { 'content-length': '2048', 'content-type': 'audio/mpeg; charset=utf-8' },
       })
     })
-    const ok = await __test__.probeRemoteMedia(okFetch as unknown as typeof fetch, 'https://example.com/ep.mp3')
+    const ok = await __test__.probeRemoteMedia(
+      okFetch as unknown as typeof fetch,
+      'https://example.com/ep.mp3'
+    )
     expect(ok.contentLength).toBe(2048)
     expect(ok.mediaType).toBe('audio/mpeg')
     expect(ok.filename).toBe('ep.mp3')
@@ -81,7 +88,10 @@ describe('podcast transcript provider - helper branches', () => {
     expect(fallback.mediaType).toBeNull()
     expect(fallback.filename).toBe('ep.mp3')
 
-    const invalid = await __test__.probeRemoteMedia(throwingFetch as unknown as typeof fetch, 'not a url')
+    const invalid = await __test__.probeRemoteMedia(
+      throwingFetch as unknown as typeof fetch,
+      'not a url'
+    )
     expect(invalid.filename).toBeNull()
   })
 
@@ -150,4 +160,3 @@ describe('podcast transcript provider - helper branches', () => {
     expect(Array.from(disk)).toEqual([9, 8, 7])
   })
 })
-

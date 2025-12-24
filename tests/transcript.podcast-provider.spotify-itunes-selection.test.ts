@@ -4,7 +4,7 @@ import { fetchTranscript } from '../src/content/link-preview/transcript/provider
 
 const baseOptions = {
   fetch: vi.fn() as unknown as typeof fetch,
-  scrapeWithFirecrawl: null as unknown as ((...args: any[]) => any) | null,
+  scrapeWithFirecrawl: null as unknown as ((...args: unknown[]) => unknown) | null,
   apifyApiToken: null,
   youtubeTranscriptMode: 'auto' as const,
   ytDlpPath: null,
@@ -21,13 +21,16 @@ describe('podcast transcript provider - Spotify iTunes feed resolution', () => {
     const enclosureUrl = 'https://example.com/episode.mp3'
 
     const embedHtml = `<script id="__NEXT_DATA__" type="application/json">${JSON.stringify({
-      props: { pageProps: { state: { data: { entity: { title: episodeTitle, subtitle: showTitle } } } } },
+      props: {
+        pageProps: { state: { data: { entity: { title: episodeTitle, subtitle: showTitle } } } },
+      },
     })}</script>`
 
     const feedXml = `<rss><channel><item><title><![CDATA[${episodeTitle}]]></title><enclosure url="${enclosureUrl}" type="audio/mpeg"/></item></channel></rss>`
 
     const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
       const method = (init?.method ?? 'GET').toUpperCase()
 
       if (url === 'https://open.spotify.com/embed/episode/abc') {
@@ -46,7 +49,10 @@ describe('podcast transcript provider - Spotify iTunes feed resolution', () => {
         )
       }
       if (url === feedUrl2) {
-        return new Response(feedXml, { status: 200, headers: { 'content-type': 'application/xml' } })
+        return new Response(feedXml, {
+          status: 200,
+          headers: { 'content-type': 'application/xml' },
+        })
       }
       if (url === enclosureUrl) {
         if (method === 'HEAD') {
@@ -79,26 +85,31 @@ describe('podcast transcript provider - Spotify iTunes feed resolution', () => {
 
       expect(result.source).toBe('whisper')
       expect(result.metadata?.feedUrl).toBe(feedUrl2)
-      expect(fetchImpl.mock.calls.some(([callInput]) => String(callInput).includes(feedUrl1))).toBe(false)
+      expect(fetchImpl.mock.calls.some(([callInput]) => String(callInput).includes(feedUrl1))).toBe(
+        false
+      )
     } finally {
       vi.unstubAllGlobals()
     }
   })
 
-  it('extracts episode enclosures from Atom-style <link rel=\"enclosure\"> inside <item>', async () => {
+  it('extracts episode enclosures from Atom-style <link rel="enclosure"> inside <item>', async () => {
     const showTitle = 'My Show'
     const episodeTitle = 'Episode 2'
     const feedUrl = 'https://example.com/feed.xml'
     const enclosureUrl = 'https://example.com/episode2.mp3'
 
     const embedHtml = `<script id="__NEXT_DATA__" type="application/json">${JSON.stringify({
-      props: { pageProps: { state: { data: { entity: { title: episodeTitle, subtitle: showTitle } } } } },
+      props: {
+        pageProps: { state: { data: { entity: { title: episodeTitle, subtitle: showTitle } } } },
+      },
     })}</script>`
 
     const feedXml = `<rss><channel><item><title>${episodeTitle}</title><itunes:duration>44</itunes:duration><link rel="enclosure" href="${enclosureUrl}" /></item></channel></rss>`
 
     const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
       const method = (init?.method ?? 'GET').toUpperCase()
 
       if (url === 'https://open.spotify.com/embed/episode/abc') {
@@ -111,7 +122,10 @@ describe('podcast transcript provider - Spotify iTunes feed resolution', () => {
         )
       }
       if (url === feedUrl) {
-        return new Response(feedXml, { status: 200, headers: { 'content-type': 'application/xml' } })
+        return new Response(feedXml, {
+          status: 200,
+          headers: { 'content-type': 'application/xml' },
+        })
       }
       if (url === enclosureUrl) {
         if (method === 'HEAD') {
@@ -149,4 +163,3 @@ describe('podcast transcript provider - Spotify iTunes feed resolution', () => {
     }
   })
 })
-

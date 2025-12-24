@@ -72,10 +72,10 @@ describe('cli markdown hyperlinks', () => {
     await runCli(
       ['--model', 'openai/gpt-5.2', '--render', 'md', '--stream', 'off', 'https://example.com'],
       {
-      env: { HOME: root, OPENAI_API_KEY: 'test', TERM: 'xterm-256color' },
-      fetch: fetchMock as unknown as typeof fetch,
-      stdout: stdout.stream,
-      stderr: stderr.stream,
+        env: { HOME: root, OPENAI_API_KEY: 'test', TERM: 'xterm-256color' },
+        fetch: fetchMock as unknown as typeof fetch,
+        stdout: stdout.stream,
+        stderr: stderr.stream,
       }
     )
 

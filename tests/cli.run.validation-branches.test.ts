@@ -26,7 +26,7 @@ describe('cli run.ts validation branches', () => {
         env: {},
         fetch: (() => {
           throw new Error('unexpected fetch')
-        }) as any,
+        }) as unknown as typeof fetch,
         stdout: stdout.stream,
         stderr: stderr.stream,
       })
@@ -45,7 +45,7 @@ describe('cli run.ts validation branches', () => {
         env: {},
         fetch: (() => {
           throw new Error('unexpected fetch')
-        }) as any,
+        }) as unknown as typeof fetch,
         stdout: stdout.stream,
         stderr: stderr.stream,
       })
@@ -60,11 +60,10 @@ describe('cli run.ts validation branches', () => {
         env: {},
         fetch: (() => {
           throw new Error('unexpected fetch')
-        }) as any,
+        }) as unknown as typeof fetch,
         stdout: stdout.stream,
         stderr: stderr.stream,
       })
     ).rejects.toThrow(/Unsupported --cli/)
   })
 })
-

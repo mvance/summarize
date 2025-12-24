@@ -36,23 +36,25 @@ describe('transcript utils - more branches', () => {
   })
 
   it('sanitizes JSON responses with the XSSI prefix', () => {
-    expect(sanitizeYoutubeJsonResponse("\n)]}'\n{\"ok\":true}")).toBe('\n{\"ok\":true}')
+    expect(sanitizeYoutubeJsonResponse('\n)]}\'\n{"ok":true}')).toBe('\n{"ok":true}')
     expect(sanitizeYoutubeJsonResponse(' {"ok":true}')).toBe('{"ok":true}')
   })
 
   it('decodes common HTML entities', () => {
-    expect(decodeHtmlEntities('a&amp;b &lt; &gt; &quot;x&quot; &#39;y&#39;')).toBe('a&b < > "x" \'y\'')
+    expect(decodeHtmlEntities('a&amp;b &lt; &gt; &quot;x&quot; &#39;y&#39;')).toBe(
+      'a&b < > "x" \'y\''
+    )
   })
 
   it('parses ytcfg.set and var ytcfg bootstrap configs', () => {
     const config1 = extractYoutubeBootstrapConfig(
-      `<script>ytcfg.set({\"INNERTUBE_API_KEY\":\"k\",\"INNERTUBE_CLIENT_NAME\":\"WEB\"})</script>`
+      `<script>ytcfg.set({"INNERTUBE_API_KEY":"k","INNERTUBE_CLIENT_NAME":"WEB"})</script>`
     )
     expect(isRecord(config1)).toBe(true)
     expect(config1?.INNERTUBE_API_KEY).toBe('k')
 
     const config2 = extractYoutubeBootstrapConfig(
-      `var ytcfg = {\"INNERTUBE_API_KEY\":\"k2\",\"X\": {\"a\": 1}};`
+      `var ytcfg = {"INNERTUBE_API_KEY":"k2","X": {"a": 1}};`
     )
     expect(isRecord(config2)).toBe(true)
     expect(config2?.INNERTUBE_API_KEY).toBe('k2')

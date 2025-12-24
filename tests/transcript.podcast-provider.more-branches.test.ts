@@ -1,22 +1,31 @@
 import { describe, expect, it, vi } from 'vitest'
 
-type WhisperResult = { text: string | null; provider: string | null; notes: string[]; error: Error | null }
+type WhisperResult = {
+  text: string | null
+  provider: string | null
+  notes: string[]
+  error: Error | null
+}
 
 async function importPodcastProvider({ ffmpegAvailable }: { ffmpegAvailable: boolean }) {
   vi.resetModules()
 
-  const transcribeMediaWithWhisper = vi.fn(async (): Promise<WhisperResult> => ({
-    text: 'ok',
-    provider: 'openai',
-    notes: [],
-    error: null,
-  }))
-  const transcribeMediaFileWithWhisper = vi.fn(async (): Promise<WhisperResult> => ({
-    text: 'ok',
-    provider: 'openai',
-    notes: [],
-    error: null,
-  }))
+  const transcribeMediaWithWhisper = vi.fn(
+    async (): Promise<WhisperResult> => ({
+      text: 'ok',
+      provider: 'openai',
+      notes: [],
+      error: null,
+    })
+  )
+  const transcribeMediaFileWithWhisper = vi.fn(
+    async (): Promise<WhisperResult> => ({
+      text: 'ok',
+      provider: 'openai',
+      notes: [],
+      error: null,
+    })
+  )
 
   vi.doMock('../src/transcription/whisper.js', () => ({
     MAX_OPENAI_UPLOAD_BYTES: 25 * 1024 * 1024,
@@ -31,7 +40,7 @@ async function importPodcastProvider({ ffmpegAvailable }: { ffmpegAvailable: boo
 }
 
 const baseOptions = {
-  scrapeWithFirecrawl: null as unknown as ((...args: any[]) => any) | null,
+  scrapeWithFirecrawl: null as unknown as ((...args: unknown[]) => unknown) | null,
   apifyApiToken: null,
   youtubeTranscriptMode: 'auto' as const,
   ytDlpPath: null,
@@ -48,7 +57,8 @@ describe('podcast transcript provider extra branches', () => {
     const xml = `<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><item><itunes:duration>123</itunes:duration><enclosure url="${enclosureUrl}" type="audio/mpeg"/></item></channel></rss>`
 
     const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
       const method = (init?.method ?? 'GET').toUpperCase()
       if (method === 'HEAD') {
         return new Response(null, {
@@ -178,7 +188,7 @@ describe('podcast transcript provider extra branches', () => {
     expect(result.notes).toContain('Download failed (500)')
   })
 
-  it('extracts enclosures from Atom feeds via <link rel=\"enclosure\">', async () => {
+  it('extracts enclosures from Atom feeds via <link rel="enclosure">', async () => {
     const { fetchTranscript } = await importPodcastProvider({ ffmpegAvailable: false })
     const enclosureUrl = 'https://example.com/episode.mp3'
     const atom = `<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"><entry><link rel="enclosure" href="${enclosureUrl}" type="audio/mpeg"/></entry></feed>`
@@ -205,8 +215,18 @@ describe('podcast transcript provider extra branches', () => {
 
   it('canHandle recognizes common podcast hosts and RSS hints', async () => {
     const { canHandle } = await importPodcastProvider({ ffmpegAvailable: false })
-    expect(canHandle({ url: 'https://podcasts.apple.com/us/podcast/x/id1?i=2', html: null, resourceKey: null })).toBe(true)
-    expect(canHandle({ url: 'https://example.com/feed.xml', html: null, resourceKey: null })).toBe(true)
-    expect(canHandle({ url: 'https://example.com/page', html: '<html/>', resourceKey: null })).toBe(false)
+    expect(
+      canHandle({
+        url: 'https://podcasts.apple.com/us/podcast/x/id1?i=2',
+        html: null,
+        resourceKey: null,
+      })
+    ).toBe(true)
+    expect(canHandle({ url: 'https://example.com/feed.xml', html: null, resourceKey: null })).toBe(
+      true
+    )
+    expect(canHandle({ url: 'https://example.com/page', html: '<html/>', resourceKey: null })).toBe(
+      false
+    )
   })
 })

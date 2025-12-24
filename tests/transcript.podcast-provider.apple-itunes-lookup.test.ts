@@ -25,7 +25,7 @@ async function importPodcastProvider() {
 }
 
 const baseOptions = {
-  scrapeWithFirecrawl: null as unknown as ((...args: any[]) => any) | null,
+  scrapeWithFirecrawl: null as unknown as ((...args: unknown[]) => unknown) | null,
   apifyApiToken: null,
   youtubeTranscriptMode: 'auto' as const,
   ytDlpPath: null as string | null,
@@ -59,7 +59,8 @@ describe('podcast provider - Apple Podcasts iTunes lookup', () => {
     }
 
     const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
       const method = (init?.method ?? 'GET').toUpperCase()
 
       if (url === lookupUrl && method === 'GET') {
@@ -94,9 +95,15 @@ describe('podcast provider - Apple Podcasts iTunes lookup', () => {
     expect(result.source).toBe('whisper')
     expect(result.text).toContain('hello from apple')
     expect(result.metadata?.kind).toBe('apple_itunes_episode')
-    expect((result.metadata as any)?.showId).toBe(showId)
-    expect((result.metadata as any)?.episodeId).toBe(episodeId)
-    expect((result.metadata as any)?.episodeUrl).toBe(episodeUrl)
-    expect((result.metadata as any)?.durationSeconds).toBe(96)
+    const meta = result.metadata as unknown as {
+      showId?: string
+      episodeId?: string
+      episodeUrl?: string
+      durationSeconds?: number
+    }
+    expect(meta.showId).toBe(showId)
+    expect(meta.episodeId).toBe(episodeId)
+    expect(meta.episodeUrl).toBe(episodeUrl)
+    expect(meta.durationSeconds).toBe(96)
   })
 })

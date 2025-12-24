@@ -4,7 +4,9 @@ import { canHandle } from '../src/content/link-preview/transcript/providers/podc
 
 describe('podcast transcript provider - canHandle + RSS detection branches', () => {
   it('detects RSS/Atom/XML and common podcast hosts', () => {
-    expect(canHandle({ url: 'https://example.com/feed.xml', html: '<rss></rss>', resourceKey: null })).toBe(true)
+    expect(
+      canHandle({ url: 'https://example.com/feed.xml', html: '<rss></rss>', resourceKey: null })
+    ).toBe(true)
     expect(
       canHandle({
         url: 'https://example.com/feed.xml',
@@ -34,10 +36,22 @@ describe('podcast transcript provider - canHandle + RSS detection branches', () 
       })
     ).toBe(true)
 
-    expect(canHandle({ url: 'https://open.spotify.com/episode/abc', html: null, resourceKey: null })).toBe(true)
-    expect(canHandle({ url: 'https://podcasts.apple.com/us/podcast/id123?i=456', html: null, resourceKey: null })).toBe(true)
+    expect(
+      canHandle({ url: 'https://open.spotify.com/episode/abc', html: null, resourceKey: null })
+    ).toBe(true)
+    expect(
+      canHandle({
+        url: 'https://podcasts.apple.com/us/podcast/id123?i=456',
+        html: null,
+        resourceKey: null,
+      })
+    ).toBe(true)
 
-    expect(canHandle({ url: 'https://example.com/podcast', html: null, resourceKey: null })).toBe(true)
-    expect(canHandle({ url: 'https://example.com/article', html: null, resourceKey: null })).toBe(false)
+    expect(canHandle({ url: 'https://example.com/podcast', html: null, resourceKey: null })).toBe(
+      true
+    )
+    expect(canHandle({ url: 'https://example.com/article', html: null, resourceKey: null })).toBe(
+      false
+    )
   })
 })

@@ -3,8 +3,8 @@ import { promises as fs } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
-  MAX_OPENAI_UPLOAD_BYTES,
   isFfmpegAvailable,
+  MAX_OPENAI_UPLOAD_BYTES,
   probeMediaDurationSecondsWithFfprobe,
   transcribeMediaFileWithWhisper,
   transcribeMediaWithWhisper,
@@ -20,6 +20,46 @@ const BLOCKED_HTML_HINT_PATTERN =
   /access denied|attention required|captcha|recaptcha|cloudflare|forbidden|verify you are human/i
 const ITUNES_SEARCH_URL = 'https://itunes.apple.com/search'
 const ITUNES_LOOKUP_URL = 'https://itunes.apple.com/lookup'
+
+type JsonRecord = Record<string, unknown>
+
+function isJsonRecord(value: unknown): value is JsonRecord {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function getJsonPath(value: unknown, path: readonly string[]): unknown {
+  let current: unknown = value
+  for (const key of path) {
+    if (!isJsonRecord(current)) return undefined
+    current = current[key]
+  }
+  return current
+}
+
+function getJsonString(value: unknown, path: readonly string[]): string | null {
+  const found = getJsonPath(value, path)
+  return typeof found === 'string' ? found : null
+}
+
+function getJsonNumber(value: unknown, path: readonly string[]): number | null {
+  const found = getJsonPath(value, path)
+  return typeof found === 'number' && Number.isFinite(found) ? found : null
+}
+
+function getJsonArray(value: unknown, path: readonly string[]): unknown[] {
+  const found = getJsonPath(value, path)
+  return Array.isArray(found) ? found : []
+}
+
+function asRecordArray(value: unknown): JsonRecord[] {
+  if (!Array.isArray(value)) return []
+  return value.filter((v): v is JsonRecord => isJsonRecord(v))
+}
+
+function getRecordString(record: JsonRecord, key: string): string | null {
+  const value = record[key]
+  return typeof value === 'string' ? value : null
+}
 
 export const canHandle = ({ url, html }: ProviderContext): boolean => {
   if (typeof html === 'string' && looksLikeRssOrAtomFeed(html)) return true
@@ -80,10 +120,18 @@ export const fetchTranscript = async (
           openaiApiKey: options.openaiApiKey,
           falApiKey: options.falApiKey,
           notes,
-          progress: { url: context.url, service: 'podcast', onProgress: options.onProgress ?? null },
+          progress: {
+            url: context.url,
+            service: 'podcast',
+            onProgress: options.onProgress ?? null,
+          },
         })
         if (result.text) {
-          notes.push(via === 'firecrawl' ? 'Resolved Spotify embed audio via Firecrawl' : 'Resolved Spotify embed audio')
+          notes.push(
+            via === 'firecrawl'
+              ? 'Resolved Spotify embed audio via Firecrawl'
+              : 'Resolved Spotify embed audio'
+          )
           return {
             text: result.text,
             source: 'whisper',
@@ -327,7 +375,11 @@ export const fetchTranscript = async (
           openaiApiKey: options.openaiApiKey,
           falApiKey: options.falApiKey,
           notes,
-          progress: { url: context.url, service: 'podcast', onProgress: options.onProgress ?? null },
+          progress: {
+            url: context.url,
+            service: 'podcast',
+            onProgress: options.onProgress ?? null,
+          },
         })
         if (result.text) {
           return {
@@ -425,8 +477,7 @@ export const fetchTranscript = async (
     }
   }
 
-  const ogAudioUrl =
-    typeof context.html === 'string' ? extractOgAudioUrl(context.html) : null
+  const ogAudioUrl = typeof context.html === 'string' ? extractOgAudioUrl(context.html) : null
   if (ogAudioUrl) {
     attemptedProviders.push('whisper')
     const result = await transcribeMediaUrl({
@@ -508,7 +559,9 @@ function looksLikeRssOrAtomFeed(xml: string): boolean {
   return false
 }
 
-function extractEnclosureFromFeed(xml: string): { enclosureUrl: string; durationSeconds: number | null } | null {
+function extractEnclosureFromFeed(
+  xml: string
+): { enclosureUrl: string; durationSeconds: number | null } | null {
   const items = xml.match(/<item\b[\s\S]*?<\/item>/gi) ?? []
   for (const item of items) {
     const enclosureUrl = extractEnclosureUrlFromItem(item)
@@ -544,11 +597,11 @@ function extractEnclosureUrlFromItem(xml: string): string | null {
 }
 
 function extractEmbeddedJsonUrl(html: string, field: string): string | null {
-  const pattern = new RegExp(`\"${field}\":\"((?:\\\\.|[^\"\\\\])*)\"`, 'i')
+  const pattern = new RegExp(`"${field}":"((?:\\\\.|[^"\\\\])*)"`, 'i')
   const match = html.match(pattern)
   if (!match?.[1]) return null
   try {
-    return JSON.parse(`\"${match[1]}\"`) as string
+    return JSON.parse(`"${match[1]}"`) as string
   } catch {
     return null
   }
@@ -578,9 +631,7 @@ function extractSpotifyEpisodeId(url: string): string | null {
   }
 }
 
-function extractSpotifyEmbedData(
-  html: string
-): {
+function extractSpotifyEmbedData(html: string): {
   showTitle: string
   episodeTitle: string
   durationSeconds: number | null
@@ -590,22 +641,39 @@ function extractSpotifyEmbedData(
   const match = html.match(/<script[^>]*id=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i)
   if (!match?.[1]) return null
   try {
-    const json = JSON.parse(match[1]) as any
-    const state = json?.props?.pageProps?.state?.data ?? null
-    const entity = state?.entity ?? null
-    const showTitle = typeof entity?.subtitle === 'string' ? entity.subtitle.trim() : ''
-    const episodeTitle = typeof entity?.title === 'string' ? entity.title.trim() : ''
-    const durationMs = typeof entity?.duration === 'number' ? entity.duration : null
+    const json = JSON.parse(match[1]) as unknown
+    const showTitle = (
+      getJsonString(json, ['props', 'pageProps', 'state', 'data', 'entity', 'subtitle']) ?? ''
+    ).trim()
+    const episodeTitle = (
+      getJsonString(json, ['props', 'pageProps', 'state', 'data', 'entity', 'title']) ?? ''
+    ).trim()
+    const durationMs = getJsonNumber(json, [
+      'props',
+      'pageProps',
+      'state',
+      'data',
+      'entity',
+      'duration',
+    ])
     const drmFormat =
-      typeof state?.defaultAudioFileObject?.format === 'string'
-        ? String(state.defaultAudioFileObject.format)
-        : null
-    const audioUrl = pickSpotifyEmbedAudioUrl(state?.defaultAudioFileObject?.url)
+      getJsonString(json, [
+        'props',
+        'pageProps',
+        'state',
+        'data',
+        'defaultAudioFileObject',
+        'format',
+      ]) ?? null
+    const audioUrl = pickSpotifyEmbedAudioUrl(
+      getJsonPath(json, ['props', 'pageProps', 'state', 'data', 'defaultAudioFileObject', 'url'])
+    )
     if (!showTitle || !episodeTitle) return null
     return {
       showTitle,
       episodeTitle,
-      durationSeconds: typeof durationMs === 'number' && Number.isFinite(durationMs) ? durationMs / 1000 : null,
+      durationSeconds:
+        typeof durationMs === 'number' && Number.isFinite(durationMs) ? durationMs / 1000 : null,
       drmFormat,
       audioUrl,
     }
@@ -662,24 +730,27 @@ async function resolveApplePodcastEpisodeFromItunesLookup({
     headers: { accept: 'application/json' },
   })
   if (!res.ok) return null
-  const payload = (await res.json()) as any
-  const results: any[] = Array.isArray(payload?.results) ? payload.results : []
+  const payload = (await res.json()) as unknown
+  const results = asRecordArray(getJsonArray(payload, ['results']))
 
-  const show = results.find((r) => r?.wrapperType === 'track' && r?.kind === 'podcast')
-  const feedUrl = typeof show?.feedUrl === 'string' && show.feedUrl.trim() ? show.feedUrl.trim() : null
+  const show = results.find(
+    (r) => getRecordString(r, 'wrapperType') === 'track' && getRecordString(r, 'kind') === 'podcast'
+  )
+  const feedUrl =
+    typeof show?.feedUrl === 'string' && show.feedUrl.trim() ? show.feedUrl.trim() : null
 
-  const episodes = results.filter((r) => r?.wrapperType === 'podcastEpisode')
+  const episodes = results.filter((r) => getRecordString(r, 'wrapperType') === 'podcastEpisode')
   if (episodes.length === 0) return null
 
   const chosen = (() => {
     if (episodeId) {
-      const match = episodes.find((r) => String(r?.trackId ?? '') === episodeId)
+      const match = episodes.find((r) => String(r.trackId ?? '') === episodeId)
       if (match) return match
     }
     // No i=... in URL: pick the newest episode by release date.
     const sorted = [...episodes].sort((a, b) => {
-      const aDate = Date.parse(String(a?.releaseDate ?? ''))
-      const bDate = Date.parse(String(b?.releaseDate ?? ''))
+      const aDate = Date.parse(String(a.releaseDate ?? ''))
+      const bDate = Date.parse(String(b.releaseDate ?? ''))
       if (!Number.isFinite(aDate) && !Number.isFinite(bDate)) return 0
       if (!Number.isFinite(aDate)) return 1
       if (!Number.isFinite(bDate)) return -1
@@ -689,19 +760,19 @@ async function resolveApplePodcastEpisodeFromItunesLookup({
   })()
 
   const episodeUrlRaw =
-    typeof chosen?.episodeUrl === 'string'
+    typeof chosen.episodeUrl === 'string'
       ? chosen.episodeUrl.trim()
-      : typeof chosen?.previewUrl === 'string'
+      : typeof chosen.previewUrl === 'string'
         ? chosen.previewUrl.trim()
         : ''
   if (!episodeUrlRaw || !/^https?:\/\//i.test(episodeUrlRaw)) return null
 
   const fileExtension =
-    typeof chosen?.episodeFileExtension === 'string' && chosen.episodeFileExtension.trim()
+    typeof chosen.episodeFileExtension === 'string' && chosen.episodeFileExtension.trim()
       ? chosen.episodeFileExtension.trim().replace(/^\./, '')
       : null
   const durationSeconds =
-    typeof chosen?.trackTimeMillis === 'number' && Number.isFinite(chosen.trackTimeMillis)
+    typeof chosen.trackTimeMillis === 'number' && Number.isFinite(chosen.trackTimeMillis)
       ? chosen.trackTimeMillis / 1000
       : null
 
@@ -726,12 +797,14 @@ async function resolvePodcastFeedUrlFromItunesSearch(
   if (!res.ok) {
     return null
   }
-  const payload = (await res.json()) as any
-  const results: any[] = Array.isArray(payload?.results) ? payload.results : []
+  const payload = (await res.json()) as unknown
+  const results = asRecordArray(getJsonArray(payload, ['results']))
   if (results.length === 0) return null
 
   const normalizedTarget = normalizeLooseTitle(showTitle)
-  const exact = results.find((r) => normalizeLooseTitle(String(r?.collectionName ?? '')) === normalizedTarget)
+  const exact = results.find(
+    (r) => normalizeLooseTitle(String(r.collectionName ?? '')) === normalizedTarget
+  )
   const best = exact ?? results[0]
   const feedUrl = typeof best?.feedUrl === 'string' ? best.feedUrl.trim() : ''
   return feedUrl && /^https?:\/\//i.test(feedUrl) ? feedUrl : null
@@ -782,7 +855,12 @@ async function fetchSpotifyEmbedHtml({
   embedUrl: string
   episodeId: string
   fetchImpl: typeof fetch
-  scrapeWithFirecrawl: ((url: string, options?: { cacheMode?: 'default' | 'bypass'; timeoutMs?: number }) => Promise<{ html?: string | null; markdown: string } | null>) | null
+  scrapeWithFirecrawl:
+    | ((
+        url: string,
+        options?: { cacheMode?: 'default' | 'bypass'; timeoutMs?: number }
+      ) => Promise<{ html?: string | null; markdown: string } | null>)
+    | null
 }): Promise<{ html: string; via: 'fetch' | 'firecrawl' }> {
   try {
     // Try plain fetch first: fast, cheap, and often works with a realistic UA + referer.
@@ -852,14 +930,24 @@ function extractItemDurationSeconds(itemXml: string): number | null {
     return Number.isFinite(seconds) && seconds > 0 ? seconds : null
   }
 
-  const parts = raw.split(':').map((value) => value.trim()).filter(Boolean)
+  const parts = raw
+    .split(':')
+    .map((value) => value.trim())
+    .filter(Boolean)
   if (parts.length < 2 || parts.length > 3) return null
   const nums = parts.map((value) => Number(value))
   if (nums.some((n) => !Number.isFinite(n) || n < 0)) return null
-  const seconds =
-    nums.length === 3
-      ? Math.round(nums[0]! * 3600 + nums[1]! * 60 + nums[2]!)
-      : Math.round(nums[0]! * 60 + nums[1]!)
+  const seconds = (() => {
+    if (nums.length === 3) {
+      const [hours, minutes, secondsRaw] = nums
+      if (hours === undefined || minutes === undefined || secondsRaw === undefined) return null
+      return Math.round(hours * 3600 + minutes * 60 + secondsRaw)
+    }
+    const [minutes, secondsRaw] = nums
+    if (minutes === undefined || secondsRaw === undefined) return null
+    return Math.round(minutes * 60 + secondsRaw)
+  })()
+  if (seconds === null) return null
   return seconds > 0 ? seconds : null
 }
 
@@ -890,11 +978,21 @@ async function transcribeMediaUrl({
   openaiApiKey: string | null
   falApiKey: string | null
   notes: string[]
-  progress: { url: string; service: 'podcast'; onProgress: ProviderFetchOptions['onProgress'] | null } | null
+  progress: {
+    url: string
+    service: 'podcast'
+    onProgress: ProviderFetchOptions['onProgress'] | null
+  } | null
 }): Promise<{ text: string | null; provider: string | null; error: Error | null }> {
   const canChunk = await isFfmpegAvailable()
   const providerHint: 'openai' | 'fal' | 'openai->fal' | 'unknown' =
-    openaiApiKey && falApiKey ? 'openai->fal' : openaiApiKey ? 'openai' : falApiKey ? 'fal' : 'unknown'
+    openaiApiKey && falApiKey
+      ? 'openai->fal'
+      : openaiApiKey
+        ? 'openai'
+        : falApiKey
+          ? 'fal'
+          : 'unknown'
 
   const head = await probeRemoteMedia(fetchImpl, url)
   if (head.contentLength !== null && head.contentLength > MAX_REMOTE_MEDIA_BYTES) {

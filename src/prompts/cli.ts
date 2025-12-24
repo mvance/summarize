@@ -1,6 +1,6 @@
-import type { SummaryLengthTarget } from './link-summary.js'
 import type { OutputLanguage } from '../language.js'
 import { formatOutputLanguageInstruction } from '../language.js'
+import type { SummaryLengthTarget } from './link-summary.js'
 
 function formatTargetLength(summaryLength: SummaryLengthTarget): string {
   if (typeof summaryLength === 'string') return ''

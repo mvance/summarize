@@ -50,7 +50,10 @@ describe('Spotify episode short-circuit', () => {
       }
 
       if (resolved === feedUrl) {
-        return new Response(feedXml, { status: 200, headers: { 'content-type': 'application/xml' } })
+        return new Response(feedXml, {
+          status: 200,
+          headers: { 'content-type': 'application/xml' },
+        })
       }
 
       if (resolved === enclosureUrl) {

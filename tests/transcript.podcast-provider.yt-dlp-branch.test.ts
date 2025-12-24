@@ -16,13 +16,13 @@ import { fetchTranscript } from '../src/content/link-preview/transcript/provider
 
 const baseOptions = {
   fetch: vi.fn() as unknown as typeof fetch,
-  scrapeWithFirecrawl: null as unknown as ((...args: any[]) => any) | null,
+  scrapeWithFirecrawl: null as unknown as ((...args: unknown[]) => unknown) | null,
   apifyApiToken: null,
   youtubeTranscriptMode: 'auto' as const,
   ytDlpPath: '/usr/local/bin/yt-dlp',
   falApiKey: null,
   openaiApiKey: 'OPENAI',
-  onProgress: null as any,
+  onProgress: null,
 }
 
 describe('podcast transcript provider - yt-dlp branch', () => {
@@ -49,4 +49,3 @@ describe('podcast transcript provider - yt-dlp branch', () => {
     expect(result.notes).toContain('yt-dlp transcription failed')
   })
 })
-

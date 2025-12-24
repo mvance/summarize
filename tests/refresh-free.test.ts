@@ -87,7 +87,8 @@ describe('refresh-free', () => {
     const { stream: stderr } = createCaptureStream()
 
     const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
       if (url === 'https://openrouter.ai/api/v1/models') {
         return new Response(JSON.stringify(buildModelsPayload(['a/model:free', 'b/model:free'])), {
           status: 200,
@@ -108,7 +109,12 @@ describe('refresh-free', () => {
     expect(readStdout()).toContain('Wrote')
     const configPath = join(home, '.summarize', 'config.json')
     const raw = await readFile(configPath, 'utf8')
-    const parsed = JSON.parse(raw) as any
+    const parsed = JSON.parse(raw) as unknown as {
+      model?: string
+      models?: {
+        free?: { rules?: Array<{ candidates?: string[] }> }
+      }
+    }
     expect(parsed.model).toBe('free')
     expect(parsed.models?.free?.rules?.[0]?.candidates?.[0]).toMatch(/^openrouter\//)
   })
@@ -186,7 +192,7 @@ describe('refresh-free', () => {
         stderr,
         options: { runs: 0, maxCandidates: 1 },
       })
-    ).rejects.toThrow(/\"models\" must be an object/i)
+    ).rejects.toThrow(/"models" must be an object/i)
   })
 
   it('filters old + small models and prints verbose skip lines', async () => {
@@ -235,18 +241,24 @@ describe('refresh-free', () => {
     const { stream: stderr, read: readStderr } = createCaptureStream()
 
     const fetchImpl = vi.fn(async () => {
-      return new Response(JSON.stringify(buildModelsPayload(['a/model:free', 'b/model:free', 'c/model:free'])), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      })
+      return new Response(
+        JSON.stringify(buildModelsPayload(['a/model:free', 'b/model:free', 'c/model:free'])),
+        {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }
+      )
     })
 
-    llmMocks.generateTextWithModelId.mockReset().mockImplementation(async ({ modelId }: any) => {
-      if (modelId.includes('a/model:free')) throw new Error('Rate limit exceeded: per-day free-models-per-day')
-      if (modelId.includes('b/model:free')) throw new Error('No allowed providers are available')
-      if (modelId.includes('c/model:free')) return { text: 'OK' }
-      throw new Error('unexpected')
-    })
+    llmMocks.generateTextWithModelId
+      .mockReset()
+      .mockImplementation(async ({ modelId }: { modelId: string }) => {
+        if (modelId.includes('a/model:free'))
+          throw new Error('Rate limit exceeded: per-day free-models-per-day')
+        if (modelId.includes('b/model:free')) throw new Error('No allowed providers are available')
+        if (modelId.includes('c/model:free')) return { text: 'OK' }
+        throw new Error('unexpected')
+      })
 
     await refreshFree({
       env: { HOME: home, OPENROUTER_API_KEY: 'KEY' },
@@ -268,7 +280,7 @@ describe('refresh-free', () => {
     const { refreshFree } = await import('../src/refresh-free.js')
     const { stream: stdout } = createCaptureStream()
     const { stream: stderr } = createCaptureStream()
-    ;(stderr as any).isTTY = true
+    ;(stderr as unknown as { isTTY?: boolean }).isTTY = true
 
     const fetchImpl = vi.fn(async () => {
       return new Response(JSON.stringify(buildModelsPayload(['a/model:free'])), {
@@ -300,12 +312,14 @@ describe('refresh-free', () => {
     })
 
     let seen = 0
-    llmMocks.generateTextWithModelId.mockReset().mockImplementation(async ({ modelId }: any) => {
-      seen += 1
-      // Fail one of the refine runs for b/model.
-      if (modelId.includes('b/model:free') && seen > 2) throw new Error('provider error')
-      return { text: 'OK' }
-    })
+    llmMocks.generateTextWithModelId
+      .mockReset()
+      .mockImplementation(async ({ modelId }: { modelId: string }) => {
+        seen += 1
+        // Fail one of the refine runs for b/model.
+        if (modelId.includes('b/model:free') && seen > 2) throw new Error('provider error')
+        return { text: 'OK' }
+      })
 
     await refreshFree({
       env: { HOME: home, OPENROUTER_API_KEY: 'KEY' },
@@ -508,12 +522,23 @@ describe('refresh-free', () => {
       fetchImpl: fetchImpl as unknown as typeof fetch,
       stdout,
       stderr,
-      options: { runs: 0, maxCandidates: 10, smart: 10, concurrency: 1, minParamB: 2, maxAgeDays: 0 },
+      options: {
+        runs: 0,
+        maxCandidates: 10,
+        smart: 10,
+        concurrency: 1,
+        minParamB: 2,
+        maxAgeDays: 0,
+      },
     })
 
     const configPath = join(home, '.summarize', 'config.json')
     const raw = await readFile(configPath, 'utf8')
-    const parsed = JSON.parse(raw) as any
+    const parsed = JSON.parse(raw) as unknown as {
+      models?: {
+        free?: { rules?: Array<{ candidates?: string[] }> }
+      }
+    }
     const candidates = parsed.models?.free?.rules?.[0]?.candidates ?? []
     expect(candidates.some((c: string) => c.includes('y/model-1.5b:free'))).toBe(false)
     expect(candidates.some((c: string) => c.includes('x/model-e2b:free'))).toBe(true)

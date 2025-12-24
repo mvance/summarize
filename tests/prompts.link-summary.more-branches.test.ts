@@ -1,11 +1,10 @@
 import { describe, expect, it } from 'vitest'
-
+import { parseOutputLanguage } from '../src/language.js'
 import {
   buildLinkSummaryPrompt,
   estimateMaxCompletionTokensForCharacters,
   pickSummaryLengthForCharacters,
 } from '../src/prompts/link-summary.js'
-import { parseOutputLanguage } from '../src/language.js'
 
 describe('prompts/link-summary - more branches', () => {
   it('picks summary length presets by character targets', () => {
@@ -38,7 +37,14 @@ describe('prompts/link-summary - more branches', () => {
           replyCount: null,
           timestamp: '2025-12-24',
         },
-        { author: 'B', text: 'Second', likeCount: null, reshareCount: null, replyCount: null, timestamp: null },
+        {
+          author: 'B',
+          text: 'Second',
+          likeCount: null,
+          reshareCount: null,
+          replyCount: null,
+          timestamp: null,
+        },
       ],
     })
 

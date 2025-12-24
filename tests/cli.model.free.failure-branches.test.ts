@@ -79,7 +79,11 @@ describe('cli run.ts free preset error branches', () => {
   const setupLiteLlmCache = (root: string) => {
     const cacheDir = join(root, '.summarize', 'cache')
     mkdirSync(cacheDir, { recursive: true })
-    writeFileSync(join(cacheDir, 'litellm-model_prices_and_context_window.json'), JSON.stringify({}), 'utf8')
+    writeFileSync(
+      join(cacheDir, 'litellm-model_prices_and_context_window.json'),
+      JSON.stringify({}),
+      'utf8'
+    )
     writeFileSync(
       join(cacheDir, 'litellm-model_prices_and_context_window.meta.json'),
       JSON.stringify({ fetchedAtMs: Date.now() }),
@@ -105,7 +109,7 @@ describe('cli run.ts free preset error branches', () => {
     await expect(
       runCli(['--model', 'free', '--timeout', '2s', 'https://example.com'], {
         env: { HOME: root, OPENROUTER_API_KEY: 'test' },
-        fetch: vi.fn() as any,
+        fetch: vi.fn() as unknown as typeof fetch,
         stdout: stdout.stream,
         stderr: stderr.stream,
       })
@@ -132,7 +136,7 @@ describe('cli run.ts free preset error branches', () => {
     await expect(
       runCli(['--model', 'free', '--timeout', '2s', 'https://example.com'], {
         env: { HOME: root, OPENROUTER_API_KEY: 'test' },
-        fetch: vi.fn() as any,
+        fetch: vi.fn() as unknown as typeof fetch,
         stdout: stdout.stream,
         stderr: stderr.stream,
       })

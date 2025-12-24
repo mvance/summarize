@@ -67,12 +67,15 @@ describe('cli twitter skip-summary branches', () => {
     const stdout = collectStream()
     const stderr = collectStream()
 
-    await runCli(['--json', '--metrics', 'off', '--timeout', '2s', 'https://twitter.com/x/status/123'], {
-      env: {},
-      fetch: vi.fn() as any,
-      stdout: stdout.stream,
-      stderr: stderr.stream,
-    })
+    await runCli(
+      ['--json', '--metrics', 'off', '--timeout', '2s', 'https://twitter.com/x/status/123'],
+      {
+        env: {},
+        fetch: vi.fn() as unknown as typeof fetch,
+        stdout: stdout.stream,
+        stderr: stderr.stream,
+      }
+    )
 
     expect(stderr.getText()).toBe('')
     const payload = JSON.parse(stdout.getText())

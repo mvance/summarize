@@ -204,7 +204,11 @@ describe('link-preview content utils', () => {
       title: null,
       description: null,
       siteName: null,
-      transcriptResolution: { text: 'hello', source: 'whisper', metadata: { durationSeconds: 123 } },
+      transcriptResolution: {
+        text: 'hello',
+        source: 'whisper',
+        metadata: { durationSeconds: 123 },
+      },
       diagnostics,
     })
     expect(result.mediaDurationSeconds).toBe(123)

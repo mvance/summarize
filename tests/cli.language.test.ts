@@ -111,8 +111,8 @@ describe('--language / config.language', () => {
       }
     )
 
-    const call = streamTextMock.mock.calls[0]?.[0] as any
-    expect(String(call?.prompt ?? '')).toContain('Write the answer in German.')
+    const call = streamTextMock.mock.calls[0]?.[0] as unknown as { prompt?: unknown }
+    expect(String(call.prompt ?? '')).toContain('Write the answer in German.')
 
     globalFetchSpy.mockRestore()
   })
@@ -177,8 +177,8 @@ describe('--language / config.language', () => {
       }
     )
 
-    const call = streamTextMock.mock.calls[0]?.[0] as any
-    expect(String(call?.prompt ?? '')).toContain('Write the answer in English.')
+    const call = streamTextMock.mock.calls[0]?.[0] as unknown as { prompt?: unknown }
+    expect(String(call.prompt ?? '')).toContain('Write the answer in English.')
 
     globalFetchSpy.mockRestore()
   })

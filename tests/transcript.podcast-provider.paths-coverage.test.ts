@@ -7,13 +7,13 @@ vi.mock('node:child_process', () => ({
     if (_cmd !== 'ffmpeg' || !args.includes('-version')) {
       throw new Error(`Unexpected spawn: ${_cmd} ${args.join(' ')}`)
     }
-    const handlers = new Map<string, (value?: any) => void>()
-    const proc: any = {
-      on(event: string, handler: (value?: any) => void) {
+    const handlers = new Map<string, (value?: unknown) => void>()
+    const proc = {
+      on(event: string, handler: (value?: unknown) => void) {
         handlers.set(event, handler)
         return proc
       },
-    }
+    } as unknown
     queueMicrotask(() => handlers.get('close')?.(0))
     return proc
   },
@@ -23,13 +23,13 @@ import { fetchTranscript } from '../src/content/link-preview/transcript/provider
 
 const baseOptions = {
   fetch: vi.fn() as unknown as typeof fetch,
-  scrapeWithFirecrawl: null as unknown as ((...args: any[]) => any) | null,
+  scrapeWithFirecrawl: null as unknown as ((...args: unknown[]) => unknown) | null,
   apifyApiToken: null,
   youtubeTranscriptMode: 'auto' as const,
   ytDlpPath: null,
   falApiKey: null,
   openaiApiKey: 'OPENAI',
-  onProgress: null as any,
+  onProgress: null,
 }
 
 describe('podcast transcript provider - coverage paths', () => {
@@ -37,7 +37,8 @@ describe('podcast transcript provider - coverage paths', () => {
     const html = `<html><body><script>{"streamUrl":"https://example.com/episode.mp3"}</script></body></html>`
 
     const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
       const method = (init?.method ?? 'GET').toUpperCase()
       if (url === 'https://example.com/episode.mp3' && method === 'HEAD') {
         return new Response(null, {
@@ -46,7 +47,10 @@ describe('podcast transcript provider - coverage paths', () => {
         })
       }
       if (url === 'https://example.com/episode.mp3' && method === 'GET') {
-        return new Response(new Uint8Array([1, 2, 3]), { status: 200, headers: { 'content-type': 'audio/mpeg' } })
+        return new Response(new Uint8Array([1, 2, 3]), {
+          status: 200,
+          headers: { 'content-type': 'audio/mpeg' },
+        })
       }
       throw new Error(`Unexpected fetch: ${url} ${method}`)
     })
@@ -93,7 +97,8 @@ describe('podcast transcript provider - coverage paths', () => {
     }
 
     const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
       const method = (init?.method ?? 'GET').toUpperCase()
       if (url.startsWith('https://itunes.apple.com/lookup')) {
         return new Response(JSON.stringify(lookupPayload), {
@@ -108,7 +113,10 @@ describe('podcast transcript provider - coverage paths', () => {
         })
       }
       if (url === 'https://cdn.example.com/new.mp3' && method === 'GET') {
-        return new Response(new Uint8Array([1, 2, 3]), { status: 200, headers: { 'content-type': 'audio/mpeg' } })
+        return new Response(new Uint8Array([1, 2, 3]), {
+          status: 200,
+          headers: { 'content-type': 'audio/mpeg' },
+        })
       }
       throw new Error(`Unexpected fetch: ${url} ${method}`)
     })
@@ -154,16 +162,26 @@ describe('podcast transcript provider - coverage paths', () => {
     const scrapeWithFirecrawl = vi.fn(async () => ({ html: embedHtml, markdown: '' }))
 
     const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
       const method = (init?.method ?? 'GET').toUpperCase()
       if (url === 'https://open.spotify.com/embed/episode/abc') {
-        return new Response('<html><body>captcha</body></html>', { status: 200, headers: { 'content-type': 'text/html' } })
+        return new Response('<html><body>captcha</body></html>', {
+          status: 200,
+          headers: { 'content-type': 'text/html' },
+        })
       }
       if (url === 'https://scdn.co/file.mp4' && method === 'HEAD') {
-        return new Response(null, { status: 200, headers: { 'content-type': 'audio/mp4', 'content-length': '1024' } })
+        return new Response(null, {
+          status: 200,
+          headers: { 'content-type': 'audio/mp4', 'content-length': '1024' },
+        })
       }
       if (url === 'https://scdn.co/file.mp4' && method === 'GET') {
-        return new Response(new Uint8Array([1, 2, 3]), { status: 200, headers: { 'content-type': 'audio/mp4' } })
+        return new Response(new Uint8Array([1, 2, 3]), {
+          status: 200,
+          headers: { 'content-type': 'audio/mp4' },
+        })
       }
       throw new Error(`Unexpected fetch: ${url} ${method}`)
     })
@@ -182,7 +200,8 @@ describe('podcast transcript provider - coverage paths', () => {
         {
           ...baseOptions,
           fetch: fetchImpl as unknown as typeof fetch,
-          scrapeWithFirecrawl: scrapeWithFirecrawl as unknown as typeof baseOptions.scrapeWithFirecrawl,
+          scrapeWithFirecrawl:
+            scrapeWithFirecrawl as unknown as typeof baseOptions.scrapeWithFirecrawl,
         }
       )
       expect(result.text).toBe('ok')
@@ -201,16 +220,23 @@ describe('podcast transcript provider - coverage paths', () => {
       '</head><body>ok</body></html>'
 
     const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
       const method = (init?.method ?? 'GET').toUpperCase()
       if (url === 'https://example.com/preview.mp3' && method === 'HEAD') {
         return new Response(null, {
           status: 200,
-          headers: { 'content-type': 'audio/mpeg', 'content-length': String(MAX_OPENAI_UPLOAD_BYTES - 1) },
+          headers: {
+            'content-type': 'audio/mpeg',
+            'content-length': String(MAX_OPENAI_UPLOAD_BYTES - 1),
+          },
         })
       }
       if (url === 'https://example.com/preview.mp3' && method === 'GET') {
-        return new Response(new Uint8Array([1, 2, 3]), { status: 200, headers: { 'content-type': 'audio/mpeg' } })
+        return new Response(new Uint8Array([1, 2, 3]), {
+          status: 200,
+          headers: { 'content-type': 'audio/mpeg' },
+        })
       }
       throw new Error(`Unexpected fetch: ${url} ${method}`)
     })

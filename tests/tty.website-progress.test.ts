@@ -54,13 +54,23 @@ describe('tty website progress', () => {
     progress.onProgress({ kind: 'bird-start', url: 'https://x.com/test/status/1' })
     expect(setText).toHaveBeenLastCalledWith('Bird: reading tweet…')
 
-    progress.onProgress({ kind: 'bird-done', url: 'https://x.com/test/status/1', ok: false, textBytes: null })
+    progress.onProgress({
+      kind: 'bird-done',
+      url: 'https://x.com/test/status/1',
+      ok: false,
+      textBytes: null,
+    })
     expect(setText).toHaveBeenLastCalledWith('Bird: failed; fallback…')
 
     progress.onProgress({ kind: 'nitter-start', url: 'https://x.com/test/status/1' })
     expect(setText).toHaveBeenLastCalledWith('Nitter: fetching…')
 
-    progress.onProgress({ kind: 'nitter-done', url: 'https://x.com/test/status/1', ok: true, textBytes: 999 })
+    progress.onProgress({
+      kind: 'nitter-done',
+      url: 'https://x.com/test/status/1',
+      ok: true,
+      textBytes: 999,
+    })
     expect(setText).toHaveBeenLastCalledWith('Nitter: got 999 B…')
 
     progress.onProgress({
@@ -124,7 +134,9 @@ describe('tty website progress', () => {
       downloadedBytes: 136 * 1024,
       totalBytes: 15 * 1024,
     })
-    expect(setText).toHaveBeenLastCalledWith(expect.stringContaining('Downloading audio (podcast, 136 KB, 2m 42s'))
+    expect(setText).toHaveBeenLastCalledWith(
+      expect.stringContaining('Downloading audio (podcast, 136 KB, 2m 42s')
+    )
     expect(setText).toHaveBeenLastCalledWith(expect.stringContaining('B/s'))
     expect(setText).toHaveBeenLastCalledWith(expect.not.stringContaining('2m42s'))
 
@@ -145,7 +157,9 @@ describe('tty website progress', () => {
       totalDurationSeconds: 3600,
       parts: 6,
     })
-    expect(setText).toHaveBeenLastCalledWith(expect.stringContaining('Transcribing (podcast, Whisper/OpenAI'))
+    expect(setText).toHaveBeenLastCalledWith(
+      expect.stringContaining('Transcribing (podcast, Whisper/OpenAI')
+    )
 
     vi.setSystemTime(288_000)
     progress.onProgress({
@@ -200,6 +214,8 @@ describe('tty website progress', () => {
       totalDurationSeconds: null,
       parts: 3,
     })
-    expect(setText).toHaveBeenLastCalledWith(expect.stringContaining('Transcribing (podcast, Whisper'))
+    expect(setText).toHaveBeenLastCalledWith(
+      expect.stringContaining('Transcribing (podcast, Whisper')
+    )
   })
 })

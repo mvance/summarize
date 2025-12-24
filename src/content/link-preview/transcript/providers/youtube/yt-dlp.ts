@@ -4,8 +4,8 @@ import { promises as fs } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
-  transcribeMediaFileWithWhisper,
   type TranscriptionProvider,
+  transcribeMediaFileWithWhisper,
 } from '../../../../../transcription/whisper.js'
 
 const YT_DLP_TIMEOUT_MS = 300_000

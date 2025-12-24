@@ -25,7 +25,7 @@ async function importPodcastProvider() {
 }
 
 const baseOptions = {
-  scrapeWithFirecrawl: null as unknown as ((...args: any[]) => any) | null,
+  scrapeWithFirecrawl: null as unknown as ((...args: unknown[]) => unknown) | null,
   apifyApiToken: null,
   youtubeTranscriptMode: 'auto' as const,
   ytDlpPath: null as string | null,
@@ -57,7 +57,8 @@ describe('podcast provider - Spotify embed audio', () => {
     )}</script>`
 
     const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
       const method = (init?.method ?? 'GET').toUpperCase()
 
       if (url === embedUrl && method === 'GET') {
@@ -89,7 +90,8 @@ describe('podcast provider - Spotify embed audio', () => {
     expect(result.source).toBe('whisper')
     expect(result.text).toContain('hello from spotify')
     expect(result.metadata?.kind).toBe('spotify_embed_audio')
-    expect((result.metadata as any)?.audioUrl).toBe(audioUrl)
-    expect((result.metadata as any)?.durationSeconds).toBe(90)
+    const meta = result.metadata as unknown as { audioUrl?: string; durationSeconds?: number }
+    expect(meta.audioUrl).toBe(audioUrl)
+    expect(meta.durationSeconds).toBe(90)
   })
 })

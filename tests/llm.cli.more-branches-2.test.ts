@@ -1,5 +1,6 @@
+import type { ChildProcess } from 'node:child_process'
 import { writeFileSync } from 'node:fs'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 
 import { isCliDisabled, resolveCliBinary, runCliModel } from '../src/llm/cli.js'
 
@@ -38,8 +39,8 @@ describe('llm/cli more branches', () => {
         config: null,
         execFileImpl: (_cmd, _args, _opts, cb) => {
           const error = Object.assign(new Error('boom'), { code: 1 })
-          cb(error as any, '', 'stderr details')
-          return { stdin: { write() {}, end() {} } } as any
+          cb(error as unknown as NodeJS.ErrnoException, '', 'stderr details')
+          return { stdin: { write() {}, end() {} } } as unknown as ChildProcess
         },
       })
     ).rejects.toThrow(/boom: stderr details/i)
@@ -68,7 +69,7 @@ describe('llm/cli more branches', () => {
           ].join('\n'),
           ''
         )
-        return { stdin: { write() {}, end() {} } } as any
+        return { stdin: { write() {}, end() {} } } as unknown as ChildProcess
       },
     })
     expect(resultFile.text).toBe('FROM FILE')
@@ -90,7 +91,7 @@ describe('llm/cli more branches', () => {
         if (!outputPath) throw new Error('missing output path')
         writeFileSync(outputPath, '   ', 'utf8')
         cb(null, 'STDOUT', '')
-        return { stdin: { write() {}, end() {} } } as any
+        return { stdin: { write() {}, end() {} } } as unknown as ChildProcess
       },
     })
     expect(resultStdout.text).toBe('STDOUT')
@@ -107,11 +108,10 @@ describe('llm/cli more branches', () => {
       config: null,
       execFileImpl: (_cmd, _args, _opts, cb) => {
         cb(null, '{"foo":"bar"}', '')
-        return { stdin: { write() {}, end() {} } } as any
+        return { stdin: { write() {}, end() {} } } as unknown as ChildProcess
       },
     })
     expect(result.text).toBe('{"foo":"bar"}')
     expect(result.usage).toBeNull()
   })
 })
-

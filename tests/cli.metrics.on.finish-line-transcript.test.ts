@@ -65,4 +65,3 @@ describe('--metrics on', () => {
     expect(stderrText).not.toContain('input=')
   })
 })
-

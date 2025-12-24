@@ -37,12 +37,16 @@ import {
   parseVideoMode,
   parseYoutubeMode,
 } from './flags.js'
+import {
+  formatOutputLanguageForJson,
+  type OutputLanguage,
+  parseOutputLanguage,
+} from './language.js'
 import { isCliDisabled, resolveCliBinary, runCliModel } from './llm/cli.js'
 import { generateTextWithModelId, streamTextWithModelId } from './llm/generate-text.js'
 import { resolveGoogleModelForUsage } from './llm/google-models.js'
 import { createHtmlToMarkdownConverter } from './llm/html-to-markdown.js'
 import { parseGatewayStyleModelId } from './llm/model-id.js'
-import { formatOutputLanguageForJson, parseOutputLanguage, type OutputLanguage } from './language.js'
 import { convertToMarkdownWithMarkitdown, type ExecFileFn } from './markitdown.js'
 import { buildAutoModelAttempts } from './model-auto.js'
 import { type FixedModelSpec, parseRequestedModelId, type RequestedModel } from './model-spec.js'
@@ -60,14 +64,14 @@ import {
 } from './prompts/index.js'
 import { refreshFree } from './refresh-free.js'
 import type { SummaryLength } from './shared/contracts.js'
-import { startOscProgress } from './tty/osc-progress.js'
-import { startSpinner } from './tty/spinner.js'
 import {
   formatBytes,
   formatCompactCount,
   formatDurationSecondsSmart,
   formatElapsedMs,
 } from './tty/format.js'
+import { startOscProgress } from './tty/osc-progress.js'
+import { startSpinner } from './tty/spinner.js'
 import { createWebsiteProgress } from './tty/website-progress.js'
 import { resolvePackageVersion } from './version.js'
 
@@ -1029,7 +1033,11 @@ function estimateWhisperTranscriptionCostUsd({
 }): number | null {
   if (transcriptSource !== 'whisper') return null
   if (!transcriptionProvider || transcriptionProvider.toLowerCase() !== 'openai') return null
-  if (typeof mediaDurationSeconds !== 'number' || !Number.isFinite(mediaDurationSeconds) || mediaDurationSeconds <= 0) {
+  if (
+    typeof mediaDurationSeconds !== 'number' ||
+    !Number.isFinite(mediaDurationSeconds) ||
+    mediaDurationSeconds <= 0
+  ) {
     return null
   }
   const perSecond = openaiWhisperUsdPerMinute / 60
@@ -1243,26 +1251,6 @@ function writeFinishLine({
   if (line2Segments.length > 0) {
     stderr.write(`${ansi('0;90', line2Segments.join(' | '), color)}\n`)
   }
-}
-
-function buildBasicLengthPartsForExtracted(extracted: {
-  transcriptCharacters: number | null
-  transcriptWordCount: number | null
-  mediaDurationSeconds: number | null
-}): string[] {
-  if (typeof extracted.transcriptCharacters !== 'number' || extracted.transcriptCharacters <= 0) {
-    return []
-  }
-
-  const wordEstimate = Math.max(0, Math.round(extracted.transcriptCharacters / 6))
-  const transcriptWords = extracted.transcriptWordCount ?? wordEstimate
-  const minutesEstimate = Math.max(1, Math.round(transcriptWords / 160))
-  const durationPart =
-    typeof extracted.mediaDurationSeconds === 'number' && extracted.mediaDurationSeconds > 0
-      ? formatDurationSecondsSmart(extracted.mediaDurationSeconds)
-      : `~${formatDurationSecondsSmart(minutesEstimate * 60)}`
-
-  return [`transcript=${durationPart} (~${formatCompactCount(transcriptWords)} words)`]
 }
 
 function buildDetailedLengthPartsForExtracted(extracted: {
@@ -2236,7 +2224,7 @@ export async function runCli(
     if (streamResult) {
       getLastStreamError = streamResult.lastError
       let streamed = ''
-          const liveRenderer = shouldLiveRenderSummary
+      const liveRenderer = shouldLiveRenderSummary
         ? createLiveRenderer({
             write: (chunk) => {
               clearProgressForStdout()
@@ -3363,7 +3351,7 @@ export async function runCli(
       stderr.write(`${UVX_TIP}\n`)
     }
 
-	    if (!isYoutubeUrl && extracted.isVideoOnly && extracted.video) {
+    if (!isYoutubeUrl && extracted.isVideoOnly && extracted.video) {
       if (extracted.video.kind === 'youtube') {
         writeVerbose(
           stderr,
@@ -3418,20 +3406,20 @@ export async function runCli(
           })
           writeViaFooter([...footerBaseParts, ...(chosenModel ? [`model ${chosenModel}`] : [])])
           return
-	        }
-	      }
-	    }
+        }
+      }
+    }
 
-	    // Whisper transcription cost (OpenAI only): estimate from duration (RSS hints or ffprobe) and
-	    // include it in the finish-line total.
-	    transcriptionCostUsd = estimateWhisperTranscriptionCostUsd({
-	      transcriptionProvider: extracted.transcriptionProvider,
-	      transcriptSource: extracted.transcriptSource,
-	      mediaDurationSeconds: extracted.mediaDurationSeconds,
-	      openaiWhisperUsdPerMinute,
-	    })
-	    transcriptionCostLabel =
-	      typeof transcriptionCostUsd === 'number' ? `txcost=${formatUSD(transcriptionCostUsd)}` : null
+    // Whisper transcription cost (OpenAI only): estimate from duration (RSS hints or ffprobe) and
+    // include it in the finish-line total.
+    transcriptionCostUsd = estimateWhisperTranscriptionCostUsd({
+      transcriptionProvider: extracted.transcriptionProvider,
+      transcriptSource: extracted.transcriptSource,
+      mediaDurationSeconds: extracted.mediaDurationSeconds,
+      openaiWhisperUsdPerMinute,
+    })
+    transcriptionCostLabel =
+      typeof transcriptionCostUsd === 'number' ? `txcost=${formatUSD(transcriptionCostUsd)}` : null
 
     const isYouTube = extracted.siteName === 'YouTube'
     const prompt = buildLinkSummaryPrompt({
