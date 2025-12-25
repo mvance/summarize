@@ -25,7 +25,26 @@ export const fetchTranscript = async (
 ): Promise<ProviderResult> => {
   const attemptedProviders: TranscriptSource[] = []
   const notes: string[] = []
-  const { html, url } = context
+  const { html: initialHtml, url } = context
+  let html = initialHtml
+  const hasYoutubeConfig =
+    typeof html === 'string' && /ytcfg\.set|ytInitialPlayerResponse/.test(html)
+  if (!hasYoutubeConfig) {
+    try {
+      const response = await options.fetch(url, {
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36',
+          Accept: 'text/html,application/xhtml+xml',
+        },
+      })
+      if (response.ok) {
+        html = await response.text()
+      }
+    } catch {
+      // ignore and fall back to existing html
+    }
+  }
   const mode = options.youtubeTranscriptMode
   const progress = typeof options.onProgress === 'function' ? options.onProgress : null
   const hasLocalWhisper = await isWhisperCppReady()

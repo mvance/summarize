@@ -20,6 +20,7 @@ import type {
   ProviderResult,
 } from './types.js'
 import {
+  extractEmbeddedYouTubeUrlFromHtml,
   extractYouTubeVideoId as extractYouTubeVideoIdInternal,
   isYouTubeUrl as isYouTubeUrlInternal,
 } from './utils.js'
@@ -43,8 +44,13 @@ export const resolveTranscriptForLink = async (
   { youtubeTranscriptMode, cacheMode: providedCacheMode }: ResolveTranscriptOptions = {}
 ): Promise<TranscriptResolution> => {
   const normalizedUrl = url.trim()
-  const resourceKey = extractResourceKey(normalizedUrl)
-  const baseContext: ProviderContext = { url: normalizedUrl, html, resourceKey }
+  const embeddedYoutubeUrl =
+    !isYouTubeUrlInternal(normalizedUrl) && html
+      ? extractEmbeddedYouTubeUrlFromHtml(html)
+      : null
+  const effectiveUrl = embeddedYoutubeUrl ?? normalizedUrl
+  const resourceKey = extractResourceKey(effectiveUrl)
+  const baseContext: ProviderContext = { url: effectiveUrl, html, resourceKey }
   const provider: ProviderModule = selectProvider(baseContext)
   const cacheMode: CacheMode = providedCacheMode ?? 'default'
 

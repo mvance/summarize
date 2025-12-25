@@ -68,6 +68,38 @@ export function extractYouTubeVideoId(rawUrl: string): string | null {
   return null
 }
 
+export function extractEmbeddedYouTubeUrlFromHtml(html: string): string | null {
+  try {
+    const $ = load(html)
+    const candidates: string[] = []
+
+    const iframeSrc =
+      $('iframe[src*="youtube.com/embed/"], iframe[src*="youtu.be/"]').first().attr('src') ?? null
+    if (iframeSrc) candidates.push(iframeSrc)
+
+    const ogVideo =
+      $(
+        'meta[property="og:video"], meta[property="og:video:url"], meta[property="og:video:secure_url"], meta[name="og:video"], meta[name="og:video:url"], meta[name="og:video:secure_url"]'
+      )
+        .first()
+        .attr('content') ?? null
+    if (ogVideo) candidates.push(ogVideo)
+
+    for (const candidate of candidates) {
+      let url = candidate.trim()
+      if (!url) continue
+      if (url.startsWith('//')) url = `https:${url}`
+      if (url.startsWith('/')) url = `https://www.youtube.com${url}`
+      const id = extractYouTubeVideoId(url)
+      if (id) return `https://www.youtube.com/watch?v=${id}`
+    }
+  } catch {
+    return null
+  }
+  return null
+}
+
+
 export function sanitizeYoutubeJsonResponse(input: string): string {
   const trimmed = input.trimStart()
   if (trimmed.startsWith(")]}'")) {
