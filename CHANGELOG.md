@@ -5,6 +5,7 @@
 ### Fixed
 
 - Streaming: render streamed Markdown append-only (newline-bounded) to avoid line loss from in-place redraw.
+- Streaming: render Markdown line-by-line (no full-frame reflows) to prevent duplicated sections in scrollback.
 - Streaming: flush newline-bounded output in `--plain` mode to avoid duplication with cumulative stream chunks.
 - Website extraction: strip inline CSS before Readability to avoid extremely slow jsdom stylesheet parsing on some pages.
 - Twitter/X: rotate Nitter hosts and skip Anubis PoW pages during tweet fallback.

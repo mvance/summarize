@@ -7,7 +7,7 @@ import { streamTextWithModelId } from '../llm/generate-text.js'
 import { parseGatewayStyleModelId } from '../llm/model-id.js'
 import { formatCompactCount } from '../tty/format.js'
 import { createRetryLogger, writeVerbose } from './logging.js'
-import { prepareMarkdownForTerminal } from './markdown.js'
+import { prepareMarkdownLineForTerminal } from './markdown.js'
 import {
   isGoogleStreamingUnsupportedError,
   isStreamingTimeoutError,
@@ -374,54 +374,49 @@ export function createSummaryEngine(deps: SummaryEngineDeps) {
 	      let streamedRaw = ''
 	      const liveWidth = markdownRenderWidth(deps.stdout, deps.env)
 
-      let previousRendered = ''
-      let pendingAnsi = ''
-      let reflowCount = 0
+      let markdownFlushedLen = 0
+      let markdownFence = false
 
-      const renderFrame = (markdown: string): string =>
-        renderMarkdownAnsi(prepareMarkdownForTerminal(markdown), {
+      const renderLine = (line: string): string => {
+        const trimmed = line.trimStart()
+        const isFence = trimmed.startsWith('```')
+        if (isFence) {
+          markdownFence = !markdownFence
+          return `${line}\n`
+        }
+        if (markdownFence) return `${line}\n`
+
+        // Keep reference definitions stable in streaming mode; they can affect earlier lines.
+        if (/^\s*\[[^\]]+\]:\s*\S+/.test(line)) return `${line}\n`
+
+        if (!line) return '\n'
+
+        const rendered = renderMarkdownAnsi(prepareMarkdownLineForTerminal(line), {
           width: liveWidth,
           wrap: true,
           color: supportsColor(deps.stdout, deps.envForRun),
           hyperlinks: true,
         })
-
-      const flushCompleteLines = () => {
-        const idx = pendingAnsi.lastIndexOf('\n')
-        if (idx < 0) return
-        const upto = idx + 1
-        const chunk = pendingAnsi.slice(0, upto)
-        pendingAnsi = pendingAnsi.slice(upto)
-        if (!chunk) return
-        deps.clearProgressForStdout()
-        deps.stdout.write(chunk)
+        return rendered.endsWith('\n') ? rendered : `${rendered}\n`
       }
 
-      const updateRenderedStream = (markdown: string, { final }: { final: boolean }) => {
-        const raw = renderFrame(markdown)
-        const rendered = final && !raw.endsWith('\n') ? `${raw}\n` : raw
-        if (previousRendered && !rendered.startsWith(previousRendered)) {
-          reflowCount += 1
-          if (reflowCount === 1) {
-            // Rare: renderer changed earlier output (tables, etc). Keep scrollback-only semantics:
-            // append a full frame (may duplicate), then continue with prefix matching from there.
-            pendingAnsi = ''
-            previousRendered = ''
-            pendingAnsi += rendered
-            flushCompleteLines()
-            previousRendered = rendered
-            return
-          }
-          // Too many reflows; stop emitting incremental ANSI to avoid massive duplication.
-          previousRendered = rendered
-          return
-        }
+      const flushRenderedLines = (markdown: string, { final }: { final: boolean }) => {
+        const lastNl = markdown.lastIndexOf('\n')
+        const upto = final ? markdown.length : lastNl >= 0 ? lastNl + 1 : 0
+        if (upto <= markdownFlushedLen) return
+        const chunk = markdown.slice(markdownFlushedLen, upto)
+        markdownFlushedLen = upto
+        if (!chunk) return
 
-        const appended = previousRendered ? rendered.slice(previousRendered.length) : rendered
-        previousRendered = rendered
-        if (!appended) return
-        pendingAnsi += appended
-        flushCompleteLines()
+        deps.clearProgressForStdout()
+        const lines = chunk.split('\n')
+        const trailing = lines.pop() ?? ''
+        for (const line of lines) {
+          deps.stdout.write(renderLine(line))
+        }
+        if (final && trailing.length > 0) {
+          deps.stdout.write(renderLine(trailing))
+        }
       }
 
 	      try {
@@ -442,12 +437,7 @@ export function createSummaryEngine(deps: SummaryEngineDeps) {
 	            continue
 	          }
 
-          if (shouldStreamRenderedMarkdownToStdout) {
-            const hasNewline = delta.includes('\n')
-            if (hasNewline) {
-              updateRenderedStream(streamed, { final: false })
-            }
-          }
+          if (shouldStreamRenderedMarkdownToStdout) flushRenderedLines(streamed, { final: false })
 	        }
 
 	        streamedRaw = streamed
@@ -455,8 +445,7 @@ export function createSummaryEngine(deps: SummaryEngineDeps) {
 	        streamed = trimmed
 	      } finally {
 	        if (shouldStreamRenderedMarkdownToStdout) {
-	          updateRenderedStream(streamed, { final: true })
-	          flushCompleteLines()
+	          flushRenderedLines(streamedRaw || streamed, { final: true })
           summaryAlreadyPrinted = true
         }
       }

@@ -58,7 +58,7 @@ vi.mock('@ai-sdk/openai', () => ({
 }))
 
 describe('cli markdown reference links', () => {
-  it('inlines reference-style links so URLs remain clickable', async () => {
+  it('streams without re-rendering earlier lines when reference definitions arrive', async () => {
     const root = mkdtempSync(join(tmpdir(), 'summarize-md-links-'))
     const cacheDir = join(root, '.summarize', 'cache')
     mkdirSync(cacheDir, { recursive: true })
@@ -115,7 +115,8 @@ describe('cli markdown reference links', () => {
 
     const out = stdout.getText()
     expect(out).toContain('https://example.com')
-    expect(out).not.toContain('[1]: https://example.com')
+    expect(out).toContain('[1]: https://example.com')
+    expect(out.split('Here is a link:').length - 1).toBe(1)
 
     globalFetchSpy.mockRestore()
   })

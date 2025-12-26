@@ -28,6 +28,15 @@ function materializeInlineMarkdownLinks(markdown: string): string {
   return out.join('\n')
 }
 
+export function prepareMarkdownLineForTerminal(line: string): string {
+  return line.replace(/(?<!!)\[([^\]]+)\]\((\S+?)\)/g, (_full, label, url) => {
+    const safeLabel = String(label ?? '').trim()
+    const safeUrl = String(url ?? '').trim()
+    if (!safeLabel || !safeUrl) return _full
+    return `${safeLabel}: ${safeUrl}`
+  })
+}
+
 function inlineReferenceStyleLinks(markdown: string): string {
   // Some models like emitting reference-style links:
   //   [Label][1]
