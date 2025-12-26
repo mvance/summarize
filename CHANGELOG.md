@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.0 - Unreleased
+
+### Breaking
+
+- ESM-only: `@steipete/summarize` + `@steipete/summarize-core` no longer support CommonJS `require()`; the CLI binary is now ESM.
+
 ## 0.7.1 - 2025-12-26
 
 ### Fixed

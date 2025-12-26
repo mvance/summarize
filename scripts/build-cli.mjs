@@ -22,10 +22,10 @@ const gitSha = (() => {
 
 await build({
   entryPoints: [path.join(repoRoot, 'src', 'cli.ts')],
-  outfile: path.join(distDir, 'cli.cjs'),
+  outfile: path.join(distDir, 'cli.js'),
   bundle: true,
   platform: 'node',
-  format: 'cjs',
+  format: 'esm',
   target: 'node22',
   sourcemap: true,
   // Keep builds quiet in CI/prepare; real failures still surface as errors.

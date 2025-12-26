@@ -1,6 +1,6 @@
 {
   "name": "@steipete/summarize-core",
-  "version": "0.7.1",
+  "version": "0.8.0",
   "description": "Summarize core library (content extraction + prompts).",
   "type": "module",
   "main": "./dist/esm/index.js",
@@ -9,23 +9,19 @@
   "exports": {
     ".": {
       "types": "./dist/types/index.d.ts",
-      "import": "./dist/esm/index.js",
-      "require": "./dist/cjs/index.js"
+      "import": "./dist/esm/index.js"
     },
     "./content": {
       "types": "./dist/types/content/index.d.ts",
-      "import": "./dist/esm/content/index.js",
-      "require": "./dist/cjs/content/index.js"
+      "import": "./dist/esm/content/index.js"
     },
     "./prompts": {
       "types": "./dist/types/prompts/index.d.ts",
-      "import": "./dist/esm/prompts/index.js",
-      "require": "./dist/cjs/prompts/index.js"
+      "import": "./dist/esm/prompts/index.js"
     },
     "./language": {
       "types": "./dist/types/language.d.ts",
-      "import": "./dist/esm/language.js",
-      "require": "./dist/cjs/language.js"
+      "import": "./dist/esm/language.js"
     }
   },
   "files": [
@@ -38,7 +34,7 @@
   },
   "scripts": {
     "clean": "rm -rf dist",
-    "build": "pnpm clean && tsc -p tsconfig.build.json && tsc -p tsconfig.build.cjs.json && node scripts/postbuild-cjs.mjs",
+    "build": "pnpm clean && tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.build.json --noEmit"
   },
   "dependencies": {
