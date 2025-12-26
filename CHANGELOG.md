@@ -1,22 +1,22 @@
 # Changelog
 
-## 0.6.2 - Unreleased
+## 0.7.0 - Unreleased
+
+### Highlights
+
+- Streaming: scrollback-safe Markdown streaming (hybrid: line-by-line + block buffering for fenced code + tables). No cursor control, no full-frame redraws.
+- Output: Markdown rendering is automatic on TTY; use `--plain` for raw Markdown/text output.
+- Finish line: compact separators (`·`) and no duplicated `… words` when transcript stats are shown.
 
 ### Fixed
 
-- Streaming: render streamed Markdown append-only (newline-bounded) to avoid line loss from in-place redraw.
-- Streaming: render Markdown line-by-line (no full-frame reflows) to prevent duplicated sections in scrollback.
-- Streaming: drop leading blank lines in streamed output (prevents double-spacing after `pnpm` script banners).
-- Streaming: strip markdansi’s extra leading newline for headings (prevents double blank lines between sections).
 - Streaming: flush newline-bounded output in `--plain` mode to avoid duplication with cumulative stream chunks.
-- Finish line: avoid duplicated `… words` when transcript stats are shown; use `·` separators for transcript summary.
 - Website extraction: strip inline CSS before Readability to avoid extremely slow jsdom stylesheet parsing on some pages.
 - Twitter/X: rotate Nitter hosts and skip Anubis PoW pages during tweet fallback.
 
 ### Changed
 
-- CLI: remove `--render`; add `--plain` to keep raw text/Markdown output (no ANSI/OSC rendering).
-- Output: Markdown rendering is automatic on TTY unless `--plain` is set.
+- CLI: remove `--render`; add `--plain` to keep raw output (no ANSI/OSC rendering).
 
 ## 0.6.1 - 2025-12-25
 

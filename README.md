@@ -9,7 +9,7 @@ Fast CLI for summarizing *anything you can point at*:
 - Remote files (PDFs/images/audio/video via URL — downloaded and forwarded to the model)
 - Local files (PDFs/images/audio/video/text — forwarded or inlined; support depends on provider/model)
 
-It streams output by default on TTY and renders Markdown to ANSI (via `markdansi`). At the end it prints a single “Finished in …” line with timing, token usage, and a best-effort cost estimate (when pricing is available).
+It streams output by default on TTY and renders Markdown to ANSI (via `markdansi`) using scrollback-safe hybrid streaming (line-by-line, but buffers fenced code blocks and tables as blocks). At the end it prints a single “Finished in …” line with timing, token usage, and a best-effort cost estimate (when pricing is available).
 
 ## Install
 
