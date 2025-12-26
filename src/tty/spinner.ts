@@ -18,6 +18,8 @@ export function startSpinner({
     return { stop: () => {}, clear: () => {}, stopAndClear: () => {}, setText: () => {} }
   }
 
+  let stopped = false
+
   const oraStream = stream as typeof stream & {
     cursorTo?: (x: number, y?: number) => void
     clearLine?: (dir: number) => void
@@ -29,6 +31,7 @@ export function startSpinner({
   if (typeof oraStream.moveCursor !== 'function') oraStream.moveCursor = () => {}
 
   const clear = () => {
+    if (stopped) return
     // Keep output clean in scrollback.
     // `ora` clears the line, but we also hard-clear as a fallback.
     spinner.clear()
@@ -36,15 +39,21 @@ export function startSpinner({
   }
 
   const stop = () => {
+    if (stopped) return
+    stopped = true
     if (spinner.isSpinning) spinner.stop()
   }
 
   const stopAndClear = () => {
+    if (stopped) return
     stop()
-    clear()
+    // `stop()` sets stopped=true; do the actual clear anyway.
+    spinner.clear()
+    stream.write('\r\u001b[2K')
   }
 
   const setText = (next: string) => {
+    if (stopped) return
     spinner.text = next
     spinner.render?.()
   }
