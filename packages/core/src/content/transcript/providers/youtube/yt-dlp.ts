@@ -189,6 +189,27 @@ async function downloadAudio(
     const proc = spawn(ytDlpPath, args, { stdio: ['ignore', 'pipe', 'pipe'] })
     let stderr = ''
     let progressBuffer = ''
+    let lastTotalBytes: number | null = null
+
+    const reportProgress = (
+      downloadedBytes: number,
+      totalBytes: number | null
+    ): void => {
+      if (!onProgress) return
+      let normalizedTotal = totalBytes
+      if (typeof normalizedTotal === 'number' && Number.isFinite(normalizedTotal)) {
+        if (normalizedTotal > 0) {
+          if (lastTotalBytes === null || normalizedTotal > lastTotalBytes) {
+            lastTotalBytes = normalizedTotal
+          } else if (normalizedTotal < lastTotalBytes) {
+            normalizedTotal = lastTotalBytes
+          }
+        }
+      } else if (lastTotalBytes !== null) {
+        normalizedTotal = lastTotalBytes
+      }
+      onProgress(downloadedBytes, normalizedTotal)
+    }
 
     const handleProgressChunk = (chunk: string) => {
       if (!onProgress) return
@@ -196,7 +217,7 @@ async function downloadAudio(
       const lines = progressBuffer.split(/\r?\n/)
       progressBuffer = lines.pop() ?? ''
       for (const line of lines) {
-        emitProgressFromLine(line, onProgress)
+        emitProgressFromLine(line, reportProgress)
       }
     }
 
@@ -225,7 +246,7 @@ async function downloadAudio(
 
     proc.on('close', (code, signal) => {
       if (onProgress && progressBuffer.trim().length > 0) {
-        emitProgressFromLine(progressBuffer, onProgress)
+        emitProgressFromLine(progressBuffer, reportProgress)
       }
       clearTimeout(timeout)
       if (code === 0) {

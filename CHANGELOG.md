@@ -20,7 +20,7 @@
 
 - Chrome Side Panel: avoid MV3 background stream stalls by streaming SSE from the panel page; improve auto-summarize de-dupe; keep background theme continuous on long summaries; avoid “disconnected port” errors by using runtime messaging; show a subtle summary metrics footer.
 - Transcripts: show yt-dlp download progress bytes instead of staying at 0 B.
-- Streaming: stop/clear progress UI before first streamed output to avoid sticky “Summarizing …” lines in scrollback.
+- Transcripts: stabilize yt-dlp download totals to prevent bouncing progress bars.
 - Streaming: stop/clear progress UI before first streamed output to avoid sticky “Summarizing …” lines in scrollback.
 
 ## 0.7.1 - 2025-12-26

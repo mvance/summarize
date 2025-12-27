@@ -133,8 +133,9 @@ describe('yt-dlp transcript helper', () => {
       proc.stderr = new PassThrough()
       proc.kill = vi.fn()
       process.nextTick(() => {
-        proc.stdout?.write('progress:1024|2048|0\n')
-        proc.stdout?.write('progress:2048||4096\n')
+        proc.stdout?.write('progress:1024|7000|0\n')
+        proc.stdout?.write('progress:2048|6500|0\n')
+        proc.stdout?.write('progress:3072||6400\n')
         proc.stdout?.end()
         proc.emit('close', 0, null)
       })
@@ -160,9 +161,12 @@ describe('yt-dlp transcript helper', () => {
     const progress = events.filter((event) => event.kind === 'transcript-media-download-progress')
     expect(progress.length).toBeGreaterThan(0)
     expect(progress[0]?.downloadedBytes).toBe(1024)
-    expect(progress[0]?.totalBytes).toBe(2048)
+    expect(progress[0]?.totalBytes).toBe(7000)
     expect(
-      progress.some((event) => event.downloadedBytes === 2048 && event.totalBytes === 4096)
+      progress.some((event) => event.downloadedBytes === 2048 && event.totalBytes === 7000)
+    ).toBe(true)
+    expect(
+      progress.some((event) => event.downloadedBytes === 3072 && event.totalBytes === 7000)
     ).toBe(true)
   })
 
