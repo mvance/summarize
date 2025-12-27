@@ -2,6 +2,8 @@ export type Settings = {
   token: string
   autoSummarize: boolean
   model: string
+  length: string
+  language: string
   maxChars: number
   fontFamily: string
   fontSize: number
@@ -32,10 +34,30 @@ function normalizeModel(value: unknown): string {
   return trimmed
 }
 
+function normalizeLength(value: unknown): string {
+  if (typeof value !== 'string') return defaultSettings.length
+  const trimmed = value.trim()
+  if (!trimmed) return defaultSettings.length
+  const lowered = trimmed.toLowerCase()
+  if (lowered === 's') return 'short'
+  if (lowered === 'm') return 'medium'
+  if (lowered === 'l') return 'long'
+  return lowered
+}
+
+function normalizeLanguage(value: unknown): string {
+  if (typeof value !== 'string') return defaultSettings.language
+  const trimmed = value.trim()
+  if (!trimmed) return defaultSettings.language
+  return trimmed
+}
+
 export const defaultSettings: Settings = {
   token: '',
   autoSummarize: true,
   model: 'auto',
+  length: 'xl',
+  language: 'auto',
   maxChars: 120_000,
   fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif',
   fontSize: 14,
@@ -49,6 +71,8 @@ export async function loadSettings(): Promise<Settings> {
     ...raw,
     token: typeof raw.token === 'string' ? raw.token : defaultSettings.token,
     model: normalizeModel(raw.model),
+    length: normalizeLength(raw.length),
+    language: normalizeLanguage(raw.language),
     autoSummarize:
       typeof raw.autoSummarize === 'boolean' ? raw.autoSummarize : defaultSettings.autoSummarize,
     maxChars: typeof raw.maxChars === 'number' ? raw.maxChars : defaultSettings.maxChars,
@@ -62,6 +86,8 @@ export async function saveSettings(settings: Settings): Promise<void> {
     [storageKey]: {
       ...settings,
       model: normalizeModel(settings.model),
+      length: normalizeLength(settings.length),
+      language: normalizeLanguage(settings.language),
       fontFamily: normalizeFontFamily(settings.fontFamily),
     },
   })

@@ -255,6 +255,8 @@ export default defineBackground(() => {
           text: extracted.text,
           truncated: extracted.truncated,
           model: settings.model,
+          length: settings.length,
+          language: settings.language,
           mode: 'auto',
           maxCharacters: settings.maxChars,
         }),

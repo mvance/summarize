@@ -30,6 +30,50 @@
             <option value="free" label="Free"></option>
           </datalist>
         </label>
+        <label>
+          <span>Length</span>
+          <input
+            id="length"
+            type="text"
+            list="lengthPresets"
+            placeholder="xl / short / 20k"
+            autocapitalize="off"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <datalist id="lengthPresets">
+            <option value="short"></option>
+            <option value="medium"></option>
+            <option value="long"></option>
+            <option value="xl"></option>
+            <option value="xxl"></option>
+            <option value="20k"></option>
+          </datalist>
+        </label>
+        <label>
+          <span>Language</span>
+          <input
+            id="language"
+            type="text"
+            list="languagePresets"
+            placeholder="auto / en / de / …"
+            autocapitalize="off"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <datalist id="languagePresets">
+            <option value="auto"></option>
+            <option value="en"></option>
+            <option value="de"></option>
+            <option value="es"></option>
+            <option value="fr"></option>
+            <option value="it"></option>
+            <option value="pt"></option>
+            <option value="ja"></option>
+            <option value="zh"></option>
+            <option value="ko"></option>
+          </datalist>
+        </label>
         <label class="row">
           <input id="auto" type="checkbox" />
           <span>Auto-summarize when panel is open</span>
