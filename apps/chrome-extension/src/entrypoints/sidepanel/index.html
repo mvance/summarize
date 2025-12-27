@@ -26,10 +26,6 @@
 
     <section id="drawer" class="drawer hidden" aria-label="Controls">
       <div class="drawerGrid">
-        <label class="toggle">
-          <input id="auto" type="checkbox" />
-          <span>Auto summarize</span>
-        </label>
         <label class="model">
           <span>Model</span>
           <input
@@ -60,6 +56,11 @@
           <input id="size" type="range" min="12" max="20" step="1" />
         </label>
       </div>
+
+      <label class="toggleRow">
+        <input id="auto" type="checkbox" />
+        <span>Auto summarize (when panel open)</span>
+      </label>
       <div class="drawerFooter">
         <button id="advanced" type="button" class="ghost">Advanced…</button>
       </div>
