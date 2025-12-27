@@ -2,6 +2,16 @@ import { defineConfig } from 'wxt'
 
 export default defineConfig({
   srcDir: 'src',
+  vite: () => ({
+    resolve: {
+      alias: {
+        react: 'preact/compat',
+        'react-dom': 'preact/compat',
+        'react/jsx-runtime': 'preact/jsx-runtime',
+        'react/jsx-dev-runtime': 'preact/jsx-dev-runtime',
+      },
+    },
+  }),
   manifest: {
     name: 'Summarize',
     description: 'Summarize what you see. Articles, threads, YouTube, podcasts — anything.',

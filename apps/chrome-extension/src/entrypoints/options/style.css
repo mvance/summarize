@@ -373,22 +373,6 @@ h1 {
   letter-spacing: 0.2px;
 }
 
-.docsLink {
-  color: var(--muted);
-  text-decoration: none;
-  font-size: 12px;
-  font-weight: 800;
-  padding: 6px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-}
-
-.docsLink:hover {
-  border-color: color-mix(in srgb, var(--ui-focus) 55%, var(--border));
-  color: var(--text);
-}
-
 form {
   display: grid;
   gap: 14px;
@@ -396,6 +380,48 @@ form {
   border: 1px solid var(--border);
   border-radius: 14px;
   background: var(--panel);
+}
+
+details.advanced {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  padding: 10px 12px;
+}
+
+details.advanced > summary {
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.3px;
+}
+
+details.advanced > summary::-webkit-details-marker {
+  display: none;
+}
+
+details.advanced > summary::after {
+  content: "▸";
+  float: right;
+  color: color-mix(in srgb, var(--muted) 85%, transparent);
+  transform: translateY(1px);
+}
+
+details.advanced[open] > summary::after {
+  content: "▾";
+}
+
+.advancedGrid {
+  display: grid;
+  gap: 14px;
+  margin-top: 12px;
+}
+
+#pickersRoot {
+  display: contents;
 }
 
 label {

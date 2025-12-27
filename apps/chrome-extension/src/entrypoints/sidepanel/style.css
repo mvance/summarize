@@ -581,6 +581,10 @@ button.ghost:hover {
   align-items: end;
 }
 
+#pickersRoot {
+  display: contents;
+}
+
 .drawerGrid .wide {
   grid-column: 1 / -1;
 }
@@ -596,16 +600,22 @@ button.ghost:hover {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex: 1;
+  min-width: 0;
   color: var(--text);
   font-size: 12px;
 }
 
 .drawerRow {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
   margin-top: 12px;
+}
+
+.drawerRow #advanced {
+  margin-top: -1px;
 }
 
 .drawer .combo {
@@ -826,24 +836,6 @@ input[type="range"] {
   justify-content: flex-end;
   gap: 10px;
   margin-top: 10px;
-}
-
-.docsLink {
-  display: inline-flex;
-  align-items: center;
-  padding: 7px 10px;
-  border-radius: 12px;
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--muted);
-  text-decoration: none;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.docsLink:hover {
-  border-color: color-mix(in srgb, var(--ui-focus) 35%, var(--border));
-  color: var(--text);
 }
 
 .progress {

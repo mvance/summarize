@@ -1,7 +1,7 @@
 import { readPresetOrCustomValue, resolvePresetOrCustom } from '../../lib/combo'
 import { defaultSettings, loadSettings, saveSettings } from '../../lib/settings'
 import { applyTheme, type ColorMode, type ColorScheme } from '../../lib/theme'
-import { createZagSelect, type ZagSelectItem } from '../../lib/zag-select'
+import { mountOptionsPickers } from './pickers'
 
 function byId<T extends HTMLElement>(id: string): T {
   const el = document.getElementById(id)
@@ -20,23 +20,7 @@ const languageCustomEl = byId<HTMLInputElement>('languageCustom')
 const promptOverrideEl = byId<HTMLTextAreaElement>('promptOverride')
 const autoEl = byId<HTMLInputElement>('auto')
 const maxCharsEl = byId<HTMLInputElement>('maxChars')
-const schemeLabelEl = byId<HTMLLabelElement>('schemeLabel')
-const schemePickerEl = byId<HTMLElement>('schemePicker')
-const schemeTriggerEl = byId<HTMLButtonElement>('schemeTrigger')
-const schemeValueEl = byId<HTMLSpanElement>('schemeValue')
-const schemeChipsEl = byId<HTMLSpanElement>('schemeChips')
-const schemePositionerEl = byId<HTMLDivElement>('schemePositioner')
-const schemeContentEl = byId<HTMLDivElement>('schemeContent')
-const schemeListEl = byId<HTMLDivElement>('schemeList')
-const schemeHiddenEl = byId<HTMLSelectElement>('schemeHidden')
-const modeLabelEl = byId<HTMLLabelElement>('modeLabel')
-const modePickerEl = byId<HTMLElement>('modePicker')
-const modeTriggerEl = byId<HTMLButtonElement>('modeTrigger')
-const modeValueEl = byId<HTMLSpanElement>('modeValue')
-const modePositionerEl = byId<HTMLDivElement>('modePositioner')
-const modeContentEl = byId<HTMLDivElement>('modeContent')
-const modeListEl = byId<HTMLDivElement>('modeList')
-const modeHiddenEl = byId<HTMLSelectElement>('modeHidden')
+const pickersRoot = byId<HTMLDivElement>('pickersRoot')
 const fontFamilyEl = byId<HTMLInputElement>('fontFamily')
 const fontSizeEl = byId<HTMLInputElement>('fontSize')
 
@@ -44,9 +28,44 @@ const setStatus = (text: string) => {
   statusEl.textContent = text
 }
 
+function setDefaultModelPresets() {
+  modelPresetsEl.innerHTML = ''
+  {
+    const el = document.createElement('option')
+    el.value = 'auto'
+    el.label = 'Auto'
+    modelPresetsEl.append(el)
+  }
+}
+
+function setModelPlaceholderFromDiscovery(discovery: {
+  providers?: unknown
+  localModelsSource?: unknown
+}) {
+  const hints: string[] = ['auto']
+  const providers = discovery.providers
+  if (providers && typeof providers === 'object') {
+    const p = providers as Record<string, unknown>
+    if (p.openrouter === true) hints.push('free')
+    if (p.openai === true) hints.push('openai/…')
+    if (p.anthropic === true) hints.push('anthropic/…')
+    if (p.google === true) hints.push('google/…')
+    if (p.xai === true) hints.push('xai/…')
+    if (p.zai === true) hints.push('zai/…')
+  }
+  if (discovery.localModelsSource && typeof discovery.localModelsSource === 'object') {
+    hints.push('local: openai/<id>')
+  }
+  modelEl.placeholder = hints.join(' / ')
+}
+
 async function refreshModelPresets(token: string) {
   const trimmed = token.trim()
-  if (!trimmed) return
+  if (!trimmed) {
+    setDefaultModelPresets()
+    setModelPlaceholderFromDiscovery({})
+    return
+  }
   try {
     const res = await fetch('http://127.0.0.1:8787/v1/models', {
       headers: { Authorization: `Bearer ${trimmed}` },
@@ -56,6 +75,12 @@ async function refreshModelPresets(token: string) {
     if (!json || typeof json !== 'object') return
     const obj = json as Record<string, unknown>
     if (obj.ok !== true) return
+
+    setModelPlaceholderFromDiscovery({
+      providers: obj.providers,
+      localModelsSource: obj.localModelsSource,
+    })
+
     const optionsRaw = obj.options
     if (!Array.isArray(optionsRaw)) return
 
@@ -110,95 +135,24 @@ const languagePresets = [
   'zh-tw',
 ]
 
-const schemeLabels: Record<ColorScheme, string> = {
-  slate: 'Slate',
-  cedar: 'Cedar',
-  mint: 'Mint',
-  ocean: 'Ocean',
-  ember: 'Ember',
-  iris: 'Iris',
-}
-
-const modeLabels: Record<ColorMode, string> = {
-  system: 'System',
-  light: 'Light',
-  dark: 'Dark',
-}
-
-function buildItemMap(listEl: HTMLElement) {
-  const items = new Map<string, HTMLElement>()
-  listEl.querySelectorAll<HTMLElement>('.pickerOption').forEach((el) => {
-    const value = el.dataset.value
-    if (value) items.set(value, el)
-  })
-  return items
-}
-
-const schemeItems: ZagSelectItem[] = Object.entries(schemeLabels).map(([value, label]) => ({
-  value,
-  label,
-}))
-const modeItems: ZagSelectItem[] = Object.entries(modeLabels).map(([value, label]) => ({
-  value,
-  label,
-}))
-
-const schemeItemEls = buildItemMap(schemeListEl)
-const modeItemEls = buildItemMap(modeListEl)
-
 let currentScheme: ColorScheme = defaultSettings.colorScheme
 let currentMode: ColorMode = defaultSettings.colorMode
-let syncingScheme = false
-let syncingMode = false
 
-const schemePicker = createZagSelect({
-  id: 'options-scheme',
-  items: schemeItems,
-  value: defaultSettings.colorScheme,
-  elements: {
-    root: schemePickerEl,
-    label: schemeLabelEl,
-    trigger: schemeTriggerEl,
-    positioner: schemePositionerEl,
-    content: schemeContentEl,
-    list: schemeListEl,
-    hiddenSelect: schemeHiddenEl,
-    valueText: schemeValueEl,
-    items: schemeItemEls,
-  },
-  renderValue: (value) => {
-    const scheme = (value || defaultSettings.colorScheme) as ColorScheme
-    schemeChipsEl.className = `scheme-chips scheme-${scheme}`
-  },
-  onValueChange: (value) => {
-    if (syncingScheme) return
-    if (!value) return
-    currentScheme = value as ColorScheme
+const pickerHandlers = {
+  onSchemeChange: (value: ColorScheme) => {
+    currentScheme = value
     applyTheme({ scheme: currentScheme, mode: currentMode })
   },
-})
-
-const modePicker = createZagSelect({
-  id: 'options-mode',
-  items: modeItems,
-  value: defaultSettings.colorMode,
-  elements: {
-    root: modePickerEl,
-    label: modeLabelEl,
-    trigger: modeTriggerEl,
-    positioner: modePositionerEl,
-    content: modeContentEl,
-    list: modeListEl,
-    hiddenSelect: modeHiddenEl,
-    valueText: modeValueEl,
-    items: modeItemEls,
-  },
-  onValueChange: (value) => {
-    if (syncingMode) return
-    if (!value) return
-    currentMode = value as ColorMode
+  onModeChange: (value: ColorMode) => {
+    currentMode = value
     applyTheme({ scheme: currentScheme, mode: currentMode })
   },
+}
+
+const pickers = mountOptionsPickers(pickersRoot, {
+  scheme: currentScheme,
+  mode: currentMode,
+  ...pickerHandlers,
 })
 
 async function load() {
@@ -219,18 +173,17 @@ async function load() {
   fontSizeEl.value = String(s.fontSize)
   currentScheme = s.colorScheme
   currentMode = s.colorMode
-  syncingScheme = true
-  schemePicker.setValue(s.colorScheme)
-  queueMicrotask(() => {
-    syncingScheme = false
-  })
-  syncingMode = true
-  modePicker.setValue(s.colorMode)
-  queueMicrotask(() => {
-    syncingMode = false
-  })
+  pickers.update({ scheme: currentScheme, mode: currentMode, ...pickerHandlers })
   applyTheme({ scheme: s.colorScheme, mode: s.colorMode })
 }
+
+let refreshTimer = 0
+tokenEl.addEventListener('input', () => {
+  window.clearTimeout(refreshTimer)
+  refreshTimer = window.setTimeout(() => {
+    void refreshModelPresets(tokenEl.value)
+  }, 350)
+})
 
 languagePresetEl.addEventListener('change', () => {
   languageCustomEl.hidden = languagePresetEl.value !== 'custom'

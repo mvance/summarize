@@ -17,22 +17,6 @@
           <input id="token" type="text" placeholder="(generated in side panel)" />
         </label>
         <label>
-          <span>Model</span>
-          <input
-            id="model"
-            type="text"
-            list="modelPresets"
-            placeholder="auto / free / openai/…"
-            autocapitalize="off"
-            autocomplete="off"
-            spellcheck="false"
-          />
-          <datalist id="modelPresets">
-            <option value="auto" label="Auto"></option>
-            <option value="free" label="Free"></option>
-          </datalist>
-        </label>
-        <label>
           <span>Language</span>
           <div class="combo">
             <select id="languagePreset">
@@ -72,94 +56,43 @@
             />
           </div>
         </label>
-        <label>
-          <span>Prompt override</span>
-          <textarea
-            id="promptOverride"
-            rows="6"
-            placeholder="Custom instructions (prefix). Context + content still appended."
-          ></textarea>
-        </label>
         <label class="row">
           <input id="auto" type="checkbox" />
           <span>Auto-summarize when panel is open</span>
         </label>
-        <label>
-          <span>Max chars (extracted)</span>
-          <input id="maxChars" type="number" min="20000" step="10000" />
-        </label>
-        <label id="schemeLabel">
-          <span class="pickerTitle">Color scheme</span>
-          <div id="schemePicker" class="picker">
-            <button id="schemeTrigger" type="button" class="pickerTrigger" aria-haspopup="listbox" aria-expanded="false">
-              <span class="scheme-label" id="schemeValue">Slate</span>
-              <span class="scheme-chips scheme-slate" id="schemeChips" aria-hidden="true">
-                <span></span><span></span><span></span><span></span>
-              </span>
-            </button>
-            <div id="schemePositioner" class="pickerPositioner">
-              <div id="schemeContent" class="pickerContent">
-                <div id="schemeList" class="pickerList">
-                  <button type="button" class="pickerOption" data-value="slate">
-                    <span class="scheme-label">Slate</span>
-                    <span class="scheme-chips scheme-slate" aria-hidden="true">
-                      <span></span><span></span><span></span><span></span>
-                    </span>
-                  </button>
-                  <button type="button" class="pickerOption" data-value="cedar">
-                    <span class="scheme-label">Cedar</span>
-                    <span class="scheme-chips scheme-cedar" aria-hidden="true">
-                      <span></span><span></span><span></span><span></span>
-                    </span>
-                  </button>
-                  <button type="button" class="pickerOption" data-value="mint">
-                    <span class="scheme-label">Mint</span>
-                    <span class="scheme-chips scheme-mint" aria-hidden="true">
-                      <span></span><span></span><span></span><span></span>
-                    </span>
-                  </button>
-                  <button type="button" class="pickerOption" data-value="ocean">
-                    <span class="scheme-label">Ocean</span>
-                    <span class="scheme-chips scheme-ocean" aria-hidden="true">
-                      <span></span><span></span><span></span><span></span>
-                    </span>
-                  </button>
-                  <button type="button" class="pickerOption" data-value="ember">
-                    <span class="scheme-label">Ember</span>
-                    <span class="scheme-chips scheme-ember" aria-hidden="true">
-                      <span></span><span></span><span></span><span></span>
-                    </span>
-                  </button>
-                  <button type="button" class="pickerOption" data-value="iris">
-                    <span class="scheme-label">Iris</span>
-                    <span class="scheme-chips scheme-iris" aria-hidden="true">
-                      <span></span><span></span><span></span><span></span>
-                    </span>
-                  </button>
-                </div>
-              </div>
-            </div>
-            <select id="schemeHidden" class="pickerHidden" aria-hidden="true"></select>
+        <details class="advanced">
+          <summary>Advanced</summary>
+          <div class="advancedGrid">
+            <label>
+              <span>Model</span>
+              <input
+                id="model"
+                type="text"
+                list="modelPresets"
+                placeholder="auto"
+                autocapitalize="off"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <datalist id="modelPresets">
+                <option value="auto" label="Auto"></option>
+              </datalist>
+            </label>
+            <label>
+              <span>Prompt override</span>
+              <textarea
+                id="promptOverride"
+                rows="6"
+                placeholder="Custom instructions (prefix). Context + content still appended."
+              ></textarea>
+            </label>
+            <label>
+              <span>Max chars (extracted)</span>
+              <input id="maxChars" type="number" min="20000" step="10000" />
+            </label>
           </div>
-        </label>
-        <label id="modeLabel">
-          <span class="pickerTitle">Appearance</span>
-          <div id="modePicker" class="picker">
-            <button id="modeTrigger" type="button" class="pickerTrigger" aria-haspopup="listbox" aria-expanded="false">
-              <span id="modeValue">System</span>
-            </button>
-            <div id="modePositioner" class="pickerPositioner">
-              <div id="modeContent" class="pickerContent">
-                <div id="modeList" class="pickerList">
-                  <button type="button" class="pickerOption" data-value="system">System</button>
-                  <button type="button" class="pickerOption" data-value="light">Light</button>
-                  <button type="button" class="pickerOption" data-value="dark">Dark</button>
-                </div>
-              </div>
-            </div>
-            <select id="modeHidden" class="pickerHidden" aria-hidden="true"></select>
-          </div>
-        </label>
+        </details>
+        <div id="pickersRoot"></div>
         <label>
           <span>Font family (CSS)</span>
           <input id="fontFamily" type="text" />
