@@ -953,7 +953,7 @@ input[type="range"] {
   width: 0%;
   background: color-mix(in srgb, var(--ui-focus) 70%, transparent);
   transform-origin: center;
-  will-change: left, width, transform;
+  will-change: left, width, transform, background-position;
 }
 
 header.isRunning .progressFill {
@@ -963,8 +963,17 @@ header.isRunning .progressFill {
 
 header.isRunning.isIndeterminate .progressFill {
   left: 0;
-  width: 34%;
-  animation: progressPingPong 2.6s linear infinite;
+  width: 100%;
+  background:
+    linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in srgb, var(--ui-focus) 85%, transparent) 35%,
+      transparent 70%
+    ),
+    color-mix(in srgb, var(--ui-focus) 35%, transparent);
+  background-size: 200% 100%;
+  animation: progressShimmer 1.8s ease-in-out infinite;
 }
 
 header.isError .progressFill {
@@ -977,51 +986,12 @@ main {
   padding: 12px;
 }
 
-@keyframes progressPingPong {
+@keyframes progressShimmer {
   0% {
-    left: 0%;
-    width: 34%;
-    transform: scaleX(1);
-  }
-  10% {
-    left: 6%;
-    width: 34%;
-    transform: scaleX(1);
-  }
-  42% {
-    left: 62%;
-    width: 34%;
-    transform: scaleX(1);
-  }
-  50% {
-    left: 68%;
-    width: 28%;
-    transform: scaleX(0.96);
-  }
-  58% {
-    left: 62%;
-    width: 34%;
-    transform: scaleX(1);
-  }
-  64% {
-    left: 58%;
-    width: 34%;
-    transform: scaleX(1);
-  }
-  92% {
-    left: 0%;
-    width: 34%;
-    transform: scaleX(1);
-  }
-  96% {
-    left: -2%;
-    width: 28%;
-    transform: scaleX(0.96);
+    background-position: 180% 0;
   }
   100% {
-    left: 0%;
-    width: 34%;
-    transform: scaleX(1);
+    background-position: -180% 0;
   }
 }
 
