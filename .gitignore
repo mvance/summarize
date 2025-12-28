@@ -10,3 +10,4 @@ coverage
 .output
 .wxt
 _pack
+apps/chrome-extension/test-results

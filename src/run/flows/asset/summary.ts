@@ -1,6 +1,16 @@
 import path from 'node:path'
 import { countTokens } from 'gpt-tokenizer'
 import { render as renderMarkdownAnsi } from 'markdansi'
+import {
+  buildLanguageKey,
+  buildLengthKey,
+  buildPromptHash,
+  buildSummaryCacheKey,
+  type CacheState,
+  extractTaggedBlock,
+  hashString,
+  normalizeContentForHash,
+} from '../../../cache.js'
 import type { CliProvider, SummarizeConfig } from '../../../config.js'
 import type { LlmCall, RunMetricsReport } from '../../../costs.js'
 import type { OutputLanguage } from '../../../language.js'
@@ -14,7 +24,6 @@ import type { SummaryLength } from '../../../shared/contracts.js'
 import {
   type AssetAttachment,
   ensureCliAttachmentPath,
-  isTextLikeMediaType,
   isUnsupportedAttachmentError,
 } from '../../attachments.js'
 import { parseCliUserModelId } from '../../env.js'
@@ -27,6 +36,17 @@ import type { createSummaryEngine } from '../../summary-engine.js'
 import { isRichTty, markdownRenderWidth, supportsColor } from '../../terminal.js'
 import type { ModelAttempt } from '../../types.js'
 import { prepareAssetPrompt } from './preprocess.js'
+
+const buildModelMetaFromAttempt = (attempt: ModelAttempt) => {
+  if (attempt.transport === 'cli') {
+    return { provider: 'cli' as const, canonical: attempt.userModelId }
+  }
+  const parsed = parseGatewayStyleModelId(attempt.llmModelId ?? attempt.userModelId)
+  const canonical = attempt.userModelId.toLowerCase().startsWith('openrouter/')
+    ? attempt.userModelId
+    : parsed.canonical
+  return { provider: parsed.provider, canonical }
+}
 
 export type AssetSummaryContext = {
   env: Record<string, string | undefined>
@@ -74,6 +94,7 @@ export type AssetSummaryContext = {
   buildReport: () => Promise<RunMetricsReport>
   estimateCostUsd: () => Promise<number | null>
   llmCalls: LlmCall[]
+  cache: CacheState
   apiStatus: {
     xaiApiKey: string | null
     apiKey: string | null
@@ -129,6 +150,22 @@ export async function summarizeAsset(ctx: AssetSummaryContext, args: SummarizeAs
         : ('file' as const)
   const requiresVideoUnderstanding = kind === 'video' && ctx.videoMode !== 'transcript'
 
+  if (
+    ctx.requestedModel.kind === 'auto' &&
+    !ctx.isNamedModelSelection &&
+    !ctx.json &&
+    typeof ctx.maxOutputTokensArg === 'number' &&
+    textContent &&
+    countTokens(textContent.content) <= ctx.maxOutputTokensArg
+  ) {
+    ctx.clearProgressForStdout()
+    ctx.stdout.write(`${textContent.content.trim()}\n`)
+    if (assetFooterParts.length > 0) {
+      ctx.writeViaFooter([...assetFooterParts, 'no model'])
+    }
+    return
+  }
+
   const attempts: ModelAttempt[] = await (async () => {
     if (ctx.isFallbackModel) {
       const catalog = await ctx.getLiteLlmCatalog()
@@ -149,20 +186,7 @@ export async function summarizeAsset(ctx: AssetSummaryContext, args: SummarizeAs
         const parsed = parseCliUserModelId(attempt.userModelId)
         return { ...attempt, cliProvider: parsed.provider, cliModel: parsed.model }
       })
-      const filtered = mapped.filter((a) => {
-        if (a.transport === 'cli') return true
-        if (!a.llmModelId) return false
-        const parsed = parseGatewayStyleModelId(a.llmModelId)
-        if (
-          parsed.provider === 'xai' &&
-          args.attachment.part.type === 'file' &&
-          !isTextLikeMediaType(args.attachment.mediaType)
-        ) {
-          return false
-        }
-        return true
-      })
-      return filtered
+      return mapped
     }
     /* v8 ignore next */
     if (!ctx.fixedModelSpec) {
@@ -206,8 +230,7 @@ export async function summarizeAsset(ctx: AssetSummaryContext, args: SummarizeAs
   const cliContext = await (async () => {
     if (!attempts.some((a) => a.transport === 'cli')) return null
     if (typeof promptPayload === 'string') return null
-    const needsPathPrompt =
-      args.attachment.part.type === 'image' || args.attachment.part.type === 'file'
+    const needsPathPrompt = args.attachment.kind === 'image' || args.attachment.kind === 'file'
     if (!needsPathPrompt) return null
     const filePath = await ensureCliAttachmentPath({
       sourceKind: args.sourceKind,
@@ -217,11 +240,11 @@ export async function summarizeAsset(ctx: AssetSummaryContext, args: SummarizeAs
     const dir = path.dirname(filePath)
     const extraArgsByProvider: Partial<Record<CliProvider, string[]>> = {
       gemini: ['--include-directories', dir],
-      codex: args.attachment.part.type === 'image' ? ['-i', filePath] : undefined,
+      codex: args.attachment.kind === 'image' ? ['-i', filePath] : undefined,
     }
     return {
       promptOverride: buildPathSummaryPrompt({
-        kindLabel: args.attachment.part.type === 'image' ? 'image' : 'file',
+        kindLabel: args.attachment.kind === 'image' ? 'image' : 'file',
         filePath,
         filename: args.attachment.filename,
         mediaType: args.attachment.mediaType,
@@ -237,49 +260,104 @@ export async function summarizeAsset(ctx: AssetSummaryContext, args: SummarizeAs
     }
   })()
 
-  const attemptOutcome = await runModelAttempts({
-    attempts,
-    isFallbackModel: ctx.isFallbackModel,
-    isNamedModelSelection: ctx.isNamedModelSelection,
-    envHasKeyFor: ctx.summaryEngine.envHasKeyFor,
-    formatMissingModelError: ctx.summaryEngine.formatMissingModelError,
-    onAutoSkip: (attempt) => {
-      writeVerbose(
-        ctx.stderr,
-        ctx.verbose,
-        `auto skip ${attempt.userModelId}: missing ${attempt.requiredEnv}`,
-        ctx.verboseColor
-      )
-    },
-    onAutoFailure: (attempt, error) => {
-      writeVerbose(
-        ctx.stderr,
-        ctx.verbose,
-        `auto failed ${attempt.userModelId}: ${error instanceof Error ? error.message : String(error)}`,
-        ctx.verboseColor
-      )
-    },
-    onFixedModelError: (attempt, error) => {
-      if (isUnsupportedAttachmentError(error)) {
-        throw new Error(
-          `Model ${attempt.userModelId} does not support attaching files of type ${args.attachment.mediaType}. Try a different --model.`,
-          { cause: error }
-        )
+  const cacheStore = ctx.cache.mode === 'default' ? ctx.cache.store : null
+  const contentBlock = extractTaggedBlock(promptText, 'content')
+  const contentHash =
+    cacheStore && contentBlock && contentBlock.trim().length > 0
+      ? hashString(normalizeContentForHash(contentBlock))
+      : null
+  const promptHash = cacheStore ? buildPromptHash(promptText) : null
+  const lengthKey = buildLengthKey(ctx.lengthArg)
+  const languageKey = buildLanguageKey(ctx.outputLanguage)
+
+  let summaryResult: Awaited<ReturnType<typeof ctx.summaryEngine.runSummaryAttempt>> | null = null
+  let usedAttempt: ModelAttempt | null = null
+  let summaryFromCache = false
+  let cacheChecked = false
+
+  if (cacheStore && contentHash && promptHash) {
+    cacheChecked = true
+    for (const attempt of attempts) {
+      if (!ctx.summaryEngine.envHasKeyFor(attempt.requiredEnv)) continue
+      const key = buildSummaryCacheKey({
+        contentHash,
+        promptHash,
+        model: attempt.userModelId,
+        lengthKey,
+        languageKey,
+      })
+      const cached = cacheStore.getText('summary', key)
+      if (!cached) continue
+      writeVerbose(ctx.stderr, ctx.verbose, 'cache hit summary', ctx.verboseColor)
+      args.onModelChosen?.(attempt.userModelId)
+      summaryResult = {
+        summary: cached,
+        summaryAlreadyPrinted: false,
+        modelMeta: buildModelMetaFromAttempt(attempt),
+        maxOutputTokensForCall: null,
       }
-      throw error
-    },
-    runAttempt: (attempt) =>
-      ctx.summaryEngine.runSummaryAttempt({
-        attempt,
-        prompt: promptPayload,
-        allowStreaming: ctx.streamingEnabled,
-        onModelChosen: args.onModelChosen ?? null,
-        cli: cliContext,
-      }),
-  })
-  const summaryResult = attemptOutcome.result
-  const usedAttempt = attemptOutcome.usedAttempt
-  const { lastError, missingRequiredEnvs, sawOpenRouterNoAllowedProviders } = attemptOutcome
+      usedAttempt = attempt
+      summaryFromCache = true
+      break
+    }
+  }
+  if (cacheChecked && !summaryFromCache) {
+    writeVerbose(ctx.stderr, ctx.verbose, 'cache miss summary', ctx.verboseColor)
+  }
+
+  let lastError: unknown = null
+  let missingRequiredEnvs = new Set<ModelAttempt['requiredEnv']>()
+  let sawOpenRouterNoAllowedProviders = false
+
+  if (!summaryResult || !usedAttempt) {
+    const attemptOutcome = await runModelAttempts({
+      attempts,
+      isFallbackModel: ctx.isFallbackModel,
+      isNamedModelSelection: ctx.isNamedModelSelection,
+      envHasKeyFor: ctx.summaryEngine.envHasKeyFor,
+      formatMissingModelError: ctx.summaryEngine.formatMissingModelError,
+      onAutoSkip: (attempt) => {
+        writeVerbose(
+          ctx.stderr,
+          ctx.verbose,
+          `auto skip ${attempt.userModelId}: missing ${attempt.requiredEnv}`,
+          ctx.verboseColor
+        )
+      },
+      onAutoFailure: (attempt, error) => {
+        writeVerbose(
+          ctx.stderr,
+          ctx.verbose,
+          `auto failed ${attempt.userModelId}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+          ctx.verboseColor
+        )
+      },
+      onFixedModelError: (attempt, error) => {
+        if (isUnsupportedAttachmentError(error)) {
+          throw new Error(
+            `Model ${attempt.userModelId} does not support attaching files of type ${args.attachment.mediaType}. Try a different --model.`,
+            { cause: error }
+          )
+        }
+        throw error
+      },
+      runAttempt: (attempt) =>
+        ctx.summaryEngine.runSummaryAttempt({
+          attempt,
+          prompt: promptPayload,
+          allowStreaming: ctx.streamingEnabled,
+          onModelChosen: args.onModelChosen ?? null,
+          cli: cliContext,
+        }),
+    })
+    summaryResult = attemptOutcome.result
+    usedAttempt = attemptOutcome.usedAttempt
+    lastError = attemptOutcome.lastError
+    missingRequiredEnvs = attemptOutcome.missingRequiredEnvs
+    sawOpenRouterNoAllowedProviders = attemptOutcome.sawOpenRouterNoAllowedProviders
+  }
 
   if (!summaryResult || !usedAttempt) {
     const withFreeTip = (message: string) => {
@@ -321,6 +399,18 @@ export async function summarizeAsset(ctx: AssetSummaryContext, args: SummarizeAs
     }
     if (lastError instanceof Error) throw lastError
     throw new Error('No model available for this input')
+  }
+
+  if (!summaryFromCache && cacheStore && contentHash && promptHash) {
+    const key = buildSummaryCacheKey({
+      contentHash,
+      promptHash,
+      model: usedAttempt.userModelId,
+      lengthKey,
+      languageKey,
+    })
+    cacheStore.setText('summary', key, summaryResult.summary, ctx.cache.ttlMs)
+    writeVerbose(ctx.stderr, ctx.verbose, 'cache write summary', ctx.verboseColor)
   }
 
   const { summary, summaryAlreadyPrinted, modelMeta, maxOutputTokensForCall } = summaryResult
@@ -398,6 +488,7 @@ export async function summarizeAsset(ctx: AssetSummaryContext, args: SummarizeAs
       writeFinishLine({
         stderr: ctx.stderr,
         elapsedMs: Date.now() - ctx.runStartedAtMs,
+        elapsedLabel: summaryFromCache ? 'Cached' : null,
         model: usedAttempt.userModelId,
         report: finishReport,
         costUsd,
@@ -440,6 +531,7 @@ export async function summarizeAsset(ctx: AssetSummaryContext, args: SummarizeAs
     writeFinishLine({
       stderr: ctx.stderr,
       elapsedMs: Date.now() - ctx.runStartedAtMs,
+      elapsedLabel: summaryFromCache ? 'Cached' : null,
       model: usedAttempt.userModelId,
       report,
       costUsd,

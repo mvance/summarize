@@ -1,5 +1,9 @@
 import { createHtmlToMarkdownConverter } from '../../../llm/html-to-markdown.js'
 import { parseGatewayStyleModelId } from '../../../llm/model-id.js'
+import {
+  type ConvertTranscriptToMarkdown,
+  createTranscriptToMarkdownConverter,
+} from '../../../llm/transcript-to-markdown.js'
 import { convertToMarkdownWithMarkitdown } from '../../../markitdown.js'
 import { hasUvxCli } from '../../env.js'
 import { createRetryLogger } from '../../logging.js'
@@ -17,6 +21,7 @@ export type MarkdownModel = {
 
 export type MarkdownConverters = {
   markdownRequested: boolean
+  transcriptMarkdownRequested: boolean
   effectiveMarkdownMode: 'off' | 'auto' | 'llm' | 'readability'
   markdownProvider: 'none' | 'xai' | 'openai' | 'google' | 'anthropic' | 'zai'
   markdownModel: MarkdownModel | null
@@ -29,74 +34,85 @@ export type MarkdownConverters = {
         timeoutMs: number
       }) => Promise<string>)
     | null
+  convertTranscriptToMarkdown: ConvertTranscriptToMarkdown | null
 }
 
 export function createMarkdownConverters(
   ctx: UrlFlowContext,
   options: { isYoutubeUrl: boolean }
 ): MarkdownConverters {
-  const wantsMarkdown = ctx.format === 'markdown' && !options.isYoutubeUrl
-  if (wantsMarkdown && ctx.markdownMode === 'off') {
+  // HTML markdown conversion (for non-YouTube URLs)
+  const wantsHtmlMarkdown = ctx.flags.format === 'markdown' && !options.isYoutubeUrl
+  if (wantsHtmlMarkdown && ctx.flags.markdownMode === 'off') {
     throw new Error('--format md conflicts with --markdown-mode off (use --format text)')
   }
 
-  const markdownRequested = wantsMarkdown
-  const effectiveMarkdownMode = markdownRequested ? ctx.markdownMode : 'off'
+  // Transcript markdown conversion (for YouTube URLs, only when --markdown-mode llm is explicit)
+  const wantsTranscriptMarkdown =
+    ctx.flags.format === 'markdown' && options.isYoutubeUrl && ctx.flags.markdownMode === 'llm'
+
+  const markdownRequested = wantsHtmlMarkdown
+  const transcriptMarkdownRequested = wantsTranscriptMarkdown
+  const effectiveMarkdownMode =
+    markdownRequested || transcriptMarkdownRequested ? ctx.flags.markdownMode : 'off'
 
   const markdownModel: MarkdownModel | null = (() => {
-    if (!markdownRequested) return null
+    if (!markdownRequested && !transcriptMarkdownRequested) return null
 
     // Prefer the explicitly chosen model when it is a native provider (keeps behavior stable).
-    if (ctx.requestedModel.kind === 'fixed' && ctx.requestedModel.transport === 'native') {
-      if (ctx.fixedModelSpec?.requiredEnv === 'Z_AI_API_KEY') {
+    if (
+      ctx.model.requestedModel.kind === 'fixed' &&
+      ctx.model.requestedModel.transport === 'native'
+    ) {
+      if (ctx.model.fixedModelSpec?.requiredEnv === 'Z_AI_API_KEY') {
         return {
-          llmModelId: ctx.requestedModel.llmModelId,
+          llmModelId: ctx.model.requestedModel.llmModelId,
           forceOpenRouter: false,
-          requiredEnv: ctx.fixedModelSpec.requiredEnv,
-          openaiApiKeyOverride: ctx.apiStatus.zaiApiKey,
-          openaiBaseUrlOverride: ctx.apiStatus.zaiBaseUrl,
+          requiredEnv: ctx.model.fixedModelSpec.requiredEnv,
+          openaiApiKeyOverride: ctx.model.apiStatus.zaiApiKey,
+          openaiBaseUrlOverride: ctx.model.apiStatus.zaiBaseUrl,
           forceChatCompletions: true,
         }
       }
       return {
-        llmModelId: ctx.requestedModel.llmModelId,
+        llmModelId: ctx.model.requestedModel.llmModelId,
         forceOpenRouter: false,
-        requiredEnv: ctx.fixedModelSpec?.requiredEnv,
-        forceChatCompletions: ctx.openaiUseChatCompletions,
+        requiredEnv: ctx.model.fixedModelSpec?.requiredEnv,
+        forceChatCompletions: ctx.model.openaiUseChatCompletions,
       }
     }
 
     // Otherwise pick a safe, broadly-capable default for HTML→Markdown conversion.
-    if (ctx.apiStatus.googleConfigured) {
+    if (ctx.model.apiStatus.googleConfigured) {
       return {
         llmModelId: 'google/gemini-3-flash-preview',
         forceOpenRouter: false,
         requiredEnv: 'GEMINI_API_KEY',
       }
     }
-    if (ctx.apiStatus.apiKey) {
+    if (ctx.model.apiStatus.apiKey) {
       return {
         llmModelId: 'openai/gpt-5-mini',
         forceOpenRouter: false,
         requiredEnv: 'OPENAI_API_KEY',
-        forceChatCompletions: ctx.openaiUseChatCompletions,
+        forceChatCompletions: ctx.model.openaiUseChatCompletions,
       }
     }
-    if (ctx.apiStatus.openrouterConfigured) {
+    if (ctx.model.apiStatus.openrouterConfigured) {
       return {
         llmModelId: 'openai/openai/gpt-5-mini',
         forceOpenRouter: true,
         requiredEnv: 'OPENROUTER_API_KEY',
       }
     }
-    if (ctx.apiStatus.anthropicConfigured) {
+    if (ctx.model.apiStatus.anthropicConfigured) {
       return {
         llmModelId: 'anthropic/claude-sonnet-4-5',
         forceOpenRouter: false,
         requiredEnv: 'ANTHROPIC_API_KEY',
       }
     }
-    if (ctx.apiStatus.xaiApiKey) {
+    if (ctx.model.apiStatus.xaiApiKey) {
       return {
         llmModelId: 'xai/grok-4-fast-non-reasoning',
         forceOpenRouter: false,
@@ -115,22 +131,26 @@ export function createMarkdownConverters(
 
   const hasKeyForMarkdownModel = (() => {
     if (!markdownModel) return false
-    if (markdownModel.forceOpenRouter) return ctx.apiStatus.openrouterConfigured
-    if (markdownModel.requiredEnv === 'Z_AI_API_KEY') return Boolean(ctx.apiStatus.zaiApiKey)
+    if (markdownModel.forceOpenRouter) return ctx.model.apiStatus.openrouterConfigured
+    if (markdownModel.requiredEnv === 'Z_AI_API_KEY') return Boolean(ctx.model.apiStatus.zaiApiKey)
     if (markdownModel.openaiApiKeyOverride) return true
     const parsed = parseGatewayStyleModelId(markdownModel.llmModelId)
     return parsed.provider === 'xai'
-      ? Boolean(ctx.apiStatus.xaiApiKey)
+      ? Boolean(ctx.model.apiStatus.xaiApiKey)
       : parsed.provider === 'google'
-        ? ctx.apiStatus.googleConfigured
+        ? ctx.model.apiStatus.googleConfigured
         : parsed.provider === 'anthropic'
-          ? ctx.apiStatus.anthropicConfigured
+          ? ctx.model.apiStatus.anthropicConfigured
           : parsed.provider === 'zai'
-            ? Boolean(ctx.apiStatus.zaiApiKey)
-            : Boolean(ctx.apiStatus.apiKey)
+            ? Boolean(ctx.model.apiStatus.zaiApiKey)
+            : Boolean(ctx.model.apiStatus.apiKey)
   })()
 
-  if (markdownRequested && effectiveMarkdownMode === 'llm' && !hasKeyForMarkdownModel) {
+  if (
+    (markdownRequested || transcriptMarkdownRequested) &&
+    effectiveMarkdownMode === 'llm' &&
+    !hasKeyForMarkdownModel
+  ) {
     const required = (() => {
       if (markdownModel?.forceOpenRouter) return 'OPENROUTER_API_KEY'
       if (markdownModel?.requiredEnv === 'Z_AI_API_KEY') return 'Z_AI_API_KEY'
@@ -158,31 +178,31 @@ export function createMarkdownConverters(
       ? createHtmlToMarkdownConverter({
           modelId: markdownModel.llmModelId,
           forceOpenRouter: markdownModel.forceOpenRouter,
-          xaiApiKey: ctx.apiStatus.xaiApiKey,
-          googleApiKey: ctx.apiStatus.googleApiKey,
-          openaiApiKey: markdownModel.openaiApiKeyOverride ?? ctx.apiStatus.apiKey,
-          anthropicApiKey: ctx.apiStatus.anthropicApiKey,
-          openrouterApiKey: ctx.apiStatus.openrouterApiKey,
+          xaiApiKey: ctx.model.apiStatus.xaiApiKey,
+          googleApiKey: ctx.model.apiStatus.googleApiKey,
+          openaiApiKey: markdownModel.openaiApiKeyOverride ?? ctx.model.apiStatus.apiKey,
+          anthropicApiKey: ctx.model.apiStatus.anthropicApiKey,
+          openrouterApiKey: ctx.model.apiStatus.openrouterApiKey,
           openaiBaseUrlOverride: markdownModel.openaiBaseUrlOverride ?? null,
           forceChatCompletions:
             markdownModel.forceChatCompletions ??
-            (ctx.openaiUseChatCompletions && markdownProvider === 'openai'),
-          fetchImpl: ctx.trackedFetch,
-          retries: ctx.retries,
+            (ctx.model.openaiUseChatCompletions && markdownProvider === 'openai'),
+          fetchImpl: ctx.io.fetch,
+          retries: ctx.flags.retries,
           onRetry: createRetryLogger({
-            stderr: ctx.stderr,
-            verbose: ctx.verbose,
-            color: ctx.verboseColor,
+            stderr: ctx.io.stderr,
+            verbose: ctx.flags.verbose,
+            color: ctx.flags.verboseColor,
             modelId: markdownModel.llmModelId,
           }),
           onUsage: ({ model: usedModel, provider, usage }) => {
-            ctx.llmCalls.push({ provider, model: usedModel, usage, purpose: 'markdown' })
+            ctx.model.llmCalls.push({ provider, model: usedModel, usage, purpose: 'markdown' })
           },
         })
       : null
 
   const markitdownHtmlToMarkdown =
-    markdownRequested && ctx.preprocessMode !== 'off' && hasUvxCli(ctx.env)
+    markdownRequested && ctx.flags.preprocessMode !== 'off' && hasUvxCli(ctx.io.env)
       ? async (args: {
           url: string
           html: string
@@ -197,10 +217,10 @@ export function createMarkdownConverters(
             bytes: new TextEncoder().encode(args.html),
             filenameHint: 'page.html',
             mediaTypeHint: 'text/html',
-            uvxCommand: ctx.envForRun.UVX_PATH,
+            uvxCommand: ctx.io.envForRun.UVX_PATH,
             timeoutMs: args.timeoutMs,
-            env: ctx.env,
-            execFileImpl: ctx.execFileImpl,
+            env: ctx.io.env,
+            execFileImpl: ctx.io.execFileImpl,
           })
         }
       : null
@@ -220,7 +240,7 @@ export function createMarkdownConverters(
           return llmHtmlToMarkdown(args)
         }
 
-        if (ctx.extractMode) {
+        if (ctx.flags.extractMode) {
           if (markitdownHtmlToMarkdown) {
             return await markitdownHtmlToMarkdown(args)
           }
@@ -246,11 +266,42 @@ export function createMarkdownConverters(
       }
     : null
 
+  // Transcript→Markdown converter (only for YouTube with --markdown-mode llm)
+  const convertTranscriptToMarkdown: ConvertTranscriptToMarkdown | null =
+    transcriptMarkdownRequested && markdownModel !== null
+      ? createTranscriptToMarkdownConverter({
+          modelId: markdownModel.llmModelId,
+          forceOpenRouter: markdownModel.forceOpenRouter,
+          xaiApiKey: ctx.model.apiStatus.xaiApiKey,
+          googleApiKey: ctx.model.apiStatus.googleApiKey,
+          openaiApiKey: markdownModel.openaiApiKeyOverride ?? ctx.model.apiStatus.apiKey,
+          anthropicApiKey: ctx.model.apiStatus.anthropicApiKey,
+          openrouterApiKey: ctx.model.apiStatus.openrouterApiKey,
+          openaiBaseUrlOverride: markdownModel.openaiBaseUrlOverride ?? null,
+          forceChatCompletions:
+            markdownModel.forceChatCompletions ??
+            (ctx.model.openaiUseChatCompletions && markdownProvider === 'openai'),
+          fetchImpl: ctx.io.fetch,
+          retries: ctx.flags.retries,
+          onRetry: createRetryLogger({
+            stderr: ctx.io.stderr,
+            verbose: ctx.flags.verbose,
+            color: ctx.flags.verboseColor,
+            modelId: markdownModel.llmModelId,
+          }),
+          onUsage: ({ model: usedModel, provider, usage }) => {
+            ctx.model.llmCalls.push({ provider, model: usedModel, usage, purpose: 'markdown' })
+          },
+        })
+      : null
+
   return {
     markdownRequested,
+    transcriptMarkdownRequested,
     effectiveMarkdownMode,
     markdownProvider,
     markdownModel,
     convertHtmlToMarkdown,
+    convertTranscriptToMarkdown,
   }
 }

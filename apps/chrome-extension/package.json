@@ -6,15 +6,20 @@
   "scripts": {
     "dev": "wxt dev",
     "build": "wxt build",
-    "lint": "wxt lint"
+    "lint": "wxt lint",
+    "test:e2e": "env -u NO_COLOR pnpm build && env -u NO_COLOR playwright test -c playwright.config.ts"
   },
   "dependencies": {
     "@mozilla/readability": "0.6.0",
-    "markdown-it": "^14.1.0"
+    "@zag-js/preact": "^1.31.1",
+    "@zag-js/select": "^1.31.1",
+    "markdown-it": "^14.1.0",
+    "preact": "11.0.0-beta.0"
   },
   "devDependencies": {
+    "@playwright/test": "1.57.0",
     "@types/chrome": "^0.1.32",
     "typescript": "^5.9.3",
-    "wxt": "^0.20.13"
+    "wxt": "0.20.13"
   }
 }

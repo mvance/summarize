@@ -1,17 +1,20 @@
+import type { TranscriptCache } from '../cache/types.js'
 import { fetchLinkContent } from './content/index.js'
 import type { ExtractedLinkContent, FetchLinkContentOptions } from './content/types.js'
 import type {
   ConvertHtmlToMarkdown,
   LinkPreviewDeps,
   LinkPreviewProgressEvent,
+  ResolveTwitterCookies,
   ScrapeWithFirecrawl,
-  TranscriptCache,
 } from './deps.js'
 
+/** Public client used by external consumers to fetch link content. */
 export interface LinkPreviewClient {
   fetchLinkContent(url: string, options?: FetchLinkContentOptions): Promise<ExtractedLinkContent>
 }
 
+/** Public options for wiring dependencies into the link preview client. */
 export interface LinkPreviewClientOptions {
   fetch?: typeof fetch
   scrapeWithFirecrawl?: ScrapeWithFirecrawl | null
@@ -22,9 +25,11 @@ export interface LinkPreviewClientOptions {
   convertHtmlToMarkdown?: ConvertHtmlToMarkdown | null
   transcriptCache?: TranscriptCache | null
   readTweetWithBird?: LinkPreviewDeps['readTweetWithBird']
+  resolveTwitterCookies?: ResolveTwitterCookies | null
   onProgress?: ((event: LinkPreviewProgressEvent) => void) | null
 }
 
+/** Public factory for a link preview client with injectable dependencies. */
 export function createLinkPreviewClient(options: LinkPreviewClientOptions = {}): LinkPreviewClient {
   const fetchImpl: typeof fetch =
     options.fetch ?? ((...args: Parameters<typeof fetch>) => globalThis.fetch(...args))
@@ -37,6 +42,8 @@ export function createLinkPreviewClient(options: LinkPreviewClientOptions = {}):
   const transcriptCache: TranscriptCache | null = options.transcriptCache ?? null
   const readTweetWithBird =
     typeof options.readTweetWithBird === 'function' ? options.readTweetWithBird : null
+  const resolveTwitterCookies =
+    typeof options.resolveTwitterCookies === 'function' ? options.resolveTwitterCookies : null
   const onProgress = typeof options.onProgress === 'function' ? options.onProgress : null
 
   return {
@@ -51,6 +58,7 @@ export function createLinkPreviewClient(options: LinkPreviewClientOptions = {}):
         convertHtmlToMarkdown,
         transcriptCache,
         readTweetWithBird,
+        resolveTwitterCookies,
         onProgress,
       }),
   }

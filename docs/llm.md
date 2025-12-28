@@ -1,3 +1,9 @@
+---
+summary: "LLM usage, env vars, flags, and prompt rules."
+read_when:
+  - "When changing model selection or prompt formatting."
+---
+
 # LLM / summarization mode
 
 By default `summarize` will call an LLM using **direct provider API keys**. When CLI tools are
@@ -47,6 +53,12 @@ installed, auto mode can use local CLI models when `cli.enabled` is set (see `do
   - Overrides the built-in summary instructions (prompt becomes the instruction prefix).
   - Prompts are wrapped in `<instructions>`, `<context>`, `<content>` tags.
   - When `--length` is numeric, we add `Output is X characters.` When `--language` is explicitly set, we add `Output should be <language>.`
+- `--no-cache`
+  - Bypass cache reads and writes (extracted content, transcripts, summaries).
+- `--cache-stats`
+  - Print cache stats and exit.
+- `--clear-cache`
+  - Delete the cache database and exit. Must be used alone.
 - `--video-mode auto|transcript|understand`
   - Only relevant for video inputs / video-only pages.
 - `--length short|medium|long|xl|xxl|<chars>`

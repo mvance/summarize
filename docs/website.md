@@ -1,3 +1,9 @@
+---
+summary: "Website extraction pipeline, flags, and fallbacks."
+read_when:
+  - "When changing website extraction behavior."
+---
+
 # Website mode
 
 Use this for non-YouTube URLs.

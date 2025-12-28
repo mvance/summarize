@@ -1,20 +1,25 @@
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { Writable } from 'node:stream'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { runCli } from '../src/run.js'
 
-const fetchLinkContentMock = vi.fn()
-const generateTextWithModelIdMock = vi.fn()
-const streamTextWithModelIdMock = vi.fn()
+const mocks = vi.hoisted(() => ({
+  fetchLinkContent: vi.fn(),
+  generateTextWithModelId: vi.fn(),
+  streamTextWithModelId: vi.fn(),
+}))
 
 vi.mock('../src/content/index.js', () => ({
   createLinkPreviewClient: () => ({
-    fetchLinkContent: (...args: unknown[]) => fetchLinkContentMock(...args),
+    fetchLinkContent: (...args: unknown[]) => mocks.fetchLinkContent(...args),
   }),
 }))
 
 vi.mock('../src/llm/generate-text.js', () => ({
-  generateTextWithModelId: (...args: unknown[]) => generateTextWithModelIdMock(...args),
-  streamTextWithModelId: (...args: unknown[]) => streamTextWithModelIdMock(...args),
+  generateTextWithModelId: (...args: unknown[]) => mocks.generateTextWithModelId(...args),
+  streamTextWithModelId: (...args: unknown[]) => mocks.streamTextWithModelId(...args),
 }))
 
 const createBufferStream = () => {
@@ -74,15 +79,16 @@ const baseExtracted = {
 }
 
 beforeEach(() => {
-  fetchLinkContentMock.mockReset()
-  generateTextWithModelIdMock.mockReset()
-  streamTextWithModelIdMock.mockReset()
+  mocks.fetchLinkContent.mockReset()
+  mocks.generateTextWithModelId.mockReset()
+  mocks.streamTextWithModelId.mockReset()
 })
 
 describe('tweet summary behavior', () => {
   it('uses LLM and claim source in finish line for tweets', async () => {
-    fetchLinkContentMock.mockResolvedValue(baseExtracted)
-    generateTextWithModelIdMock.mockResolvedValue({
+    const home = mkdtempSync(join(tmpdir(), 'summarize-tests-run-tweet-summary-'))
+    mocks.fetchLinkContent.mockResolvedValue(baseExtracted)
+    mocks.generateTextWithModelId.mockResolvedValue({
       text: 'LLM summary output.',
       provider: 'openai',
       canonicalModelId: 'openai/gpt-4o-mini',
@@ -95,7 +101,7 @@ describe('tweet summary behavior', () => {
     await runCli(
       [baseExtracted.url, '--model', 'openai/gpt-4o-mini', '--stream', 'off', '--plain'],
       {
-        env: { ...process.env, OPENAI_API_KEY: 'test-key' },
+        env: { ...process.env, HOME: home, OPENAI_API_KEY: 'test-key' },
         fetch: async () => {
           throw new Error('unexpected fetch')
         },
@@ -104,8 +110,8 @@ describe('tweet summary behavior', () => {
       }
     )
 
-    expect(generateTextWithModelIdMock).toHaveBeenCalledTimes(1)
-    expect(streamTextWithModelIdMock).not.toHaveBeenCalled()
+    expect(mocks.generateTextWithModelId).toHaveBeenCalledTimes(1)
+    expect(mocks.streamTextWithModelId).not.toHaveBeenCalled()
     expect(stdout.read()).toContain('LLM summary output.')
     expect(stdout.read()).not.toContain(baseExtracted.content)
     expect(stderr.read()).toContain('3 words via bird')

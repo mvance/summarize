@@ -4,65 +4,92 @@ import { join } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
-import { createDaemonRunContext } from '../src/daemon/summarize-run.js'
+import type { CacheState } from '../src/cache.js'
+import { createDaemonUrlFlowContext } from '../src/daemon/flow-context.js'
 
 function makeTempHome(): string {
   return mkdtempSync(join(tmpdir(), 'summarize-daemon-home-'))
 }
 
-describe('daemon/summarize-run (overrides)', () => {
+describe('daemon/flow-context (overrides)', () => {
+  const makeCacheState = (): CacheState => ({
+    mode: 'bypass',
+    store: null,
+    ttlMs: 0,
+    maxBytes: 0,
+    path: null,
+  })
+
   it('defaults to xl + auto language when unset', () => {
     const home = makeTempHome()
-    const ctx = createDaemonRunContext({
+    const ctx = createDaemonUrlFlowContext({
       env: { HOME: home },
       fetchImpl: fetch,
+      cache: makeCacheState(),
       modelOverride: null,
+      promptOverride: null,
       lengthRaw: '',
       languageRaw: '',
-      sink: { writeChunk: () => {}, onModelChosen: () => {} },
+      maxExtractCharacters: null,
+      runStartedAtMs: Date.now(),
+      stdoutSink: { writeChunk: () => {} },
     })
 
-    expect(ctx.summaryLength).toBe('xl')
-    expect(ctx.outputLanguage).toEqual({ kind: 'auto' })
+    expect(ctx.flags.lengthArg).toEqual({ kind: 'preset', preset: 'xl' })
+    expect(ctx.flags.outputLanguage).toEqual({ kind: 'auto' })
   })
 
   it('accepts custom length and language overrides', () => {
     const home = makeTempHome()
-    const ctx = createDaemonRunContext({
+    const ctx = createDaemonUrlFlowContext({
       env: { HOME: home },
       fetchImpl: fetch,
+      cache: makeCacheState(),
       modelOverride: null,
+      promptOverride: null,
       lengthRaw: '20k',
       languageRaw: 'German',
-      sink: { writeChunk: () => {}, onModelChosen: () => {} },
+      maxExtractCharacters: null,
+      runStartedAtMs: Date.now(),
+      stdoutSink: { writeChunk: () => {} },
     })
 
-    expect(ctx.summaryLength).toEqual({ maxCharacters: 20000 })
-    expect(ctx.outputLanguage.kind).toBe('fixed')
-    expect(ctx.outputLanguage.kind === 'fixed' ? ctx.outputLanguage.tag : null).toBe('de')
+    expect(ctx.flags.lengthArg).toEqual({ kind: 'chars', maxCharacters: 20000 })
+    expect(ctx.flags.outputLanguage.kind).toBe('fixed')
+    expect(ctx.flags.outputLanguage.kind === 'fixed' ? ctx.flags.outputLanguage.tag : null).toBe(
+      'de'
+    )
   })
 
   it('adjusts desired output tokens based on length', () => {
     const home = makeTempHome()
-    const shortCtx = createDaemonRunContext({
+    const shortCtx = createDaemonUrlFlowContext({
       env: { HOME: home },
       fetchImpl: fetch,
+      cache: makeCacheState(),
       modelOverride: null,
+      promptOverride: null,
       lengthRaw: 'short',
       languageRaw: 'auto',
-      sink: { writeChunk: () => {}, onModelChosen: () => {} },
+      maxExtractCharacters: null,
+      runStartedAtMs: Date.now(),
+      stdoutSink: { writeChunk: () => {} },
     })
-    const xlCtx = createDaemonRunContext({
+    const xlCtx = createDaemonUrlFlowContext({
       env: { HOME: home },
       fetchImpl: fetch,
+      cache: makeCacheState(),
       modelOverride: null,
+      promptOverride: null,
       lengthRaw: 'xl',
       languageRaw: 'auto',
-      sink: { writeChunk: () => {}, onModelChosen: () => {} },
+      maxExtractCharacters: null,
+      runStartedAtMs: Date.now(),
+      stdoutSink: { writeChunk: () => {} },
     })
 
-    const shortTokens = shortCtx.desiredOutputTokens
-    const xlTokens = xlCtx.desiredOutputTokens
+    const shortTokens = shortCtx.model.desiredOutputTokens
+    const xlTokens = xlCtx.model.desiredOutputTokens
     if (typeof shortTokens !== 'number' || typeof xlTokens !== 'number') {
       throw new Error('expected desiredOutputTokens to be a number')
     }

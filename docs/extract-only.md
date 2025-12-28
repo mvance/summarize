@@ -1,3 +1,9 @@
+---
+summary: "Extract mode behavior and markdown handling."
+read_when:
+  - "When changing extract pipeline or flags."
+---
+
 # Extract mode
 
 `--extract` prints the extracted content and exits.

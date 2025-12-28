@@ -1,3 +1,9 @@
+---
+summary: "CLI model providers and config for Claude, Codex, and Gemini."
+read_when:
+  - "When changing CLI model integration."
+---
+
 # CLI models
 
 Summarize can use installed CLIs (Claude, Codex, Gemini) as local model backends.

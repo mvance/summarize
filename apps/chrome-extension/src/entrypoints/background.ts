@@ -10,7 +10,7 @@ type PanelToBg =
   | { type: 'panel:closed' }
   | { type: 'panel:rememberUrl'; url: string }
   | { type: 'panel:setAuto'; value: boolean }
-  | { type: 'panel:setModel'; value: string }
+  | { type: 'panel:setLength'; value: string }
   | { type: 'panel:openOptions' }
 
 type RunStart = {
@@ -31,7 +31,7 @@ type UiState = {
   panelOpen: boolean
   daemon: { ok: boolean; authed: boolean; error?: string }
   tab: { url: string | null; title: string | null }
-  settings: { autoSummarize: boolean; model: string; tokenPresent: boolean }
+  settings: { autoSummarize: boolean; model: string; length: string; tokenPresent: boolean }
   status: string
 }
 
@@ -39,6 +39,39 @@ type ExtractRequest = { type: 'extract'; maxChars: number }
 type ExtractResponse =
   | { ok: true; url: string; title: string | null; text: string; truncated: boolean }
   | { ok: false; error: string }
+
+const optionsWindowSize = { width: 900, height: 980 }
+const optionsWindowMin = { width: 760, height: 820 }
+const optionsWindowMargin = 20
+
+function resolveOptionsUrl(): string {
+  const page = chrome.runtime.getManifest().options_ui?.page ?? 'options.html'
+  return chrome.runtime.getURL(page)
+}
+
+async function openOptionsWindow() {
+  const url = resolveOptionsUrl()
+  try {
+    if (chrome.windows?.create) {
+      const current = await chrome.windows.getCurrent()
+      const maxWidth = current.width
+        ? Math.max(optionsWindowMin.width, current.width - optionsWindowMargin)
+        : null
+      const maxHeight = current.height
+        ? Math.max(optionsWindowMin.height, current.height - optionsWindowMargin)
+        : null
+      const width = maxWidth ? Math.min(optionsWindowSize.width, maxWidth) : optionsWindowSize.width
+      const height = maxHeight
+        ? Math.min(optionsWindowSize.height, maxHeight)
+        : optionsWindowSize.height
+      await chrome.windows.create({ url, type: 'popup', width, height })
+      return
+    }
+  } catch {
+    // ignore and fall back
+  }
+  void chrome.runtime.openOptionsPage()
+}
 
 function canSummarizeUrl(url: string | undefined): url is string {
   if (!url) return false
@@ -194,6 +227,7 @@ export default defineBackground(() => {
       settings: {
         autoSummarize: settings.autoSummarize,
         model: settings.model,
+        length: settings.length,
         tokenPresent: Boolean(settings.token.trim()),
       },
       status,
@@ -314,14 +348,14 @@ export default defineBackground(() => {
           if ((msg as { value: boolean }).value) void summarizeActiveTab('auto-enabled')
         })()
         break
-      case 'panel:setModel':
+      case 'panel:setLength':
         void (async () => {
-          await patchSettings({ model: (msg as { value: string }).value })
+          await patchSettings({ length: (msg as { value: string }).value })
           void emitState('')
         })()
         break
       case 'panel:openOptions':
-        void chrome.runtime.openOptionsPage()
+        void openOptionsWindow()
         break
     }
 

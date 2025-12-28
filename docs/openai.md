@@ -1,3 +1,9 @@
+---
+summary: "OpenAI model usage and flags."
+read_when:
+  - "When changing OpenAI integration."
+---
+
 # OpenAI models
 
 Use OpenAI directly by choosing an `openai/...` model id.

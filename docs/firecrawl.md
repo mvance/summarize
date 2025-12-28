@@ -1,3 +1,9 @@
+---
+summary: "Firecrawl fallback modes and API key usage."
+read_when:
+  - "When changing Firecrawl behavior."
+---
+
 # Firecrawl mode
 
 Firecrawl is a fallback for sites that block direct HTML fetching or don’t render meaningful content without JS.

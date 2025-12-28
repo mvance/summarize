@@ -29,45 +29,21 @@
 
     <section id="drawer" class="drawer hidden" aria-label="Controls">
       <div class="drawerGrid">
-        <label class="model">
-          <span>Model</span>
-          <input
-            id="model"
-            type="text"
-            list="modelPresets"
-            placeholder="auto / free / openai/…"
-            autocapitalize="off"
-            autocomplete="off"
-            spellcheck="false"
-          />
-          <datalist id="modelPresets">
-            <option value="auto" label="Auto"></option>
-            <option value="free" label="Free"></option>
-          </datalist>
-        </label>
-        <label class="font">
-          <span>Font</span>
-          <select id="font">
-            <option value="-apple-system, BlinkMacSystemFont, &quot;SF Pro Text&quot;, system-ui, sans-serif">SF</option>
-            <option value="Georgia, serif">Georgia</option>
-            <option value="Iowan Old Style, Palatino, serif">Iowan</option>
-            <option value="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace">Mono</option>
-          </select>
-        </label>
+        <div id="pickersRoot"></div>
         <label class="size">
           <span>Size</span>
           <input id="size" type="range" min="12" max="20" step="1" />
         </label>
       </div>
 
-      <label class="toggleRow">
-        <input id="auto" type="checkbox" />
-        <span>Auto summarize (when panel open)</span>
-      </label>
-      <div class="drawerFooter">
-        <a class="docsLink" href="https://summarize.sh" target="_blank" rel="noreferrer">Docs</a>
-        <button id="advanced" type="button" class="ghost">Advanced…</button>
-      </div>
+	      <div class="drawerRow">
+	        <div id="lengthRoot"></div>
+	        <label class="toggleRow">
+	          <input id="auto" type="checkbox" />
+	          <span>Auto summarize (when panel open)</span>
+	        </label>
+	        <button id="advanced" type="button" class="ghost">Advanced…</button>
+	      </div>
     </section>
 
     <main>

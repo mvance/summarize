@@ -20,4 +20,3 @@ describe('chrome/header', () => {
     expect(buildIdleSubtitle({ inputSummary: null, modelLabel: null, model: null })).toBe('')
   })
 })
-

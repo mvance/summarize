@@ -1,12 +1,14 @@
-import { createLinkPreviewClient } from '@steipete/summarize-core/content'
-import { countTokens } from 'gpt-tokenizer'
-
-import { buildLinkSummaryPrompt } from '../prompts/index.js'
+import type { CacheState } from '../cache.js'
+import { type ExtractedLinkContent, isYouTubeUrl } from '../content/index.js'
+import type { RunMetricsReport } from '../costs.js'
 import { buildFinishLineText, buildLengthPartsForFinishLine } from '../run/finish-line.js'
+import { deriveExtractionUi } from '../run/flows/url/extract.js'
+import { runUrlFlow } from '../run/flows/url/flow.js'
+import { buildUrlPrompt, summarizeExtractedUrl } from '../run/flows/url/summary.js'
 
+import { createDaemonUrlFlowContext } from './flow-context.js'
 import { countWords, formatInputSummary } from './meta.js'
 import { formatProgress } from './summarize-progress.js'
-import { createDaemonRunContext, runPrompt } from './summarize-run.js'
 
 export type VisiblePageInput = {
   url: string
@@ -25,7 +27,9 @@ export type StreamSink = {
   writeChunk: (text: string) => void
   onModelChosen: (modelId: string) => void
   writeStatus?: ((text: string) => void) | null
-  writeMeta?: ((data: { inputSummary: string | null }) => void) | null
+  writeMeta?:
+    | ((data: { inputSummary?: string | null; summaryFromCache?: boolean | null }) => void)
+    | null
 }
 
 export type VisiblePageMetrics = {
@@ -34,6 +38,56 @@ export type VisiblePageMetrics = {
   details: string | null
   summaryDetailed: string
   detailsDetailed: string | null
+}
+
+function buildDaemonMetrics({
+  elapsedMs,
+  summaryFromCache,
+  label,
+  modelLabel,
+  report,
+  costUsd,
+  compactExtraParts,
+  detailedExtraParts,
+}: {
+  elapsedMs: number
+  summaryFromCache: boolean
+  label: string | null
+  modelLabel: string
+  report: RunMetricsReport
+  costUsd: number | null
+  compactExtraParts: string[] | null
+  detailedExtraParts: string[] | null
+}): VisiblePageMetrics {
+  const elapsedLabel = summaryFromCache ? 'Cached' : null
+  const compact = buildFinishLineText({
+    elapsedMs,
+    elapsedLabel,
+    label,
+    model: modelLabel,
+    report,
+    costUsd,
+    detailed: false,
+    extraParts: compactExtraParts,
+  })
+  const extended = buildFinishLineText({
+    elapsedMs,
+    elapsedLabel,
+    label,
+    model: modelLabel,
+    report,
+    costUsd,
+    detailed: true,
+    extraParts: detailedExtraParts,
+  })
+
+  return {
+    elapsedMs,
+    summary: compact.line,
+    details: compact.details,
+    summaryDetailed: extended.line,
+    detailsDetailed: extended.details,
+  }
 }
 
 function guessSiteName(url: string): string | null {
@@ -45,6 +99,49 @@ function guessSiteName(url: string): string | null {
   }
 }
 
+function buildInputSummaryForExtracted(extracted: ExtractedLinkContent): string | null {
+  const isYouTube = extracted.siteName === 'YouTube' || isYouTubeUrl(extracted.url)
+
+  const transcriptChars =
+    typeof extracted.transcriptCharacters === 'number' && extracted.transcriptCharacters > 0
+      ? extracted.transcriptCharacters
+      : null
+  const hasTranscript = transcriptChars != null
+
+  const transcriptWords =
+    hasTranscript && transcriptChars != null
+      ? (extracted.transcriptWordCount ?? Math.max(0, Math.round(transcriptChars / 6)))
+      : null
+
+  const exactDurationSeconds =
+    typeof extracted.mediaDurationSeconds === 'number' && extracted.mediaDurationSeconds > 0
+      ? extracted.mediaDurationSeconds
+      : null
+  const estimatedDurationSeconds =
+    transcriptWords != null && transcriptWords > 0
+      ? Math.max(60, Math.max(1, Math.round(transcriptWords / 160)) * 60)
+      : null
+
+  const durationSeconds = hasTranscript ? (exactDurationSeconds ?? estimatedDurationSeconds) : null
+  const isDurationApproximate =
+    hasTranscript && durationSeconds != null && exactDurationSeconds == null
+
+  const kindLabel = (() => {
+    if (isYouTube) return 'YouTube'
+    if (!hasTranscript) return null
+    if (extracted.isVideoOnly || extracted.video) return 'video'
+    return 'podcast'
+  })()
+
+  return formatInputSummary({
+    kindLabel,
+    durationSeconds,
+    words: hasTranscript ? transcriptWords : extracted.wordCount,
+    characters: hasTranscript ? transcriptChars : extracted.totalCharacters,
+    isDurationApproximate,
+  })
+}
+
 export async function streamSummaryForVisiblePage({
   env,
   fetchImpl,
@@ -54,6 +151,7 @@ export async function streamSummaryForVisiblePage({
   lengthRaw,
   languageRaw,
   sink,
+  cache,
 }: {
   env: Record<string, string | undefined>
   fetchImpl: typeof fetch
@@ -63,97 +161,127 @@ export async function streamSummaryForVisiblePage({
   lengthRaw: unknown
   languageRaw: unknown
   sink: StreamSink
+  cache: CacheState
 }): Promise<{ usedModel: string; metrics: VisiblePageMetrics }> {
   const startedAt = Date.now()
-  const ctx = createDaemonRunContext({
+  let usedModel: string | null = null
+  let summaryFromCache = false
+
+  const writeStatus = typeof sink.writeStatus === 'function' ? sink.writeStatus : null
+
+  const ctx = createDaemonUrlFlowContext({
     env,
     fetchImpl,
+    cache,
     modelOverride,
+    promptOverride,
     lengthRaw,
     languageRaw,
-    sink,
+    maxExtractCharacters: null,
+    hooks: {
+      onModelChosen: (modelId) => {
+        usedModel = modelId
+        sink.onModelChosen(modelId)
+      },
+      onSummaryCached: (cached) => {
+        summaryFromCache = cached
+        sink.writeMeta?.({ summaryFromCache: cached })
+      },
+    },
+    runStartedAtMs: startedAt,
+    stdoutSink: { writeChunk: sink.writeChunk },
   })
 
-  const inputSummary = formatInputSummary({
-    kindLabel: null,
-    durationSeconds: null,
-    words: countWords(input.text),
-    characters: input.text.length,
-  })
-  sink.writeMeta?.({ inputSummary })
-
-  const lengthInstruction =
-    promptOverride && typeof ctx.summaryLength !== 'string'
-      ? `Output is ${ctx.summaryLength.maxCharacters.toLocaleString()} characters.`
-      : null
-  const languageExplicit =
-    typeof languageRaw === 'string' &&
-    languageRaw.trim().length > 0 &&
-    languageRaw.trim().toLowerCase() !== 'auto'
-  const languageInstruction =
-    promptOverride && languageExplicit && ctx.outputLanguage.kind === 'fixed'
-      ? `Output should be ${ctx.outputLanguage.label}.`
-      : null
-
-  const prompt = buildLinkSummaryPrompt({
+  const extracted: ExtractedLinkContent = {
     url: input.url,
     title: input.title,
-    siteName: guessSiteName(input.url),
     description: null,
+    siteName: guessSiteName(input.url),
     content: input.text,
     truncated: input.truncated,
-    hasTranscript: false,
-    summaryLength: ctx.summaryLength,
-    outputLanguage: ctx.outputLanguage,
-    shares: [],
-    promptOverride,
-    lengthInstruction,
-    languageInstruction,
-  })
-  const promptTokens = countTokens(prompt)
+    totalCharacters: input.text.length,
+    wordCount: countWords(input.text),
+    transcriptCharacters: null,
+    transcriptLines: null,
+    transcriptWordCount: null,
+    transcriptSource: null,
+    transcriptionProvider: null,
+    transcriptMetadata: null,
+    mediaDurationSeconds: null,
+    video: null,
+    isVideoOnly: false,
+    diagnostics: {
+      strategy: 'html',
+      firecrawl: {
+        attempted: false,
+        used: false,
+        cacheMode: cache.mode,
+        cacheStatus: 'unknown',
+      },
+      markdown: {
+        requested: false,
+        used: false,
+        provider: null,
+      },
+      transcript: {
+        cacheMode: cache.mode,
+        cacheStatus: 'unknown',
+        textProvided: false,
+        provider: null,
+        attemptedProviders: [],
+      },
+    } satisfies ExtractedLinkContent['diagnostics'],
+  }
 
-  const { usedModel } = await runPrompt({
+  sink.writeMeta?.({
+    inputSummary: formatInputSummary({
+      kindLabel: null,
+      durationSeconds: null,
+      words: extracted.wordCount,
+      characters: extracted.totalCharacters,
+    }),
+  })
+  writeStatus?.('Summarizing…')
+
+  const extractionUi = deriveExtractionUi(extracted)
+  const prompt = buildUrlPrompt({
+    extracted,
+    outputLanguage: ctx.flags.outputLanguage,
+    lengthArg: ctx.flags.lengthArg,
+    promptOverride: ctx.flags.promptOverride ?? null,
+    lengthInstruction: ctx.flags.lengthInstruction ?? null,
+    languageInstruction: ctx.flags.languageInstruction ?? null,
+  })
+
+  await summarizeExtractedUrl({
     ctx,
+    url: input.url,
+    extracted,
+    extractionUi,
     prompt,
-    promptTokens,
-    kind: 'website',
-    requiresVideoUnderstanding: false,
-    sink,
+    effectiveMarkdownMode: 'off',
+    transcriptionCostLabel: null,
+    onModelChosen: ctx.hooks.onModelChosen ?? null,
   })
 
-  const report = await ctx.metrics.buildReport()
-  const costUsd = await ctx.metrics.estimateCostUsd()
+  const report = await ctx.hooks.buildReport()
+  const costUsd = await ctx.hooks.estimateCostUsd()
   const elapsedMs = Date.now() - startedAt
 
-  const label = guessSiteName(input.url)
-  const compact = buildFinishLineText({
-    elapsedMs,
-    label,
-    model: usedModel,
-    report,
-    costUsd,
-    detailed: false,
-    extraParts: null,
-  })
-  const extended = buildFinishLineText({
-    elapsedMs,
-    label,
-    model: usedModel,
-    report,
-    costUsd,
-    detailed: true,
-    extraParts: null,
-  })
-
+  const label = extracted.siteName ?? guessSiteName(extracted.url)
+  const modelLabel = usedModel ?? ctx.model.requestedModelLabel
   return {
-    usedModel,
-    metrics: {
+    usedModel: modelLabel,
+    metrics: buildDaemonMetrics({
       elapsedMs,
-      summary: compact.line,
-      details: compact.details,
-      summaryDetailed: extended.line,
-      detailsDetailed: extended.details,
-    },
+      summaryFromCache,
+      label,
+      modelLabel,
+      report,
+      costUsd,
+      compactExtraParts: null,
+      detailedExtraParts: null,
+    }),
   }
 }
 
@@ -166,6 +294,7 @@ export async function streamSummaryForUrl({
   lengthRaw,
   languageRaw,
   sink,
+  cache,
 }: {
   env: Record<string, string | undefined>
   fetchImpl: typeof fetch
@@ -175,167 +304,76 @@ export async function streamSummaryForUrl({
   lengthRaw: unknown
   languageRaw: unknown
   sink: StreamSink
+  cache: CacheState
 }): Promise<{ usedModel: string; metrics: VisiblePageMetrics }> {
   const startedAt = Date.now()
-  const ctx = createDaemonRunContext({
-    env,
-    fetchImpl,
-    modelOverride,
-    lengthRaw,
-    languageRaw,
-    sink,
-  })
+  let usedModel: string | null = null
+  let summaryFromCache = false
+  const extractedRef = { value: null as ExtractedLinkContent | null }
 
   const writeStatus = typeof sink.writeStatus === 'function' ? sink.writeStatus : null
-  writeStatus?.('Extracting…')
 
-  const client = createLinkPreviewClient({
-    fetch: fetchImpl,
-    apifyApiToken: ctx.apifyApiToken,
-    ytDlpPath: ctx.ytDlpPath,
-    falApiKey: ctx.falApiKey,
-    openaiApiKey: ctx.openaiTranscriptionKey,
-    scrapeWithFirecrawl: null,
-    onProgress: (event) => {
-      const msg = formatProgress(event)
-      if (msg) writeStatus?.(msg)
-    },
-  })
-
-  const maxCharacters =
-    input.maxCharacters && input.maxCharacters > 0 ? input.maxCharacters : 120_000
-
-  const extracted = await client.fetchLinkContent(input.url, {
-    timeoutMs: 120_000,
-    maxCharacters,
-    cacheMode: 'default',
-    youtubeTranscript: 'auto',
-    firecrawl: 'off',
-    format: 'text',
-    markdownMode: 'readability',
-  })
-
-  const isYouTube = extracted.siteName === 'YouTube' || /youtube\.com|youtu\.be/i.test(extracted.url)
-  const transcriptChars =
-    typeof extracted.transcriptCharacters === 'number' && extracted.transcriptCharacters > 0
-      ? extracted.transcriptCharacters
-      : null
-  const hasTranscript = transcriptChars != null
-
-  const transcriptWords =
-    hasTranscript && transcriptChars != null
-      ? extracted.transcriptWordCount ?? Math.max(0, Math.round(transcriptChars / 6))
-      : null
-
-  const exactDurationSeconds =
-    typeof extracted.mediaDurationSeconds === 'number' && extracted.mediaDurationSeconds > 0
-      ? extracted.mediaDurationSeconds
-      : null
-  const estimatedDurationSeconds =
-    transcriptWords != null && transcriptWords > 0
-      ? Math.max(60, Math.max(1, Math.round(transcriptWords / 160)) * 60)
-      : null
-
-  const durationSeconds = hasTranscript ? exactDurationSeconds ?? estimatedDurationSeconds : null
-  const isDurationApproximate = hasTranscript && durationSeconds != null && exactDurationSeconds == null
-
-  const kindLabel = (() => {
-    if (isYouTube) return 'YouTube'
-    if (!hasTranscript) return null
-    if (extracted.isVideoOnly || extracted.video) return 'video'
-    return 'podcast'
-  })()
-
-  const inputSummary = formatInputSummary({
-    kindLabel,
-    durationSeconds,
-    words: hasTranscript ? transcriptWords : extracted.wordCount,
-    characters: hasTranscript ? transcriptChars : extracted.totalCharacters,
-    isDurationApproximate,
-  })
-  sink.writeMeta?.({ inputSummary })
-
-  writeStatus?.('Summarizing…')
-
-  const hasTranscriptSource =
-    extracted.siteName === 'YouTube' ||
-    (extracted.transcriptSource !== null && extracted.transcriptSource !== 'unavailable')
-
-  const lengthInstruction =
-    promptOverride && typeof ctx.summaryLength !== 'string'
-      ? `Output is ${ctx.summaryLength.maxCharacters.toLocaleString()} characters.`
-      : null
-  const languageExplicit =
-    typeof languageRaw === 'string' &&
-    languageRaw.trim().length > 0 &&
-    languageRaw.trim().toLowerCase() !== 'auto'
-  const languageInstruction =
-    promptOverride && languageExplicit && ctx.outputLanguage.kind === 'fixed'
-      ? `Output should be ${ctx.outputLanguage.label}.`
-      : null
-
-  const prompt = buildLinkSummaryPrompt({
-    url: extracted.url,
-    title: extracted.title ?? input.title,
-    siteName: extracted.siteName ?? guessSiteName(extracted.url),
-    description: extracted.description,
-    content: extracted.content,
-    truncated: extracted.truncated,
-    hasTranscript: hasTranscriptSource,
-    summaryLength: ctx.summaryLength,
-    outputLanguage: ctx.outputLanguage,
-    shares: [],
+  const ctx = createDaemonUrlFlowContext({
+    env,
+    fetchImpl,
+    cache,
+    modelOverride,
     promptOverride,
-    lengthInstruction,
-    languageInstruction,
+    lengthRaw,
+    languageRaw,
+    maxExtractCharacters:
+      input.maxCharacters && input.maxCharacters > 0 ? input.maxCharacters : null,
+    hooks: {
+      onModelChosen: (modelId) => {
+        usedModel = modelId
+        sink.onModelChosen(modelId)
+      },
+      onExtracted: (content) => {
+        extractedRef.value = content
+        sink.writeMeta?.({ inputSummary: buildInputSummaryForExtracted(content) })
+        writeStatus?.('Summarizing…')
+      },
+      onLinkPreviewProgress: (event) => {
+        const msg = formatProgress(event)
+        if (msg) writeStatus?.(msg)
+      },
+      onSummaryCached: (cached) => {
+        summaryFromCache = cached
+        sink.writeMeta?.({ summaryFromCache: cached })
+      },
+    },
+    runStartedAtMs: startedAt,
+    stdoutSink: { writeChunk: sink.writeChunk },
   })
-  const promptTokens = countTokens(prompt)
 
-  const kind = extracted.video?.kind === 'youtube' ? 'youtube' : 'website'
-  const { usedModel } = await runPrompt({
-    ctx,
-    prompt,
-    promptTokens,
-    kind,
-    requiresVideoUnderstanding: extracted.isVideoOnly,
-    sink,
-  })
+  writeStatus?.('Extracting…')
+  await runUrlFlow({ ctx, url: input.url, isYoutubeUrl: isYouTubeUrl(input.url) })
 
-  const report = await ctx.metrics.buildReport()
-  const costUsd = await ctx.metrics.estimateCostUsd()
+  const extracted = extractedRef.value
+  if (!extracted) {
+    throw new Error('Internal error: missing extracted content')
+  }
+
+  const report = await ctx.hooks.buildReport()
+  const costUsd = await ctx.hooks.estimateCostUsd()
   const elapsedMs = Date.now() - startedAt
 
   const label = extracted.siteName ?? guessSiteName(extracted.url)
+  const modelLabel = usedModel ?? ctx.model.requestedModelLabel
   const compactExtraParts = buildLengthPartsForFinishLine(extracted, false)
   const detailedExtraParts = buildLengthPartsForFinishLine(extracted, true)
 
-  const compact = buildFinishLineText({
-    elapsedMs,
-    label,
-    model: usedModel,
-    report,
-    costUsd,
-    detailed: false,
-    extraParts: compactExtraParts,
-  })
-  const extended = buildFinishLineText({
-    elapsedMs,
-    label,
-    model: usedModel,
-    report,
-    costUsd,
-    detailed: true,
-    extraParts: detailedExtraParts,
-  })
-
   return {
-    usedModel,
-    metrics: {
+    usedModel: modelLabel,
+    metrics: buildDaemonMetrics({
       elapsedMs,
-      summary: compact.line,
-      details: compact.details,
-      summaryDetailed: extended.line,
-      detailsDetailed: extended.details,
-    },
+      summaryFromCache,
+      label,
+      modelLabel,
+      report,
+      costUsd,
+      compactExtraParts,
+      detailedExtraParts,
+    }),
   }
 }

@@ -41,7 +41,7 @@ export function buildProgram() {
     .addOption(
       new Option(
         '--markdown-mode <mode>',
-        'HTML→Markdown conversion: off, auto (prefer LLM when configured, then markitdown when available), llm (force LLM), readability (use Readability article HTML as input). Only affects --format md for non-YouTube URLs.'
+        'Markdown conversion: off, auto, llm (force LLM), readability. For websites: converts HTML→Markdown. For YouTube/transcripts: llm mode formats raw transcripts into clean markdown with headings and paragraphs.'
       ).default('readability')
     )
     .addOption(
@@ -82,6 +82,9 @@ export function buildProgram() {
       undefined
     )
     .option('--prompt-file <path>', 'Read the prompt override from a file.', undefined)
+    .option('--no-cache', 'Bypass cache reads and writes.')
+    .option('--cache-stats', 'Print cache stats and exit.')
+    .option('--clear-cache', 'Delete the cache database and exit.', false)
     .addOption(
       new Option(
         '--cli [provider]',
@@ -127,6 +130,7 @@ ${heading('Examples')}
   ${cmd('summarize "https://example.com" --extract')} ${dim('# extracted plain text')}
   ${cmd('summarize "https://example.com" --extract --format md')} ${dim('# extracted markdown (prefers Firecrawl when configured)')}
   ${cmd('summarize "https://example.com" --extract --format md --markdown-mode llm')} ${dim('# extracted markdown via LLM')}
+  ${cmd('summarize "https://www.youtube.com/watch?v=..." --extract --format md --markdown-mode llm')} ${dim('# transcript as formatted markdown')}
   ${cmd('summarize "https://www.youtube.com/watch?v=I845O57ZSy4&t=11s" --extract --youtube web')}
   ${cmd('summarize "https://example.com" --length 20k --max-output-tokens 2k --timeout 2m --model openai/gpt-5-mini')}
   ${cmd('summarize "https://example.com" --model mymodel')} ${dim('# config preset')}
@@ -186,14 +190,19 @@ export function buildDaemonHelp(): string {
     'Usage: summarize daemon <command> [options]',
     '',
     'Commands:',
-    '  install   Install/upgrade the LaunchAgent and write ~/.summarize/daemon.json',
-    '  restart   Restart the LaunchAgent (launchctl kickstart)',
-    '  status    Check LaunchAgent + daemon health',
-    '  uninstall Unload LaunchAgent (moves plist to Trash)',
-    '  run       Run the daemon in the foreground (used by launchd)',
+    '  install   Install/upgrade the daemon autostart service and write ~/.summarize/daemon.json',
+    '  restart   Restart the daemon autostart service',
+    '  status    Check daemon service + daemon health',
+    '  uninstall Unload autostart service (macOS moves plist to Trash)',
+    '  run       Run the daemon in the foreground (used by autostart)',
+    '',
+    'Notes:',
+    '  macOS: LaunchAgent (launchd)',
+    '  Linux: systemd user service',
+    '  Windows: Scheduled Task',
     '',
     'Options:',
-    '  --dev            Install LaunchAgent that runs src/cli.ts via tsx (repo dev mode)',
+    '  --dev            Install service that runs src/cli.ts via tsx (repo dev mode)',
     '  --port <n>       (default: 8787)',
     '  --token <token>  (required for install)',
   ].join('\n')

@@ -1,121 +1,108 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
+import { describe, expect, it } from 'vitest'
 
-const mocks = vi.hoisted(() => ({
-  safari: vi.fn(),
-  chrome: vi.fn(),
-  firefox: vi.fn(),
-}))
+import { resolveTwitterCookies } from '../src/run/cookies/twitter.js'
 
-vi.mock('../packages/core/src/content/transcript/providers/twitter-cookies-safari.js', () => ({
-  extractCookiesFromSafari: mocks.safari,
-}))
+function makeTempHome(): string {
+  return mkdtempSync(path.join(tmpdir(), 'summarize-twitter-cookies-'))
+}
 
-vi.mock('../packages/core/src/content/transcript/providers/twitter-cookies-chrome.js', () => ({
-  extractCookiesFromChrome: mocks.chrome,
-}))
+function touch(filePath: string): void {
+  mkdirSync(path.dirname(filePath), { recursive: true })
+  writeFileSync(filePath, 'x')
+}
 
-vi.mock('../packages/core/src/content/transcript/providers/twitter-cookies-firefox.js', () => ({
-  extractCookiesFromFirefox: mocks.firefox,
-}))
+describe('twitter cookies resolver (CLI)', () => {
+  it('returns cookies-from-browser when chrome store exists', async () => {
+    const home = makeTempHome()
+    touch(
+      path.join(home, 'Library', 'Application Support', 'Google', 'Chrome', 'Default', 'Cookies')
+    )
 
-const empty = () => ({ authToken: null, ct0: null, cookieHeader: null, source: null })
-
-describe('twitter cookies resolver', () => {
-  const savedEnv = { ...process.env }
-
-  beforeEach(() => {
-    mocks.safari.mockReset()
-    mocks.chrome.mockReset()
-    mocks.firefox.mockReset()
-    process.env = { ...savedEnv }
-    delete process.env.AUTH_TOKEN
-    delete process.env.CT0
-    delete process.env.TWITTER_AUTH_TOKEN
-    delete process.env.TWITTER_CT0
-    delete process.env.TWITTER_COOKIE_SOURCE
-    delete process.env.TWITTER_CHROME_PROFILE
-    delete process.env.TWITTER_FIREFOX_PROFILE
-  })
-
-  it('uses explicit tokens without touching browsers', async () => {
-    const mod = await import('../packages/core/src/content/transcript/providers/twitter-cookies.js')
-
-    const res = await mod.resolveTwitterCookies({ authToken: 'auth', ct0: 'csrf' })
-    expect(res.cookies.cookieHeader).toBe('auth_token=auth; ct0=csrf')
-    expect(res.cookies.source).toBe('CLI argument')
-    expect(mocks.safari).not.toHaveBeenCalled()
-    expect(mocks.chrome).not.toHaveBeenCalled()
-    expect(mocks.firefox).not.toHaveBeenCalled()
-  })
-
-  it('uses env vars without touching browsers', async () => {
-    process.env.AUTH_TOKEN = 'auth'
-    process.env.CT0 = 'csrf'
-    const mod = await import('../packages/core/src/content/transcript/providers/twitter-cookies.js')
-
-    const res = await mod.resolveTwitterCookies({})
-    expect(res.cookies.cookieHeader).toBe('auth_token=auth; ct0=csrf')
-    expect(res.cookies.source).toBe('env AUTH_TOKEN')
-    expect(mocks.safari).not.toHaveBeenCalled()
-    expect(mocks.chrome).not.toHaveBeenCalled()
-    expect(mocks.firefox).not.toHaveBeenCalled()
-  })
-
-  it('returns the first browser with both cookies', async () => {
-    mocks.safari.mockResolvedValue({
-      cookies: { authToken: 'a', ct0: 'c', cookieHeader: 'auth_token=a; ct0=c', source: 'Safari' },
-      warnings: [],
-    })
-    const mod = await import('../packages/core/src/content/transcript/providers/twitter-cookies.js')
-
-    const res = await mod.resolveTwitterCookies({ cookieSource: ['safari', 'chrome', 'firefox'] })
-    expect(res.cookies.source).toBe('Safari')
-    expect(res.cookies.cookieHeader).toBe('auth_token=a; ct0=c')
-    expect(mocks.safari).toHaveBeenCalledTimes(1)
-    expect(mocks.chrome).not.toHaveBeenCalled()
-  })
-
-  it('uses cookie source order from env vars', async () => {
-    process.env.TWITTER_COOKIE_SOURCE = 'firefox, chrome'
-    process.env.TWITTER_FIREFOX_PROFILE = 'default-release'
-    mocks.firefox.mockResolvedValue({
-      cookies: { authToken: 'a', ct0: 'c', cookieHeader: 'auth_token=a; ct0=c', source: 'Firefox' },
-      warnings: [],
-    })
-    const mod = await import('../packages/core/src/content/transcript/providers/twitter-cookies.js')
-
-    const res = await mod.resolveTwitterCookies({})
-    expect(res.cookies.source).toBe('Firefox')
-    expect(mocks.safari).not.toHaveBeenCalled()
-    expect(mocks.chrome).not.toHaveBeenCalled()
-    expect(mocks.firefox).toHaveBeenCalledWith('default-release')
-  })
-
-  it('falls back to the next browser when needed', async () => {
-    mocks.safari.mockResolvedValue({
-      cookies: { ...empty(), source: 'Safari' },
-      warnings: ['nope'],
-    })
-    mocks.chrome.mockResolvedValue({
-      cookies: { authToken: 'a', ct0: 'c', cookieHeader: 'auth_token=a; ct0=c', source: 'Chrome' },
-      warnings: [],
-    })
-    const mod = await import('../packages/core/src/content/transcript/providers/twitter-cookies.js')
-
-    const res = await mod.resolveTwitterCookies({ cookieSource: ['safari', 'chrome'] })
+    const res = await resolveTwitterCookies({ env: {}, platform: 'darwin', homeDir: home })
+    expect(res.cookies.cookiesFromBrowser).toBe('chrome')
     expect(res.cookies.source).toBe('Chrome')
-    expect(res.warnings).toContain('nope')
-    expect(mocks.safari).toHaveBeenCalledTimes(1)
-    expect(mocks.chrome).toHaveBeenCalledTimes(1)
+    expect(res.warnings).toHaveLength(0)
   })
 
-  it('returns warnings when no cookies are found', async () => {
-    mocks.safari.mockResolvedValue({ cookies: empty(), warnings: [] })
-    const mod = await import('../packages/core/src/content/transcript/providers/twitter-cookies.js')
+  it('uses cookie source order and profile from env', async () => {
+    const home = makeTempHome()
+    touch(
+      path.join(
+        home,
+        'Library',
+        'Application Support',
+        'Firefox',
+        'Profiles',
+        'default-release',
+        'cookies.sqlite'
+      )
+    )
 
-    const res = await mod.resolveTwitterCookies({ cookieSource: ['safari'] })
-    expect(res.cookies.cookieHeader).toBeNull()
-    expect(res.warnings.join('\n')).toContain('Missing auth_token')
-    expect(res.warnings.join('\n')).toContain('Missing ct0')
+    const res = await resolveTwitterCookies({
+      env: {
+        TWITTER_COOKIE_SOURCE: 'firefox, chrome',
+        TWITTER_FIREFOX_PROFILE: 'default-release',
+      },
+      platform: 'darwin',
+      homeDir: home,
+    })
+    expect(res.cookies.cookiesFromBrowser).toBe('firefox:default-release')
+    expect(res.cookies.source).toBe('Firefox (default-release)')
+    expect(res.warnings).toHaveLength(0)
+  })
+
+  it('skips missing sources and returns the first available store', async () => {
+    const home = makeTempHome()
+    touch(
+      path.join(home, 'Library', 'Application Support', 'Google', 'Chrome', 'Default', 'Cookies')
+    )
+
+    const res = await resolveTwitterCookies({
+      env: {},
+      cookieSource: ['safari', 'chrome'],
+      platform: 'darwin',
+      homeDir: home,
+    })
+    expect(res.cookies.cookiesFromBrowser).toBe('chrome')
+    expect(res.cookies.source).toBe('Chrome')
+  })
+
+  it('returns explicit source with warning when store is missing', async () => {
+    const home = makeTempHome()
+
+    const res = await resolveTwitterCookies({
+      env: { TWITTER_COOKIE_SOURCE: 'safari' },
+      platform: 'darwin',
+      homeDir: home,
+    })
+    expect(res.cookies.cookiesFromBrowser).toBe('safari')
+    expect(res.cookies.source).toBe('Safari')
+    expect(res.warnings.join('\n')).toContain('No cookie store found')
+  })
+
+  it('returns null when no cookie stores are found', async () => {
+    const home = makeTempHome()
+
+    const res = await resolveTwitterCookies({ env: {}, platform: 'darwin', homeDir: home })
+    expect(res.cookies.cookiesFromBrowser).toBeNull()
+    expect(res.warnings.join('\n')).toContain('No browser cookies found')
+  })
+
+  it('warns about unknown cookie source tokens', async () => {
+    const home = makeTempHome()
+    touch(
+      path.join(home, 'Library', 'Application Support', 'Google', 'Chrome', 'Default', 'Cookies')
+    )
+
+    const res = await resolveTwitterCookies({
+      env: { TWITTER_COOKIE_SOURCE: 'chrome, foo' },
+      platform: 'darwin',
+      homeDir: home,
+    })
+    expect(res.warnings.join('\n')).toContain('Unknown cookie source "foo"')
+    expect(res.cookies.cookiesFromBrowser).toBe('chrome')
   })
 })

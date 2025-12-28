@@ -1,4 +1,6 @@
+import type { CacheState } from '../../../cache.js'
 import type { SummarizeConfig } from '../../../config.js'
+import type { ExtractedLinkContent, LinkPreviewProgressEvent } from '../../../content/index.js'
 import type { LlmCall, RunMetricsReport } from '../../../costs.js'
 import type { OutputLanguage } from '../../../language.js'
 import type { ExecFileFn } from '../../../markitdown.js'
@@ -7,13 +9,18 @@ import type { SummaryLength } from '../../../shared/contracts.js'
 import type { createSummaryEngine } from '../../summary-engine.js'
 import type { SummarizeAssetArgs } from '../asset/summary.js'
 
-export type UrlFlowContext = {
+export type UrlFlowIo = {
   env: Record<string, string | undefined>
   envForRun: Record<string, string | undefined>
   stdout: NodeJS.WritableStream
   stderr: NodeJS.WritableStream
   execFileImpl: ExecFileFn
+  fetch: typeof fetch
+}
+
+export type UrlFlowFlags = {
   timeoutMs: number
+  maxExtractCharacters?: number | null
   retries: number
   format: 'text' | 'markdown'
   markdownMode: 'off' | 'auto' | 'llm' | 'readability'
@@ -27,17 +34,6 @@ export type UrlFlowContext = {
   lengthInstruction?: string | null
   languageInstruction?: string | null
   maxOutputTokensArg: number | null
-  requestedModel: RequestedModel
-  requestedModelInput: string
-  requestedModelLabel: string
-  fixedModelSpec: FixedModelSpec | null
-  isFallbackModel: boolean
-  isNamedModelSelection: boolean
-  wantsFreeNamedModel: boolean
-  desiredOutputTokens: number | null
-  configForModelSelection: SummarizeConfig | null
-  envForAuto: Record<string, string | undefined>
-  cliAvailability: Partial<Record<'claude' | 'codex' | 'gemini', boolean>>
   json: boolean
   extractMode: boolean
   metricsEnabled: boolean
@@ -49,11 +45,24 @@ export type UrlFlowContext = {
   progressEnabled: boolean
   streamingEnabled: boolean
   plain: boolean
-  openaiUseChatCompletions: boolean
   configPath: string | null
   configModelLabel: string | null
+}
+
+export type UrlFlowModel = {
+  requestedModel: RequestedModel
+  requestedModelInput: string
+  requestedModelLabel: string
+  fixedModelSpec: FixedModelSpec | null
+  isFallbackModel: boolean
+  isNamedModelSelection: boolean
+  wantsFreeNamedModel: boolean
+  desiredOutputTokens: number | null
+  configForModelSelection: SummarizeConfig | null
+  envForAuto: Record<string, string | undefined>
+  cliAvailability: Partial<Record<'claude' | 'codex' | 'gemini', boolean>>
+  openaiUseChatCompletions: boolean
   openaiWhisperUsdPerMinute: number
-  setTranscriptionCost: (costUsd: number | null, label: string | null) => void
   apiStatus: {
     xaiApiKey: string | null
     apiKey: string | null
@@ -72,17 +81,37 @@ export type UrlFlowContext = {
     falApiKey: string | null
     openaiTranscriptionKey: string | null
   }
-  trackedFetch: typeof fetch
   summaryEngine: ReturnType<typeof createSummaryEngine>
+  getLiteLlmCatalog: () => Promise<
+    Awaited<ReturnType<typeof import('../../../pricing/litellm.js').loadLiteLlmCatalog>>['catalog']
+  >
+  llmCalls: LlmCall[]
+}
+
+export type UrlFlowHooks = {
+  onModelChosen?: ((modelId: string) => void) | null
+  onExtracted?: ((extracted: ExtractedLinkContent) => void) | null
+  onLinkPreviewProgress?: ((event: LinkPreviewProgressEvent) => void) | null
+  onSummaryCached?: ((cached: boolean) => void) | null
+  setTranscriptionCost: (costUsd: number | null, label: string | null) => void
   summarizeAsset: (args: SummarizeAssetArgs) => Promise<void>
   writeViaFooter: (parts: string[]) => void
   clearProgressForStdout: () => void
   setClearProgressBeforeStdout: (fn: (() => void) | null) => void
   clearProgressIfCurrent: (fn: () => void) => void
-  getLiteLlmCatalog: () => Promise<
-    Awaited<ReturnType<typeof import('../../../pricing/litellm.js').loadLiteLlmCatalog>>['catalog']
-  >
   buildReport: () => Promise<RunMetricsReport>
   estimateCostUsd: () => Promise<number | null>
-  llmCalls: LlmCall[]
+}
+
+/**
+ * Wiring struct for `runUrlFlow`.
+ * CLI runner populates the full surface; daemon uses a smaller subset (no TTY/progress/footer),
+ * but both share the same extraction/cache/model logic.
+ */
+export type UrlFlowContext = {
+  io: UrlFlowIo
+  flags: UrlFlowFlags
+  model: UrlFlowModel
+  cache: CacheState
+  hooks: UrlFlowHooks
 }

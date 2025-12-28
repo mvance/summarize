@@ -32,9 +32,8 @@ const buildFetchMock = (html: string) =>
   })
 
 describe('cli tweet summarization bypass', () => {
-  const home = mkdtempSync(join(tmpdir(), 'summarize-tests-twitter-summary-'))
-
   it('skips LLM summary for short tweets', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'summarize-tests-twitter-summary-'))
     const tweet = 'Short tweet content.'
     const html = `<!doctype html><html><head><title>Tweet</title></head><body><article><p>${tweet}</p></article></body></html>`
     const fetchMock = buildFetchMock(html)
@@ -58,6 +57,7 @@ describe('cli tweet summarization bypass', () => {
   })
 
   it('still summarizes when tweet exceeds target length', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'summarize-tests-twitter-summary-'))
     const tweet = 'A'.repeat(600)
     const html = `<!doctype html><html><head><title>Tweet</title></head><body><article><p>${tweet}</p></article></body></html>`
     const fetchMock = buildFetchMock(html)

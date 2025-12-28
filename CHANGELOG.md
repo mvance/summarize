@@ -20,6 +20,8 @@
 - Core: expose lightweight URL helpers at `@steipete/summarize-core/content/url` (YouTube/Twitter/podcast/direct-media detection).
 - X/Twitter: auto-transcribe tweet videos via `yt-dlp`, using browser cookies (Chrome → Safari → Firefox) when available; set `TWITTER_COOKIE_SOURCE` / `TWITTER_*_PROFILE` to control cookie extraction order.
 - Config: add `prompt` to replace the default summary instructions (same behavior as `--prompt`).
+- Cache: add SQLite cache for transcripts/extractions/summaries with `--no-cache` / `--clear-cache` + config.
+- CLI: add transcript → Markdown formatting via `--extract --format md --markdown-mode llm` (thanks @dougvk!).
 - Daemon/Chrome: stream extra run metadata (`inputSummary`, `modelLabel`) over SSE so the panel can show input size + model without cluttering the summary.
 
 ### Fixed
@@ -27,11 +29,19 @@
 - Chrome Side Panel: avoid MV3 background stream stalls by streaming SSE from the panel page; improve auto-summarize de-dupe; keep background theme continuous on long summaries; avoid “disconnected port” errors by using runtime messaging; show a subtle summary metrics footer.
 - Chrome Side Panel: move “working” status into the header (no layout jump) and show progress as a 1px separator line; allow the subtitle to use full available width.
 - Chrome Side Panel: use the current page title as the header title; show `words/chars` (or media duration + words) + model in the idle subtitle after a run.
+- Chrome Side Panel: reduce “blue” UI accents by using system highlight/link colors (more native look, light/dark).
+- Chrome Side Panel: fix toolbar icon transparency (no white background).
 - Daemon: prefer the installed env snapshot over launchd’s minimal environment (fixes missing `yt-dlp` / `whisper.cpp` on PATH, especially for X/Twitter video transcription).
+- X/Twitter: cookie handling now delegates to `yt-dlp --cookies-from-browser` (no sweet-cookie dependency).
+- X/Twitter: skip yt-dlp transcript attempts for long-form tweet text (articles).
 - Finish line: shorten transcript summaries to include source (`YouTube` / `podcast`) and avoid repeating the label.
 - Transcripts: show yt-dlp download progress bytes instead of staying at 0 B.
 - Transcripts: stabilize yt-dlp download totals to prevent bouncing progress bars.
 - Streaming: stop/clear progress UI before first streamed output to avoid sticky “Summarizing …” lines in scrollback.
+- Daemon: unify URL/page summarization with the CLI flows (single code path; keeps extract/cache/model logic in sync).
+- URL flow: propagate `extracted.truncated` into the prompt context so summaries can reflect partial inputs.
+- Streaming: avoid printing a leading blank line when stdout is not a TTY (keeps cached vs streamed output consistent).
+- Finish line: show “Cached” instead of `0.0s` when summaries are served from cache (CLI + daemon/extension).
 
 ## 0.7.1 - 2025-12-26
 

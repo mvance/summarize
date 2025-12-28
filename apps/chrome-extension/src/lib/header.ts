@@ -7,10 +7,11 @@ export function buildIdleSubtitle({
   modelLabel?: string | null
   model?: string | null
 }): string {
-  const a = typeof inputSummary === 'string' ? inputSummary.trim() : ''
-  const bRaw = typeof modelLabel === 'string' ? modelLabel : typeof model === 'string' ? model : ''
-  const b = bRaw.trim()
-  const parts = [a, b].filter((p) => p.length > 0)
+  const input = typeof inputSummary === 'string' ? inputSummary.trim() : ''
+  const label = typeof modelLabel === 'string' ? modelLabel.trim() : ''
+  const rawModel = typeof model === 'string' ? model.trim() : ''
+  const modelPart = label || rawModel
+
+  const parts = [input, modelPart].filter(Boolean)
   return parts.join(' · ')
 }
-

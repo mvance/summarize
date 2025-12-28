@@ -10,7 +10,6 @@
     <main>
       <div class="top">
         <h1>Summarize Settings</h1>
-        <a class="docsLink" href="https://summarize.sh" target="_blank" rel="noreferrer">Docs</a>
       </div>
       <form id="form">
         <label>
@@ -18,81 +17,87 @@
           <input id="token" type="text" placeholder="(generated in side panel)" />
         </label>
         <label>
-          <span>Model</span>
-          <input
-            id="model"
-            type="text"
-            list="modelPresets"
-            placeholder="auto / free / openai/…"
-            autocapitalize="off"
-            autocomplete="off"
-            spellcheck="false"
-          />
-          <datalist id="modelPresets">
-            <option value="auto" label="Auto"></option>
-            <option value="free" label="Free"></option>
-          </datalist>
-        </label>
-        <label>
-          <span>Length</span>
-          <input
-            id="length"
-            type="text"
-            list="lengthPresets"
-            placeholder="xl / short / 20k"
-            autocapitalize="off"
-            autocomplete="off"
-            spellcheck="false"
-          />
-          <datalist id="lengthPresets">
-            <option value="short"></option>
-            <option value="medium"></option>
-            <option value="long"></option>
-            <option value="xl"></option>
-            <option value="xxl"></option>
-            <option value="20k"></option>
-          </datalist>
-        </label>
-        <label>
           <span>Language</span>
-          <input
-            id="language"
-            type="text"
-            list="languagePresets"
-            placeholder="auto / en / de / …"
-            autocapitalize="off"
-            autocomplete="off"
-            spellcheck="false"
-          />
-          <datalist id="languagePresets">
-            <option value="auto"></option>
-            <option value="en"></option>
-            <option value="de"></option>
-            <option value="es"></option>
-            <option value="fr"></option>
-            <option value="it"></option>
-            <option value="pt"></option>
-            <option value="ja"></option>
-            <option value="zh"></option>
-            <option value="ko"></option>
-          </datalist>
-        </label>
-        <label>
-          <span>Prompt override</span>
-          <textarea
-            id="promptOverride"
-            rows="6"
-            placeholder="Custom instructions (prefix). Context + content still appended."
-          ></textarea>
+          <div class="combo">
+            <select id="languagePreset">
+              <option value="auto">Auto (detect)</option>
+              <option value="en">English</option>
+              <option value="de">German</option>
+              <option value="es">Spanish</option>
+              <option value="fr">French</option>
+              <option value="it">Italian</option>
+              <option value="pt">Portuguese</option>
+              <option value="nl">Dutch</option>
+              <option value="sv">Swedish</option>
+              <option value="no">Norwegian</option>
+              <option value="da">Danish</option>
+              <option value="fi">Finnish</option>
+              <option value="pl">Polish</option>
+              <option value="cs">Czech</option>
+              <option value="tr">Turkish</option>
+              <option value="ru">Russian</option>
+              <option value="uk">Ukrainian</option>
+              <option value="ar">Arabic</option>
+              <option value="hi">Hindi</option>
+              <option value="ja">Japanese</option>
+              <option value="ko">Korean</option>
+              <option value="zh-cn">Chinese (Simplified)</option>
+              <option value="zh-tw">Chinese (Traditional)</option>
+              <option value="custom">Custom…</option>
+            </select>
+            <input
+              id="languageCustom"
+              type="text"
+              placeholder="Custom (e.g. en-US / Portuguese (Brazil))"
+              autocapitalize="off"
+              autocomplete="off"
+              spellcheck="false"
+              hidden
+            />
+          </div>
         </label>
         <label class="row">
           <input id="auto" type="checkbox" />
           <span>Auto-summarize when panel is open</span>
         </label>
-        <label>
-          <span>Max chars (extracted)</span>
-          <input id="maxChars" type="number" min="20000" step="10000" />
-        </label>
+        <details class="advanced">
+          <summary>Advanced</summary>
+          <div class="advancedGrid">
+            <label>
+              <span>Model</span>
+              <input
+                id="model"
+                type="text"
+                list="modelPresets"
+                placeholder="auto"
+                autocapitalize="off"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <datalist id="modelPresets">
+                <option value="auto" label="Auto"></option>
+              </datalist>
+              <div class="hint">
+                Tip: configure “free” models via <code>summarize refresh-free</code> (needs <code>OPENROUTER_API_KEY</code>). Writes
+                <code>~/.summarize/config.json</code> (updates <code>models.free</code>). Add <code>--set-default</code> to also set
+                your default model to <code>free</code>.
+              </div>
+            </label>
+            <label>
+              <span>Prompt override</span>
+              <textarea
+                id="promptOverride"
+                rows="6"
+                placeholder="Custom instructions (prefix). Context + content still appended."
+              ></textarea>
+            </label>
+            <label>
+              <span>Max chars (extracted)</span>
+              <input id="maxChars" type="number" min="20000" step="10000" />
+            </label>
+          </div>
+        </details>
+        <div id="pickersRoot"></div>
         <label>
           <span>Font family (CSS)</span>
           <input id="fontFamily" type="text" />

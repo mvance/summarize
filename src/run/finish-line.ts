@@ -172,6 +172,7 @@ export function buildLengthPartsForFinishLine(
 export function writeFinishLine({
   stderr,
   elapsedMs,
+  elapsedLabel,
   label,
   model,
   report,
@@ -182,6 +183,7 @@ export function writeFinishLine({
 }: {
   stderr: NodeJS.WritableStream
   elapsedMs: number
+  elapsedLabel?: string | null
   label?: string | null
   model: string | null
   report: {
@@ -200,6 +202,7 @@ export function writeFinishLine({
 }): void {
   const text = buildFinishLineText({
     elapsedMs,
+    elapsedLabel,
     label,
     model,
     report,
@@ -217,6 +220,7 @@ export function writeFinishLine({
 
 export function buildFinishLineText({
   elapsedMs,
+  elapsedLabel,
   label,
   model,
   report,
@@ -225,6 +229,7 @@ export function buildFinishLineText({
   extraParts,
 }: {
   elapsedMs: number
+  elapsedLabel?: string | null
   label?: string | null
   model: string | null
   report: {
@@ -240,6 +245,10 @@ export function buildFinishLineText({
   detailed: boolean
   extraParts?: string[] | null
 }): FinishLineText {
+  const resolvedElapsedLabel =
+    typeof elapsedLabel === 'string' && elapsedLabel.trim().length > 0
+      ? elapsedLabel
+      : formatElapsedMs(elapsedMs)
   const promptTokens = sumNumbersOrNull(report.llm.map((row) => row.promptTokens))
   const completionTokens = sumNumbersOrNull(report.llm.map((row) => row.completionTokens))
   const totalTokens = sumNumbersOrNull(report.llm.map((row) => row.totalTokens))
@@ -288,7 +297,7 @@ export function buildFinishLineText({
       ? extraParts.filter((part) => part !== compactTranscript)
       : extraParts
   const summaryParts: Array<string | null> = [
-    formatElapsedMs(elapsedMs),
+    resolvedElapsedLabel,
     compactTranscriptLabel,
     costUsd != null ? formatUSD(costUsd) : null,
     effectiveLabel,

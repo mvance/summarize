@@ -1,10 +1,12 @@
 import MarkdownIt from 'markdown-it'
 
 import { buildIdleSubtitle } from '../../lib/header'
-import { loadSettings, patchSettings } from '../../lib/settings'
+import { defaultSettings, loadSettings, patchSettings } from '../../lib/settings'
 import { parseSseStream } from '../../lib/sse'
 import { splitStatusPercent } from '../../lib/status'
+import { applyTheme } from '../../lib/theme'
 import { generateToken } from '../../lib/token'
+import { mountSidepanelLengthPicker, mountSidepanelPickers } from './pickers'
 
 type PanelToBg =
   | { type: 'panel:ready' }
@@ -13,14 +15,14 @@ type PanelToBg =
   | { type: 'panel:closed' }
   | { type: 'panel:rememberUrl'; url: string }
   | { type: 'panel:setAuto'; value: boolean }
-  | { type: 'panel:setModel'; value: string }
+  | { type: 'panel:setLength'; value: string }
   | { type: 'panel:openOptions' }
 
 type UiState = {
   panelOpen: boolean
   daemon: { ok: boolean; authed: boolean; error?: string }
   tab: { url: string | null; title: string | null }
-  settings: { autoSummarize: boolean; model: string; tokenPresent: boolean }
+  settings: { autoSummarize: boolean; model: string; length: string; tokenPresent: boolean }
   status: string
 }
 
@@ -58,8 +60,8 @@ const summarizeBtn = byId<HTMLButtonElement>('summarize')
 const drawerToggleBtn = byId<HTMLButtonElement>('drawerToggle')
 const advancedBtn = byId<HTMLButtonElement>('advanced')
 const autoEl = byId<HTMLInputElement>('auto')
-const modelEl = byId<HTMLInputElement>('model')
-const fontEl = byId<HTMLSelectElement>('font')
+const lengthRoot = byId<HTMLDivElement>('lengthRoot')
+const pickersRoot = byId<HTMLDivElement>('pickersRoot')
 const sizeEl = byId<HTMLInputElement>('size')
 
 const md = new MarkdownIt({
@@ -76,6 +78,9 @@ let streamController: AbortController | null = null
 let streamedAnyNonWhitespace = false
 let rememberedUrl = false
 let streaming = false
+let progressTimer = 0
+let showProgress = false
+let summaryFromCache: boolean | null = null
 let baseTitle = 'Summarize'
 let baseSubtitle = ''
 let statusText = ''
@@ -84,28 +89,7 @@ let lastMeta: { inputSummary: string | null; model: string | null; modelLabel: s
   model: null,
   modelLabel: null,
 }
-
-function ensureSelectValue(select: HTMLSelectElement, value: unknown): string {
-  const normalized = typeof value === 'string' ? value.trim() : ''
-  if (!normalized) {
-    const fallback = select.options[0]?.value ?? ''
-    if (fallback) select.value = fallback
-    if (select.selectedIndex === -1 && select.options.length > 0) select.selectedIndex = 0
-    return fallback
-  }
-
-  if (!Array.from(select.options).some((o) => o.value === normalized)) {
-    const label = normalized.split(',')[0]?.replace(/["']/g, '').trim() || 'Custom'
-    const option = document.createElement('option')
-    option.value = normalized
-    option.textContent = `Custom (${label})`
-    select.append(option)
-  }
-
-  select.value = normalized
-  if (select.selectedIndex === -1 && select.options.length > 0) select.selectedIndex = 0
-  return normalized
-}
+let drawerAnimation: Animation | null = null
 
 function setBaseSubtitle(text: string) {
   baseSubtitle = text
@@ -120,6 +104,16 @@ function setBaseTitle(text: string) {
 
 function setStatus(text: string) {
   statusText = text
+  if (streaming) {
+    const split = splitStatusPercent(text)
+    if (split.percent && summaryFromCache !== true) {
+      showProgress = true
+      if (progressTimer) {
+        clearTimeout(progressTimer)
+        progressTimer = 0
+      }
+    }
+  }
   updateHeader()
 }
 
@@ -133,11 +127,13 @@ function updateHeader() {
   const isError =
     showStatus &&
     (trimmed.toLowerCase().startsWith('error:') || trimmed.toLowerCase().includes(' error'))
+  const isRunning = showProgress && !isError
+  const shouldShowStatus = showStatus && (!streaming || !baseSubtitle)
 
   titleEl.textContent = baseTitle
   headerEl.classList.toggle('isError', isError)
-  headerEl.classList.toggle('isRunning', showStatus && !isError)
-  headerEl.classList.toggle('isIndeterminate', showStatus && !isError && percentNum == null)
+  headerEl.classList.toggle('isRunning', isRunning)
+  headerEl.classList.toggle('isIndeterminate', isRunning && percentNum == null)
 
   if (
     !isError &&
@@ -151,8 +147,34 @@ function updateHeader() {
     headerEl.style.setProperty('--progress', '0%')
   }
 
-  progressFillEl.style.display = showStatus ? '' : 'none'
-  subtitleEl.textContent = showStatus ? split.text || trimmed : baseSubtitle
+  progressFillEl.style.display = isRunning || isError ? '' : 'none'
+  subtitleEl.textContent = isError
+    ? split.text || trimmed
+    : shouldShowStatus
+      ? split.text || trimmed
+      : baseSubtitle
+}
+
+function armProgress() {
+  if (summaryFromCache === true) return
+  showProgress = false
+  if (progressTimer) clearTimeout(progressTimer)
+  progressTimer = window.setTimeout(() => {
+    progressTimer = 0
+    if (!streaming) return
+    showProgress = true
+    updateHeader()
+  }, 240)
+}
+
+function stopProgress() {
+  if (progressTimer) {
+    clearTimeout(progressTimer)
+    progressTimer = 0
+  }
+  if (!showProgress) return
+  showProgress = false
+  updateHeader()
 }
 
 window.addEventListener('error', (event) => {
@@ -185,6 +207,30 @@ function queueRender() {
   }, 80)
 }
 
+const isHttpUrl = (value: string) => /^https?:\/\//i.test(value)
+const isLikelyDomain = (value: string) =>
+  /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(value) && !value.includes('..')
+
+function renderMetricsSummary(summary: string) {
+  metricsEl.replaceChildren()
+  const parts = summary.split(' · ')
+  parts.forEach((part, index) => {
+    if (index) metricsEl.append(document.createTextNode(' · '))
+    const trimmed = part.trim()
+    if (!trimmed) return
+    if (isHttpUrl(trimmed) || isLikelyDomain(trimmed)) {
+      const link = document.createElement('a')
+      link.href = isHttpUrl(trimmed) ? trimmed : `https://${trimmed}`
+      link.textContent = trimmed
+      link.target = '_blank'
+      link.rel = 'noopener noreferrer'
+      metricsEl.append(link)
+      return
+    }
+    metricsEl.append(document.createTextNode(part))
+  })
+}
+
 function mergeStreamText(current: string, incoming: string): string {
   if (!incoming) return current
   if (!current) return incoming
@@ -210,6 +256,71 @@ function applyTypography(fontFamily: string, fontSize: number) {
   document.documentElement.style.setProperty('--font-size', `${fontSize}px`)
 }
 
+let pickerSettings = {
+  scheme: defaultSettings.colorScheme,
+  mode: defaultSettings.colorMode,
+  fontFamily: defaultSettings.fontFamily,
+  length: defaultSettings.length,
+}
+
+const pickerHandlers = {
+  onSchemeChange: (value) => {
+    void (async () => {
+      const next = await patchSettings({ colorScheme: value })
+      pickerSettings = { ...pickerSettings, scheme: next.colorScheme, mode: next.colorMode }
+      applyTheme({ scheme: next.colorScheme, mode: next.colorMode })
+    })()
+  },
+  onModeChange: (value) => {
+    void (async () => {
+      const next = await patchSettings({ colorMode: value })
+      pickerSettings = { ...pickerSettings, scheme: next.colorScheme, mode: next.colorMode }
+      applyTheme({ scheme: next.colorScheme, mode: next.colorMode })
+    })()
+  },
+  onFontChange: (value) => {
+    void (async () => {
+      const next = await patchSettings({ fontFamily: value })
+      pickerSettings = { ...pickerSettings, fontFamily: next.fontFamily }
+      applyTypography(next.fontFamily, next.fontSize)
+    })()
+  },
+  onLengthChange: (value) => {
+    pickerSettings = { ...pickerSettings, length: value }
+    send({ type: 'panel:setLength', value })
+  },
+}
+
+const pickers = mountSidepanelPickers(pickersRoot, {
+  scheme: pickerSettings.scheme,
+  mode: pickerSettings.mode,
+  fontFamily: pickerSettings.fontFamily,
+  onSchemeChange: pickerHandlers.onSchemeChange,
+  onModeChange: pickerHandlers.onModeChange,
+  onFontChange: pickerHandlers.onFontChange,
+})
+
+const lengthPicker = mountSidepanelLengthPicker(lengthRoot, {
+  length: pickerSettings.length,
+  onLengthChange: pickerHandlers.onLengthChange,
+})
+
+type PlatformKind = 'mac' | 'windows' | 'linux' | 'other'
+
+function resolvePlatformKind(): PlatformKind {
+  const nav = navigator as Navigator & { userAgentData?: { platform?: string } }
+  const raw = (nav.userAgentData?.platform ?? navigator.platform ?? navigator.userAgent ?? '')
+    .toLowerCase()
+    .trim()
+
+  if (raw.includes('mac')) return 'mac'
+  if (raw.includes('win')) return 'windows'
+  if (raw.includes('linux') || raw.includes('cros') || raw.includes('chrome os')) return 'linux'
+  return 'other'
+}
+
+const platformKind = resolvePlatformKind()
+
 function friendlyFetchError(err: unknown, context: string): string {
   const message = err instanceof Error ? err.message : String(err)
   if (message.toLowerCase() === 'failed to fetch') {
@@ -226,34 +337,173 @@ async function ensureToken(): Promise<string> {
   return token
 }
 
-function renderSetup(token: string) {
-  setupEl.classList.remove('hidden')
-  const cmd = `summarize daemon install --token ${token}`
-  setupEl.innerHTML = `
-    <h2>Setup</h2>
-    <p>Install the local daemon (LaunchAgent) so the side panel can stream summaries.</p>
-    <code>${cmd}</code>
-    <div class="row">
-      <button id="copy" type="button">Copy Install Command</button>
-      <button id="regen" type="button">Regenerate Token</button>
-    </div>
+function installStepsHtml({
+  token,
+  headline,
+  message,
+  showTroubleshooting,
+}: {
+  token: string
+  headline: string
+  message?: string
+  showTroubleshooting?: boolean
+}) {
+  const npmCmd = 'npm i -g @steipete/summarize'
+  const brewCmd = 'brew install steipete/tap/summarize'
+  const daemonCmd = `summarize daemon install --token ${token}`
+  const isMac = platformKind === 'mac'
+  const isLinux = platformKind === 'linux'
+  const isWindows = platformKind === 'windows'
+  const isSupported = isMac || isLinux || isWindows
+  const daemonLabel = isMac
+    ? 'LaunchAgent'
+    : isLinux
+      ? 'systemd user service'
+      : isWindows
+        ? 'Scheduled Task'
+        : 'daemon'
+
+  const installIntro = isMac
+    ? `
+      <p><strong>1) Install summarize (choose one)</strong></p>
+      <code>${npmCmd}</code>
+      <code>${brewCmd}</code>
+      <p class="setup__hint">Homebrew installs the daemon-ready binary (macOS arm64).</p>
+    `
+    : `
+      <p><strong>1) Install summarize</strong></p>
+      <code>${npmCmd}</code>
+      <p class="setup__hint">Homebrew tap is macOS-only.</p>
+    `
+
+  const daemonIntro = isSupported
+    ? `
+      <p><strong>2) Register the daemon (${daemonLabel})</strong></p>
+      <code>${daemonCmd}</code>
+    `
+    : `
+      <p><strong>2) Daemon auto-start</strong></p>
+      <p class="setup__hint">Not supported on this OS yet.</p>
+    `
+
+  const copyRow = isMac
+    ? `
+      <div class="row">
+        <button id="copy-npm" type="button">Copy npm</button>
+        <button id="copy-brew" type="button">Copy brew</button>
+      </div>
+      <div class="row">
+        <button id="copy-daemon" type="button">Copy daemon</button>
+        <button id="regen" type="button">Regenerate Token</button>
+      </div>
+    `
+    : isSupported
+      ? `
+      <div class="row">
+        <button id="copy-npm" type="button">Copy npm</button>
+        <button id="copy-daemon" type="button">Copy daemon</button>
+      </div>
+      <div class="row">
+        <button id="regen" type="button">Regenerate Token</button>
+      </div>
+    `
+      : `
+      <div class="row">
+        <button id="copy-npm" type="button">Copy npm</button>
+        <button id="regen" type="button">Regenerate Token</button>
+      </div>
+    `
+
+  const troubleshooting =
+    showTroubleshooting && isSupported
+      ? `
+      <div class="row">
+        <button id="status" type="button">Copy Status Command</button>
+        <button id="restart" type="button">Copy Restart Command</button>
+      </div>
+    `
+      : ''
+
+  return `
+    <h2>${headline}</h2>
+    ${message ? `<p>${message}</p>` : ''}
+    ${installIntro}
+    ${daemonIntro}
+    ${copyRow}
+    ${troubleshooting}
   `
-  const copyBtn = setupEl.querySelector<HTMLButtonElement>('#copy')
-  const regenBtn = setupEl.querySelector<HTMLButtonElement>('#regen')
-  copyBtn?.addEventListener('click', () => {
+}
+
+function wireSetupButtons({
+  token,
+  showTroubleshooting,
+}: {
+  token: string
+  showTroubleshooting?: boolean
+}) {
+  const npmCmd = 'npm i -g @steipete/summarize'
+  const brewCmd = 'brew install steipete/tap/summarize'
+  const daemonCmd = `summarize daemon install --token ${token}`
+
+  const flashCopied = () => {
+    setStatus('Copied')
+    setTimeout(() => setStatus(currentState?.status ?? ''), 800)
+  }
+
+  setupEl.querySelector<HTMLButtonElement>('#copy-npm')?.addEventListener('click', () => {
     void (async () => {
-      await navigator.clipboard.writeText(cmd)
-      setStatus('Copied')
-      setTimeout(() => setStatus(currentState?.status ?? ''), 800)
+      await navigator.clipboard.writeText(npmCmd)
+      flashCopied()
     })()
   })
-  regenBtn?.addEventListener('click', () => {
+
+  setupEl.querySelector<HTMLButtonElement>('#copy-brew')?.addEventListener('click', () => {
+    void (async () => {
+      await navigator.clipboard.writeText(brewCmd)
+      flashCopied()
+    })()
+  })
+
+  setupEl.querySelector<HTMLButtonElement>('#copy-daemon')?.addEventListener('click', () => {
+    void (async () => {
+      await navigator.clipboard.writeText(daemonCmd)
+      flashCopied()
+    })()
+  })
+
+  setupEl.querySelector<HTMLButtonElement>('#regen')?.addEventListener('click', () => {
     void (async () => {
       const token2 = generateToken()
       await patchSettings({ token: token2 })
       renderSetup(token2)
     })()
   })
+
+  if (!showTroubleshooting) return
+
+  setupEl.querySelector<HTMLButtonElement>('#status')?.addEventListener('click', () => {
+    void (async () => {
+      await navigator.clipboard.writeText('summarize daemon status')
+      flashCopied()
+    })()
+  })
+
+  setupEl.querySelector<HTMLButtonElement>('#restart')?.addEventListener('click', () => {
+    void (async () => {
+      await navigator.clipboard.writeText('summarize daemon restart')
+      flashCopied()
+    })()
+  })
+}
+
+function renderSetup(token: string) {
+  setupEl.classList.remove('hidden')
+  setupEl.innerHTML = installStepsHtml({
+    token,
+    headline: 'Setup',
+    message: 'Install summarize, then register the daemon so the side panel can stream summaries.',
+  })
+  wireSetupButtons({ token })
 }
 
 function maybeShowSetup(state: UiState) {
@@ -268,33 +518,15 @@ function maybeShowSetup(state: UiState) {
     setupEl.classList.remove('hidden')
     const token = (async () => (await loadSettings()).token.trim())()
     void token.then((t) => {
-      const cmd = `summarize daemon install --token ${t}`
       setupEl.innerHTML = `
-        <h2>Daemon not reachable</h2>
-        <p>${state.daemon.error ?? 'Check that the LaunchAgent is installed.'}</p>
-        <p>Try:</p>
-        <code>${cmd}</code>
-        <div class="row">
-          <button id="copy" type="button">Copy Install Command</button>
-          <button id="status" type="button">Copy Status Command</button>
-          <button id="restart" type="button">Copy Restart Command</button>
-        </div>
+        ${installStepsHtml({
+          token: t,
+          headline: 'Daemon not reachable',
+          message: state.daemon.error ?? 'Check that the LaunchAgent is installed.',
+          showTroubleshooting: true,
+        })}
       `
-      setupEl.querySelector<HTMLButtonElement>('#copy')?.addEventListener('click', () => {
-        void (async () => {
-          await navigator.clipboard.writeText(cmd)
-        })()
-      })
-      setupEl.querySelector<HTMLButtonElement>('#status')?.addEventListener('click', () => {
-        void (async () => {
-          await navigator.clipboard.writeText('summarize daemon status')
-        })()
-      })
-      setupEl.querySelector<HTMLButtonElement>('#restart')?.addEventListener('click', () => {
-        void (async () => {
-          await navigator.clipboard.writeText('summarize daemon restart')
-        })()
-      })
+      wireSetupButtons({ token: t, showTroubleshooting: true })
     })
     return
   }
@@ -303,7 +535,13 @@ function maybeShowSetup(state: UiState) {
 
 function updateControls(state: UiState) {
   autoEl.checked = state.settings.autoSummarize
-  modelEl.value = state.settings.model
+  if (pickerSettings.length !== state.settings.length) {
+    pickerSettings = { ...pickerSettings, length: state.settings.length }
+    lengthPicker.update({
+      length: pickerSettings.length,
+      onLengthChange: pickerHandlers.onLengthChange,
+    })
+  }
   if (currentSource && state.tab.url && state.tab.url !== currentSource.url && !streaming) {
     currentSource = null
   }
@@ -312,7 +550,7 @@ function updateControls(state: UiState) {
     setBaseTitle(state.tab.title || state.tab.url || 'Summarize')
     setBaseSubtitle('')
   }
-  setStatus(state.status)
+  if (!streaming || state.status.trim().length > 0) setStatus(state.status)
   maybeShowSetup(state)
 }
 
@@ -323,7 +561,7 @@ function handleBgMessage(msg: BgToPanel) {
       updateControls(msg.state)
       return
     case 'ui:status':
-      setStatus(msg.status)
+      if (!streaming || msg.status.trim().length > 0) setStatus(msg.status)
       return
     case 'run:error':
       setStatus(`Error: ${msg.message}`)
@@ -340,9 +578,81 @@ function send(message: PanelToBg) {
   })
 }
 
-function toggleDrawer(force?: boolean) {
-  const next = typeof force === 'boolean' ? force : drawerEl.classList.contains('hidden')
-  drawerEl.classList.toggle('hidden', !next)
+function toggleDrawer(force?: boolean, opts?: { animate?: boolean }) {
+  const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false
+  const animate = opts?.animate !== false && !reducedMotion
+
+  const isOpen = !drawerEl.classList.contains('hidden')
+  const next = typeof force === 'boolean' ? force : !isOpen
+
+  drawerToggleBtn.classList.toggle('isActive', next)
+  drawerToggleBtn.setAttribute('aria-expanded', next ? 'true' : 'false')
+  drawerEl.setAttribute('aria-hidden', next ? 'false' : 'true')
+
+  if (next === isOpen) return
+
+  const cleanup = () => {
+    drawerEl.style.removeProperty('height')
+    drawerEl.style.removeProperty('opacity')
+    drawerEl.style.removeProperty('transform')
+    drawerEl.style.removeProperty('overflow')
+  }
+
+  drawerAnimation?.cancel()
+  drawerAnimation = null
+  cleanup()
+
+  if (!animate) {
+    drawerEl.classList.toggle('hidden', !next)
+    return
+  }
+
+  if (next) {
+    drawerEl.classList.remove('hidden')
+    const targetHeight = drawerEl.scrollHeight
+    drawerEl.style.height = '0px'
+    drawerEl.style.opacity = '0'
+    drawerEl.style.transform = 'translateY(-6px)'
+    drawerEl.style.overflow = 'hidden'
+
+    drawerAnimation = drawerEl.animate(
+      [
+        { height: '0px', opacity: 0, transform: 'translateY(-6px)' },
+        { height: `${targetHeight}px`, opacity: 1, transform: 'translateY(0px)' },
+      ],
+      { duration: 200, easing: 'cubic-bezier(0.2, 0, 0, 1)' }
+    )
+    drawerAnimation.onfinish = () => {
+      drawerAnimation = null
+      cleanup()
+    }
+    drawerAnimation.oncancel = () => {
+      drawerAnimation = null
+    }
+    return
+  }
+
+  const currentHeight = drawerEl.getBoundingClientRect().height
+  drawerEl.style.height = `${currentHeight}px`
+  drawerEl.style.opacity = '1'
+  drawerEl.style.transform = 'translateY(0px)'
+  drawerEl.style.overflow = 'hidden'
+
+  drawerAnimation = drawerEl.animate(
+    [
+      { height: `${currentHeight}px`, opacity: 1, transform: 'translateY(0px)' },
+      { height: '0px', opacity: 0, transform: 'translateY(-6px)' },
+    ],
+    { duration: 180, easing: 'cubic-bezier(0.4, 0, 0.2, 1)' }
+  )
+  drawerAnimation.onfinish = () => {
+    drawerAnimation = null
+    drawerEl.classList.add('hidden')
+    cleanup()
+  }
+  drawerAnimation.oncancel = () => {
+    drawerAnimation = null
+  }
 }
 
 summarizeBtn.addEventListener('click', () => send({ type: 'panel:summarize' }))
@@ -350,16 +660,6 @@ drawerToggleBtn.addEventListener('click', () => toggleDrawer())
 advancedBtn.addEventListener('click', () => send({ type: 'panel:openOptions' }))
 
 autoEl.addEventListener('change', () => send({ type: 'panel:setAuto', value: autoEl.checked }))
-modelEl.addEventListener('change', () =>
-  send({ type: 'panel:setModel', value: modelEl.value.trim() || 'auto' })
-)
-
-fontEl.addEventListener('change', () => {
-  void (async () => {
-    const next = await patchSettings({ fontFamily: fontEl.value })
-    applyTypography(next.fontFamily, next.fontSize)
-  })()
-})
 
 sizeEl.addEventListener('input', () => {
   void (async () => {
@@ -370,13 +670,29 @@ sizeEl.addEventListener('input', () => {
 
 void (async () => {
   const s = await loadSettings()
-  const fontFamily = ensureSelectValue(fontEl, s.fontFamily)
-  if (fontFamily !== s.fontFamily) await patchSettings({ fontFamily })
   sizeEl.value = String(s.fontSize)
-  modelEl.value = s.model
   autoEl.checked = s.autoSummarize
-  applyTypography(fontEl.value, s.fontSize)
-  toggleDrawer(false)
+  pickerSettings = {
+    scheme: s.colorScheme,
+    mode: s.colorMode,
+    fontFamily: s.fontFamily,
+    length: s.length,
+  }
+  pickers.update({
+    scheme: pickerSettings.scheme,
+    mode: pickerSettings.mode,
+    fontFamily: pickerSettings.fontFamily,
+    onSchemeChange: pickerHandlers.onSchemeChange,
+    onModeChange: pickerHandlers.onModeChange,
+    onFontChange: pickerHandlers.onFontChange,
+  })
+  lengthPicker.update({
+    length: pickerSettings.length,
+    onLengthChange: pickerHandlers.onLengthChange,
+  })
+  applyTypography(s.fontFamily, s.fontSize)
+  applyTheme({ scheme: s.colorScheme, mode: s.colorMode })
+  toggleDrawer(false, { animate: false })
   chrome.runtime.onMessage.addListener((msg: BgToPanel) => {
     handleBgMessage(msg)
   })
@@ -402,9 +718,12 @@ async function startStream(run: RunStart) {
   const controller = new AbortController()
   streamController = controller
   streaming = true
+  armProgress()
   streamedAnyNonWhitespace = false
   rememberedUrl = false
   currentSource = { url: run.url, title: run.title }
+  summaryFromCache = null
+  stopProgress()
 
   markdown = ''
   renderEl.innerHTML = ''
@@ -450,12 +769,21 @@ async function startStream(run: RunStart) {
           model?: string | null
           modelLabel?: string | null
           inputSummary?: string | null
+          summaryFromCache?: boolean | null
         }
         lastMeta = {
           model: typeof data.model === 'string' ? data.model : lastMeta.model,
           modelLabel: typeof data.modelLabel === 'string' ? data.modelLabel : lastMeta.modelLabel,
           inputSummary:
             typeof data.inputSummary === 'string' ? data.inputSummary : lastMeta.inputSummary,
+        }
+        if (typeof data.summaryFromCache === 'boolean') {
+          summaryFromCache = data.summaryFromCache
+          if (summaryFromCache) {
+            stopProgress()
+          } else if (streaming && !showProgress) {
+            armProgress()
+          }
         }
         setBaseSubtitle(
           buildIdleSubtitle({
@@ -475,15 +803,9 @@ async function startStream(run: RunStart) {
           detailsDetailed: string | null
           elapsedMs: number
         }
-        metricsEl.textContent = data.summary
-        const tooltipParts = [data.summaryDetailed, data.detailsDetailed, data.details]
-          .filter((p): p is string => typeof p === 'string' && p.trim().length > 0)
-          .slice(0, 2)
-        const tooltip = tooltipParts.join('\n')
-        if (tooltip) {
-          metricsEl.setAttribute('title', tooltip)
-          metricsEl.setAttribute('data-details', '1')
-        }
+        renderMetricsSummary(data.summary)
+        metricsEl.removeAttribute('title')
+        metricsEl.removeAttribute('data-details')
         metricsEl.classList.remove('hidden')
       } else if (msg.event === 'error') {
         const data = JSON.parse(msg.data) as { message: string }
@@ -503,6 +825,9 @@ async function startStream(run: RunStart) {
     const message = friendlyFetchError(err, 'Stream failed')
     setStatus(`Error: ${message}`)
   } finally {
-    if (streamController === controller) streaming = false
+    if (streamController === controller) {
+      streaming = false
+      stopProgress()
+    }
   }
 }

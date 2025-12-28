@@ -1,16 +1,23 @@
 import { randomUUID } from 'node:crypto'
 import http from 'node:http'
-
+import { loadSummarizeConfig } from '../config.js'
+import { createCacheStateFromConfig } from '../run/cache-state.js'
+import { formatModelLabelForDisplay } from '../run/finish-line.js'
 import { type DaemonRequestedMode, resolveAutoDaemonMode } from './auto-mode.js'
 import type { DaemonConfig } from './config.js'
 import { DAEMON_HOST, DAEMON_PORT_DEFAULT } from './constants.js'
+import { buildModelPickerOptions } from './models.js'
 import { streamSummaryForUrl, streamSummaryForVisiblePage } from './summarize.js'
-import { formatModelLabelForDisplay } from '../run/finish-line.js'
 
 type SessionEvent =
   | {
       event: 'meta'
-      data: { model: string | null; modelLabel: string | null; inputSummary: string | null }
+      data: {
+        model: string | null
+        modelLabel: string | null
+        inputSummary: string | null
+        summaryFromCache?: boolean | null
+      }
     }
   | { event: 'status'; data: { text: string } }
   | { event: 'chunk'; data: { text: string } }
@@ -33,7 +40,12 @@ type Session = {
   buffer: string[]
   done: boolean
   clients: Set<http.ServerResponse>
-  lastMeta: { model: string | null; modelLabel: string | null; inputSummary: string | null }
+  lastMeta: {
+    model: string | null
+    modelLabel: string | null
+    inputSummary: string | null
+    summaryFromCache: boolean | null
+  }
 }
 
 function json(
@@ -119,7 +131,7 @@ function createSession(): Session {
     buffer: [],
     done: false,
     clients: new Set(),
-    lastMeta: { model: null, modelLabel: null, inputSummary: null },
+    lastMeta: { model: null, modelLabel: null, inputSummary: null, summaryFromCache: null },
   }
 }
 
@@ -139,13 +151,19 @@ function pushToSession(session: Session, evt: SessionEvent) {
 
 function emitMeta(
   session: Session,
-  patch: Partial<{ model: string | null; modelLabel: string | null; inputSummary: string | null }>
+  patch: Partial<{
+    model: string | null
+    modelLabel: string | null
+    inputSummary: string | null
+    summaryFromCache: boolean | null
+  }>
 ) {
   const next = { ...session.lastMeta, ...patch }
   if (
     next.model === session.lastMeta.model &&
     next.modelLabel === session.lastMeta.modelLabel &&
-    next.inputSummary === session.lastMeta.inputSummary
+    next.inputSummary === session.lastMeta.inputSummary &&
+    next.summaryFromCache === session.lastMeta.summaryFromCache
   ) {
     return
   }
@@ -171,6 +189,14 @@ export async function runDaemonServer({
   config: DaemonConfig
   port?: number
 }): Promise<void> {
+  const { config: summarizeConfig } = loadSummarizeConfig({ env })
+  const cacheState = await createCacheStateFromConfig({
+    envForRun: env,
+    config: summarizeConfig,
+    noCacheFlag: false,
+    transcriptNamespace: 'yt:auto',
+  })
+
   const sessions = new Map<string, Session>()
 
   const server = http.createServer((req, res) => {
@@ -201,6 +227,17 @@ export async function runDaemonServer({
 
       if (req.method === 'GET' && pathname === '/v1/ping') {
         json(res, 200, { ok: true }, cors)
+        return
+      }
+
+      if (req.method === 'GET' && pathname === '/v1/models') {
+        const result = await buildModelPickerOptions({
+          env,
+          envForRun: env,
+          configForCli: summarizeConfig,
+          fetchImpl,
+        })
+        json(res, 200, result, cors)
         return
       }
 
@@ -260,15 +297,25 @@ export async function runDaemonServer({
               onModelChosen: (modelId: string) => {
                 if (session.lastMeta.model === modelId) return
                 emittedOutput = true
-                emitMeta(session, { model: modelId, modelLabel: formatModelLabelForDisplay(modelId) })
+                emitMeta(session, {
+                  model: modelId,
+                  modelLabel: formatModelLabelForDisplay(modelId),
+                })
               },
               writeStatus: (text: string) => {
                 const clean = text.trim()
                 if (!clean) return
                 pushToSession(session, { event: 'status', data: { text: clean } })
               },
-              writeMeta: (data: { inputSummary: string | null }) => {
-                emitMeta(session, { inputSummary: data.inputSummary ?? null })
+              writeMeta: (data: {
+                inputSummary?: string | null
+                summaryFromCache?: boolean | null
+              }) => {
+                emitMeta(session, {
+                  inputSummary: typeof data.inputSummary === 'string' ? data.inputSummary : null,
+                  summaryFromCache:
+                    typeof data.summaryFromCache === 'boolean' ? data.summaryFromCache : null,
+                })
               },
             }
 
@@ -286,6 +333,7 @@ export async function runDaemonServer({
                     languageRaw,
                     input: { url: pageUrl, title, maxCharacters },
                     sink,
+                    cache: cacheState,
                   })
                 : await streamSummaryForVisiblePage({
                     env,
@@ -296,6 +344,7 @@ export async function runDaemonServer({
                     languageRaw,
                     input: { url: pageUrl, title, text: textContent, truncated },
                     sink,
+                    cache: cacheState,
                   })
             }
 
@@ -406,16 +455,20 @@ export async function runDaemonServer({
     })
   })
 
-  await new Promise<void>((resolve, reject) => {
-    server.once('error', reject)
-    server.listen(port, DAEMON_HOST, () => resolve())
-  })
+  try {
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject)
+      server.listen(port, DAEMON_HOST, () => resolve())
+    })
 
-  await new Promise<void>((resolve) => {
-    const onSignal = () => {
-      server.close(() => resolve())
-    }
-    process.once('SIGTERM', onSignal)
-    process.once('SIGINT', onSignal)
-  })
+    await new Promise<void>((resolve) => {
+      const onSignal = () => {
+        server.close(() => resolve())
+      }
+      process.once('SIGTERM', onSignal)
+      process.once('SIGINT', onSignal)
+    })
+  } finally {
+    cacheState.store?.close()
+  }
 }

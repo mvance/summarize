@@ -1,7 +1,16 @@
 import { countTokens } from 'gpt-tokenizer'
 import { render as renderMarkdownAnsi } from 'markdansi'
+import {
+  buildLanguageKey,
+  buildLengthKey,
+  buildPromptHash,
+  buildSummaryCacheKey,
+  hashString,
+  normalizeContentForHash,
+} from '../../../cache.js'
 import type { ExtractedLinkContent } from '../../../content/index.js'
 import { formatOutputLanguageForJson } from '../../../language.js'
+import { parseGatewayStyleModelId } from '../../../llm/model-id.js'
 import { buildAutoModelAttempts } from '../../../model-auto.js'
 import { buildLinkSummaryPrompt } from '../../../prompts/index.js'
 import { parseCliUserModelId } from '../../env.js'
@@ -28,8 +37,8 @@ export function buildUrlPrompt({
   languageInstruction,
 }: {
   extracted: ExtractedLinkContent
-  outputLanguage: UrlFlowContext['outputLanguage']
-  lengthArg: UrlFlowContext['lengthArg']
+  outputLanguage: UrlFlowContext['flags']['outputLanguage']
+  lengthArg: UrlFlowContext['flags']['lengthArg']
   promptOverride?: string | null
   lengthInstruction?: string | null
   languageInstruction?: string | null
@@ -41,7 +50,7 @@ export function buildUrlPrompt({
     siteName: extracted.siteName,
     description: extracted.description,
     content: extracted.content,
-    truncated: false,
+    truncated: extracted.truncated,
     hasTranscript:
       isYouTube ||
       (extracted.transcriptSource !== null && extracted.transcriptSource !== 'unavailable'),
@@ -71,7 +80,10 @@ const buildFinishExtras = ({
   return parts.length > 0 ? parts : null
 }
 
-const pickModelForFinishLine = (llmCalls: UrlFlowContext['llmCalls'], fallback: string | null) => {
+const pickModelForFinishLine = (
+  llmCalls: UrlFlowContext['model']['llmCalls'],
+  fallback: string | null
+) => {
   const findLastModel = (purpose: (typeof llmCalls)[number]['purpose']): string | null => {
     for (let i = llmCalls.length - 1; i >= 0; i -= 1) {
       const call = llmCalls[i]
@@ -86,6 +98,17 @@ const pickModelForFinishLine = (llmCalls: UrlFlowContext['llmCalls'], fallback: 
     (llmCalls.length > 0 ? (llmCalls[llmCalls.length - 1]?.model ?? null) : null) ??
     fallback
   )
+}
+
+const buildModelMetaFromAttempt = (attempt: ModelAttempt) => {
+  if (attempt.transport === 'cli') {
+    return { provider: 'cli' as const, canonical: attempt.userModelId }
+  }
+  const parsed = parseGatewayStyleModelId(attempt.llmModelId ?? attempt.userModelId)
+  const canonical = attempt.userModelId.toLowerCase().startsWith('openrouter/')
+    ? attempt.userModelId
+    : parsed.canonical
+  return { provider: parsed.provider, canonical }
 }
 
 export async function outputExtractedUrl({
@@ -105,107 +128,109 @@ export async function outputExtractedUrl({
   effectiveMarkdownMode: 'off' | 'auto' | 'llm' | 'readability'
   transcriptionCostLabel: string | null
 }) {
-  ctx.clearProgressForStdout()
+  const { io, flags, model, hooks } = ctx
+
+  hooks.clearProgressForStdout()
   const finishLabel = buildExtractFinishLabel({
     extracted: { diagnostics: extracted.diagnostics },
-    format: ctx.format,
+    format: flags.format,
     markdownMode: effectiveMarkdownMode,
-    hasMarkdownLlmCall: ctx.llmCalls.some((call) => call.purpose === 'markdown'),
+    hasMarkdownLlmCall: model.llmCalls.some((call) => call.purpose === 'markdown'),
   })
-  const finishModel = pickModelForFinishLine(ctx.llmCalls, null)
+  const finishModel = pickModelForFinishLine(model.llmCalls, null)
 
-  if (ctx.json) {
-    const finishReport = ctx.shouldComputeReport ? await ctx.buildReport() : null
+  if (flags.json) {
+    const finishReport = flags.shouldComputeReport ? await hooks.buildReport() : null
     const payload = {
       input: {
         kind: 'url' as const,
         url,
-        timeoutMs: ctx.timeoutMs,
-        youtube: ctx.youtubeMode,
-        firecrawl: ctx.firecrawlMode,
-        format: ctx.format,
+        timeoutMs: flags.timeoutMs,
+        youtube: flags.youtubeMode,
+        firecrawl: flags.firecrawlMode,
+        format: flags.format,
         markdown: effectiveMarkdownMode,
         length:
-          ctx.lengthArg.kind === 'preset'
-            ? { kind: 'preset' as const, preset: ctx.lengthArg.preset }
-            : { kind: 'chars' as const, maxCharacters: ctx.lengthArg.maxCharacters },
-        maxOutputTokens: ctx.maxOutputTokensArg,
-        model: ctx.requestedModelLabel,
-        language: formatOutputLanguageForJson(ctx.outputLanguage),
+          flags.lengthArg.kind === 'preset'
+            ? { kind: 'preset' as const, preset: flags.lengthArg.preset }
+            : { kind: 'chars' as const, maxCharacters: flags.lengthArg.maxCharacters },
+        maxOutputTokens: flags.maxOutputTokensArg,
+        model: model.requestedModelLabel,
+        language: formatOutputLanguageForJson(flags.outputLanguage),
       },
       env: {
-        hasXaiKey: Boolean(ctx.apiStatus.xaiApiKey),
-        hasOpenAIKey: Boolean(ctx.apiStatus.apiKey),
-        hasOpenRouterKey: Boolean(ctx.apiStatus.openrouterApiKey),
-        hasApifyToken: Boolean(ctx.apiStatus.apifyToken),
-        hasFirecrawlKey: ctx.apiStatus.firecrawlConfigured,
-        hasGoogleKey: ctx.apiStatus.googleConfigured,
-        hasAnthropicKey: ctx.apiStatus.anthropicConfigured,
+        hasXaiKey: Boolean(model.apiStatus.xaiApiKey),
+        hasOpenAIKey: Boolean(model.apiStatus.apiKey),
+        hasOpenRouterKey: Boolean(model.apiStatus.openrouterApiKey),
+        hasApifyToken: Boolean(model.apiStatus.apifyToken),
+        hasFirecrawlKey: model.apiStatus.firecrawlConfigured,
+        hasGoogleKey: model.apiStatus.googleConfigured,
+        hasAnthropicKey: model.apiStatus.anthropicConfigured,
       },
       extracted,
       prompt,
       llm: null,
-      metrics: ctx.metricsEnabled ? finishReport : null,
+      metrics: flags.metricsEnabled ? finishReport : null,
       summary: null,
     }
-    ctx.stdout.write(`${JSON.stringify(payload, null, 2)}\n`)
-    if (ctx.metricsEnabled && finishReport) {
-      const costUsd = await ctx.estimateCostUsd()
+    io.stdout.write(`${JSON.stringify(payload, null, 2)}\n`)
+    if (flags.metricsEnabled && finishReport) {
+      const costUsd = await hooks.estimateCostUsd()
       writeFinishLine({
-        stderr: ctx.stderr,
-        elapsedMs: Date.now() - ctx.runStartedAtMs,
+        stderr: io.stderr,
+        elapsedMs: Date.now() - flags.runStartedAtMs,
         label: finishLabel,
         model: finishModel,
         report: finishReport,
         costUsd,
-        detailed: ctx.metricsDetailed,
+        detailed: flags.metricsDetailed,
         extraParts: buildFinishExtras({
           extracted,
-          metricsDetailed: ctx.metricsDetailed,
+          metricsDetailed: flags.metricsDetailed,
           transcriptionCostLabel,
         }),
-        color: ctx.verboseColor,
+        color: flags.verboseColor,
       })
     }
     return
   }
 
   const renderedExtract =
-    ctx.format === 'markdown' && !ctx.plain && isRichTty(ctx.stdout)
+    flags.format === 'markdown' && !flags.plain && isRichTty(io.stdout)
       ? renderMarkdownAnsi(prepareMarkdownForTerminal(extracted.content), {
-          width: markdownRenderWidth(ctx.stdout, ctx.env),
+          width: markdownRenderWidth(io.stdout, io.env),
           wrap: true,
-          color: supportsColor(ctx.stdout, ctx.envForRun),
+          color: supportsColor(io.stdout, io.envForRun),
           hyperlinks: true,
         })
       : extracted.content
 
-  if (ctx.format === 'markdown' && !ctx.plain && isRichTty(ctx.stdout)) {
-    ctx.stdout.write(`\n${renderedExtract.replace(/^\n+/, '')}`)
+  if (flags.format === 'markdown' && !flags.plain && isRichTty(io.stdout)) {
+    io.stdout.write(`\n${renderedExtract.replace(/^\n+/, '')}`)
   } else {
-    ctx.stdout.write(renderedExtract)
+    io.stdout.write(renderedExtract)
   }
   if (!renderedExtract.endsWith('\n')) {
-    ctx.stdout.write('\n')
+    io.stdout.write('\n')
   }
-  ctx.writeViaFooter(extractionUi.footerParts)
-  const report = ctx.shouldComputeReport ? await ctx.buildReport() : null
-  if (ctx.metricsEnabled && report) {
-    const costUsd = await ctx.estimateCostUsd()
+  hooks.writeViaFooter(extractionUi.footerParts)
+  const report = flags.shouldComputeReport ? await hooks.buildReport() : null
+  if (flags.metricsEnabled && report) {
+    const costUsd = await hooks.estimateCostUsd()
     writeFinishLine({
-      stderr: ctx.stderr,
-      elapsedMs: Date.now() - ctx.runStartedAtMs,
+      stderr: io.stderr,
+      elapsedMs: Date.now() - flags.runStartedAtMs,
       label: finishLabel,
       model: finishModel,
       report,
       costUsd,
-      detailed: ctx.metricsDetailed,
+      detailed: flags.metricsDetailed,
       extraParts: buildFinishExtras({
         extracted,
-        metricsDetailed: ctx.metricsDetailed,
+        metricsDetailed: flags.metricsDetailed,
         transcriptionCostLabel,
       }),
-      color: ctx.verboseColor,
+      color: flags.verboseColor,
     })
   }
 }
@@ -229,126 +254,185 @@ export async function summarizeExtractedUrl({
   transcriptionCostLabel: string | null
   onModelChosen?: ((modelId: string) => void) | null
 }) {
+  const { io, flags, model, cache: cacheState, hooks } = ctx
+
   const promptTokens = countTokens(prompt)
   const kindForAuto = extracted.siteName === 'YouTube' ? ('youtube' as const) : ('website' as const)
 
   const attempts: ModelAttempt[] = await (async () => {
-    if (ctx.isFallbackModel) {
-      const catalog = await ctx.getLiteLlmCatalog()
+    if (model.isFallbackModel) {
+      const catalog = await model.getLiteLlmCatalog()
       const list = buildAutoModelAttempts({
         kind: kindForAuto,
         promptTokens,
-        desiredOutputTokens: ctx.desiredOutputTokens,
+        desiredOutputTokens: model.desiredOutputTokens,
         requiresVideoUnderstanding: false,
-        env: ctx.envForAuto,
-        config: ctx.configForModelSelection,
+        env: model.envForAuto,
+        config: model.configForModelSelection,
         catalog,
         openrouterProvidersFromEnv: null,
-        cliAvailability: ctx.cliAvailability,
+        cliAvailability: model.cliAvailability,
       })
-      if (ctx.verbose) {
+      if (flags.verbose) {
         for (const attempt of list.slice(0, 8)) {
-          writeVerbose(ctx.stderr, ctx.verbose, `auto candidate ${attempt.debug}`, ctx.verboseColor)
+          writeVerbose(
+            io.stderr,
+            flags.verbose,
+            `auto candidate ${attempt.debug}`,
+            flags.verboseColor
+          )
         }
       }
       return list.map((attempt) => {
         if (attempt.transport !== 'cli')
-          return ctx.summaryEngine.applyZaiOverrides(attempt as ModelAttempt)
+          return model.summaryEngine.applyZaiOverrides(attempt as ModelAttempt)
         const parsed = parseCliUserModelId(attempt.userModelId)
         return { ...attempt, cliProvider: parsed.provider, cliModel: parsed.model }
       })
     }
     /* v8 ignore next */
-    if (!ctx.fixedModelSpec) {
+    if (!model.fixedModelSpec) {
       throw new Error('Internal error: missing fixed model spec')
     }
-    if (ctx.fixedModelSpec.transport === 'cli') {
+    if (model.fixedModelSpec.transport === 'cli') {
       return [
         {
           transport: 'cli',
-          userModelId: ctx.fixedModelSpec.userModelId,
+          userModelId: model.fixedModelSpec.userModelId,
           llmModelId: null,
-          cliProvider: ctx.fixedModelSpec.cliProvider,
-          cliModel: ctx.fixedModelSpec.cliModel,
+          cliProvider: model.fixedModelSpec.cliProvider,
+          cliModel: model.fixedModelSpec.cliModel,
           openrouterProviders: null,
           forceOpenRouter: false,
-          requiredEnv: ctx.fixedModelSpec.requiredEnv,
+          requiredEnv: model.fixedModelSpec.requiredEnv,
         },
       ]
     }
     const openaiOverrides =
-      ctx.fixedModelSpec.requiredEnv === 'Z_AI_API_KEY'
+      model.fixedModelSpec.requiredEnv === 'Z_AI_API_KEY'
         ? {
-            openaiApiKeyOverride: ctx.apiStatus.zaiApiKey,
-            openaiBaseUrlOverride: ctx.apiStatus.zaiBaseUrl,
+            openaiApiKeyOverride: model.apiStatus.zaiApiKey,
+            openaiBaseUrlOverride: model.apiStatus.zaiBaseUrl,
             forceChatCompletions: true,
           }
         : {}
     return [
       {
-        transport: ctx.fixedModelSpec.transport === 'openrouter' ? 'openrouter' : 'native',
-        userModelId: ctx.fixedModelSpec.userModelId,
-        llmModelId: ctx.fixedModelSpec.llmModelId,
-        openrouterProviders: ctx.fixedModelSpec.openrouterProviders,
-        forceOpenRouter: ctx.fixedModelSpec.forceOpenRouter,
-        requiredEnv: ctx.fixedModelSpec.requiredEnv,
+        transport: model.fixedModelSpec.transport === 'openrouter' ? 'openrouter' : 'native',
+        userModelId: model.fixedModelSpec.userModelId,
+        llmModelId: model.fixedModelSpec.llmModelId,
+        openrouterProviders: model.fixedModelSpec.openrouterProviders,
+        forceOpenRouter: model.fixedModelSpec.forceOpenRouter,
+        requiredEnv: model.fixedModelSpec.requiredEnv,
         ...openaiOverrides,
       },
     ]
   })()
 
-  const attemptOutcome = await runModelAttempts({
-    attempts,
-    isFallbackModel: ctx.isFallbackModel,
-    isNamedModelSelection: ctx.isNamedModelSelection,
-    envHasKeyFor: ctx.summaryEngine.envHasKeyFor,
-    formatMissingModelError: ctx.summaryEngine.formatMissingModelError,
-    onAutoSkip: (attempt) => {
-      writeVerbose(
-        ctx.stderr,
-        ctx.verbose,
-        `auto skip ${attempt.userModelId}: missing ${attempt.requiredEnv}`,
-        ctx.verboseColor
-      )
-    },
-    onAutoFailure: (attempt, error) => {
-      writeVerbose(
-        ctx.stderr,
-        ctx.verbose,
-        `auto failed ${attempt.userModelId}: ${error instanceof Error ? error.message : String(error)}`,
-        ctx.verboseColor
-      )
-    },
-    onFixedModelError: (_attempt, error) => {
-      throw error
-    },
-    runAttempt: (attempt) =>
-      ctx.summaryEngine.runSummaryAttempt({
-        attempt,
-        prompt,
-        allowStreaming: ctx.streamingEnabled,
-        onModelChosen: onModelChosen ?? null,
-      }),
-  })
-  const summaryResult = attemptOutcome.result
-  const usedAttempt = attemptOutcome.usedAttempt
-  const { lastError, missingRequiredEnvs, sawOpenRouterNoAllowedProviders } = attemptOutcome
+  const cacheStore = cacheState.mode === 'default' ? cacheState.store : null
+  const contentHash = cacheStore ? hashString(normalizeContentForHash(extracted.content)) : null
+  const promptHash = cacheStore ? buildPromptHash(prompt) : null
+  const lengthKey = buildLengthKey(flags.lengthArg)
+  const languageKey = buildLanguageKey(flags.outputLanguage)
+
+  let summaryResult: Awaited<ReturnType<typeof model.summaryEngine.runSummaryAttempt>> | null = null
+  let usedAttempt: ModelAttempt | null = null
+  let summaryFromCache = false
+  let cacheChecked = false
+
+  if (cacheStore && contentHash && promptHash) {
+    cacheChecked = true
+    for (const attempt of attempts) {
+      if (!model.summaryEngine.envHasKeyFor(attempt.requiredEnv)) continue
+      const key = buildSummaryCacheKey({
+        contentHash,
+        promptHash,
+        model: attempt.userModelId,
+        lengthKey,
+        languageKey,
+      })
+      const cached = cacheStore.getText('summary', key)
+      if (!cached) continue
+      writeVerbose(io.stderr, flags.verbose, 'cache hit summary', flags.verboseColor)
+      onModelChosen?.(attempt.userModelId)
+      summaryResult = {
+        summary: cached,
+        summaryAlreadyPrinted: false,
+        modelMeta: buildModelMetaFromAttempt(attempt),
+        maxOutputTokensForCall: null,
+      }
+      usedAttempt = attempt
+      summaryFromCache = true
+      break
+    }
+  }
+  if (cacheChecked && !summaryFromCache) {
+    writeVerbose(io.stderr, flags.verbose, 'cache miss summary', flags.verboseColor)
+  }
+  ctx.hooks.onSummaryCached?.(summaryFromCache)
+
+  let lastError: unknown = null
+  let missingRequiredEnvs = new Set<ModelAttempt['requiredEnv']>()
+  let sawOpenRouterNoAllowedProviders = false
+
+  if (!summaryResult || !usedAttempt) {
+    const attemptOutcome = await runModelAttempts({
+      attempts,
+      isFallbackModel: model.isFallbackModel,
+      isNamedModelSelection: model.isNamedModelSelection,
+      envHasKeyFor: model.summaryEngine.envHasKeyFor,
+      formatMissingModelError: model.summaryEngine.formatMissingModelError,
+      onAutoSkip: (attempt) => {
+        writeVerbose(
+          io.stderr,
+          flags.verbose,
+          `auto skip ${attempt.userModelId}: missing ${attempt.requiredEnv}`,
+          flags.verboseColor
+        )
+      },
+      onAutoFailure: (attempt, error) => {
+        writeVerbose(
+          io.stderr,
+          flags.verbose,
+          `auto failed ${attempt.userModelId}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+          flags.verboseColor
+        )
+      },
+      onFixedModelError: (_attempt, error) => {
+        throw error
+      },
+      runAttempt: (attempt) =>
+        model.summaryEngine.runSummaryAttempt({
+          attempt,
+          prompt,
+          allowStreaming: flags.streamingEnabled,
+          onModelChosen: onModelChosen ?? null,
+        }),
+    })
+    summaryResult = attemptOutcome.result
+    usedAttempt = attemptOutcome.usedAttempt
+    lastError = attemptOutcome.lastError
+    missingRequiredEnvs = attemptOutcome.missingRequiredEnvs
+    sawOpenRouterNoAllowedProviders = attemptOutcome.sawOpenRouterNoAllowedProviders
+  }
 
   if (!summaryResult || !usedAttempt) {
     // Auto mode: surface raw extracted content when no model can run.
     const withFreeTip = (message: string) => {
-      if (!ctx.isNamedModelSelection || !ctx.wantsFreeNamedModel) return message
+      if (!model.isNamedModelSelection || !model.wantsFreeNamedModel) return message
       return (
         `${message}\n` +
         `Tip: run "summarize refresh-free" to refresh the free model candidates (writes ~/.summarize/config.json).`
       )
     }
 
-    if (ctx.isNamedModelSelection) {
+    if (model.isNamedModelSelection) {
       if (lastError === null && missingRequiredEnvs.size > 0) {
         throw new Error(
           withFreeTip(
-            `Missing ${Array.from(missingRequiredEnvs).sort().join(', ')} for --model ${ctx.requestedModelInput}.`
+            `Missing ${Array.from(missingRequiredEnvs).sort().join(', ')} for --model ${model.requestedModelInput}.`
           )
         )
       }
@@ -356,116 +440,128 @@ export async function summarizeExtractedUrl({
         if (sawOpenRouterNoAllowedProviders) {
           const message = await buildOpenRouterNoAllowedProvidersMessage({
             attempts,
-            fetchImpl: ctx.trackedFetch,
-            timeoutMs: ctx.timeoutMs,
+            fetchImpl: io.fetch,
+            timeoutMs: flags.timeoutMs,
           })
           throw new Error(withFreeTip(message), { cause: lastError })
         }
         throw new Error(withFreeTip(lastError.message), { cause: lastError })
       }
-      throw new Error(withFreeTip(`No model available for --model ${ctx.requestedModelInput}`))
+      throw new Error(withFreeTip(`No model available for --model ${model.requestedModelInput}`))
     }
-    ctx.clearProgressForStdout()
-    if (ctx.json) {
-      const finishReport = ctx.shouldComputeReport ? await ctx.buildReport() : null
-      const finishModel = pickModelForFinishLine(ctx.llmCalls, null)
+    hooks.clearProgressForStdout()
+    if (flags.json) {
+      const finishReport = flags.shouldComputeReport ? await hooks.buildReport() : null
+      const finishModel = pickModelForFinishLine(model.llmCalls, null)
       const payload = {
         input: {
           kind: 'url' as const,
           url,
-          timeoutMs: ctx.timeoutMs,
-          youtube: ctx.youtubeMode,
-          firecrawl: ctx.firecrawlMode,
-          format: ctx.format,
+          timeoutMs: flags.timeoutMs,
+          youtube: flags.youtubeMode,
+          firecrawl: flags.firecrawlMode,
+          format: flags.format,
           markdown: effectiveMarkdownMode,
           length:
-            ctx.lengthArg.kind === 'preset'
-              ? { kind: 'preset' as const, preset: ctx.lengthArg.preset }
-              : { kind: 'chars' as const, maxCharacters: ctx.lengthArg.maxCharacters },
-          maxOutputTokens: ctx.maxOutputTokensArg,
-          model: ctx.requestedModelLabel,
-          language: formatOutputLanguageForJson(ctx.outputLanguage),
+            flags.lengthArg.kind === 'preset'
+              ? { kind: 'preset' as const, preset: flags.lengthArg.preset }
+              : { kind: 'chars' as const, maxCharacters: flags.lengthArg.maxCharacters },
+          maxOutputTokens: flags.maxOutputTokensArg,
+          model: model.requestedModelLabel,
+          language: formatOutputLanguageForJson(flags.outputLanguage),
         },
         env: {
-          hasXaiKey: Boolean(ctx.apiStatus.xaiApiKey),
-          hasOpenAIKey: Boolean(ctx.apiStatus.apiKey),
-          hasOpenRouterKey: Boolean(ctx.apiStatus.openrouterApiKey),
-          hasApifyToken: Boolean(ctx.apiStatus.apifyToken),
-          hasFirecrawlKey: ctx.apiStatus.firecrawlConfigured,
-          hasGoogleKey: ctx.apiStatus.googleConfigured,
-          hasAnthropicKey: ctx.apiStatus.anthropicConfigured,
+          hasXaiKey: Boolean(model.apiStatus.xaiApiKey),
+          hasOpenAIKey: Boolean(model.apiStatus.apiKey),
+          hasOpenRouterKey: Boolean(model.apiStatus.openrouterApiKey),
+          hasApifyToken: Boolean(model.apiStatus.apifyToken),
+          hasFirecrawlKey: model.apiStatus.firecrawlConfigured,
+          hasGoogleKey: model.apiStatus.googleConfigured,
+          hasAnthropicKey: model.apiStatus.anthropicConfigured,
         },
         extracted,
         prompt,
         llm: null,
-        metrics: ctx.metricsEnabled ? finishReport : null,
+        metrics: flags.metricsEnabled ? finishReport : null,
         summary: extracted.content,
       }
-      ctx.stdout.write(`${JSON.stringify(payload, null, 2)}\n`)
-      if (ctx.metricsEnabled && finishReport) {
-        const costUsd = await ctx.estimateCostUsd()
+      io.stdout.write(`${JSON.stringify(payload, null, 2)}\n`)
+      if (flags.metricsEnabled && finishReport) {
+        const costUsd = await hooks.estimateCostUsd()
         writeFinishLine({
-          stderr: ctx.stderr,
-          elapsedMs: Date.now() - ctx.runStartedAtMs,
+          stderr: io.stderr,
+          elapsedMs: Date.now() - flags.runStartedAtMs,
           label: extractionUi.finishSourceLabel,
           model: finishModel,
           report: finishReport,
           costUsd,
-          detailed: ctx.metricsDetailed,
+          detailed: flags.metricsDetailed,
           extraParts: buildFinishExtras({
             extracted,
-            metricsDetailed: ctx.metricsDetailed,
+            metricsDetailed: flags.metricsDetailed,
             transcriptionCostLabel,
           }),
-          color: ctx.verboseColor,
+          color: flags.verboseColor,
         })
       }
       return
     }
-    ctx.stdout.write(`${extracted.content}\n`)
+    io.stdout.write(`${extracted.content}\n`)
     if (extractionUi.footerParts.length > 0) {
-      ctx.writeViaFooter([...extractionUi.footerParts, 'no model'])
+      hooks.writeViaFooter([...extractionUi.footerParts, 'no model'])
     }
-    if (lastError instanceof Error && ctx.verbose) {
+    if (lastError instanceof Error && flags.verbose) {
       writeVerbose(
-        ctx.stderr,
-        ctx.verbose,
+        io.stderr,
+        flags.verbose,
         `auto failed all models: ${lastError.message}`,
-        ctx.verboseColor
+        flags.verboseColor
       )
     }
     return
   }
 
+  if (!summaryFromCache && cacheStore && contentHash && promptHash) {
+    const key = buildSummaryCacheKey({
+      contentHash,
+      promptHash,
+      model: usedAttempt.userModelId,
+      lengthKey,
+      languageKey,
+    })
+    cacheStore.setText('summary', key, summaryResult.summary, cacheState.ttlMs)
+    writeVerbose(io.stderr, flags.verbose, 'cache write summary', flags.verboseColor)
+  }
+
   const { summary, summaryAlreadyPrinted, modelMeta, maxOutputTokensForCall } = summaryResult
 
-  if (ctx.json) {
-    const finishReport = ctx.shouldComputeReport ? await ctx.buildReport() : null
+  if (flags.json) {
+    const finishReport = flags.shouldComputeReport ? await hooks.buildReport() : null
     const payload = {
       input: {
         kind: 'url' as const,
         url,
-        timeoutMs: ctx.timeoutMs,
-        youtube: ctx.youtubeMode,
-        firecrawl: ctx.firecrawlMode,
-        format: ctx.format,
+        timeoutMs: flags.timeoutMs,
+        youtube: flags.youtubeMode,
+        firecrawl: flags.firecrawlMode,
+        format: flags.format,
         markdown: effectiveMarkdownMode,
         length:
-          ctx.lengthArg.kind === 'preset'
-            ? { kind: 'preset' as const, preset: ctx.lengthArg.preset }
-            : { kind: 'chars' as const, maxCharacters: ctx.lengthArg.maxCharacters },
-        maxOutputTokens: ctx.maxOutputTokensArg,
-        model: ctx.requestedModelLabel,
-        language: formatOutputLanguageForJson(ctx.outputLanguage),
+          flags.lengthArg.kind === 'preset'
+            ? { kind: 'preset' as const, preset: flags.lengthArg.preset }
+            : { kind: 'chars' as const, maxCharacters: flags.lengthArg.maxCharacters },
+        maxOutputTokens: flags.maxOutputTokensArg,
+        model: model.requestedModelLabel,
+        language: formatOutputLanguageForJson(flags.outputLanguage),
       },
       env: {
-        hasXaiKey: Boolean(ctx.apiStatus.xaiApiKey),
-        hasOpenAIKey: Boolean(ctx.apiStatus.apiKey),
-        hasOpenRouterKey: Boolean(ctx.apiStatus.openrouterApiKey),
-        hasApifyToken: Boolean(ctx.apiStatus.apifyToken),
-        hasFirecrawlKey: ctx.apiStatus.firecrawlConfigured,
-        hasGoogleKey: ctx.apiStatus.googleConfigured,
-        hasAnthropicKey: ctx.apiStatus.anthropicConfigured,
+        hasXaiKey: Boolean(model.apiStatus.xaiApiKey),
+        hasOpenAIKey: Boolean(model.apiStatus.apiKey),
+        hasOpenRouterKey: Boolean(model.apiStatus.openrouterApiKey),
+        hasApifyToken: Boolean(model.apiStatus.apifyToken),
+        hasFirecrawlKey: model.apiStatus.firecrawlConfigured,
+        hasGoogleKey: model.apiStatus.googleConfigured,
+        hasAnthropicKey: model.apiStatus.anthropicConfigured,
       },
       extracted,
       prompt,
@@ -475,71 +571,73 @@ export async function summarizeExtractedUrl({
         maxCompletionTokens: maxOutputTokensForCall,
         strategy: 'single' as const,
       },
-      metrics: ctx.metricsEnabled ? finishReport : null,
+      metrics: flags.metricsEnabled ? finishReport : null,
       summary,
     }
-    ctx.stdout.write(`${JSON.stringify(payload, null, 2)}\n`)
-    if (ctx.metricsEnabled && finishReport) {
-      const costUsd = await ctx.estimateCostUsd()
+    io.stdout.write(`${JSON.stringify(payload, null, 2)}\n`)
+    if (flags.metricsEnabled && finishReport) {
+      const costUsd = await hooks.estimateCostUsd()
       writeFinishLine({
-        stderr: ctx.stderr,
-        elapsedMs: Date.now() - ctx.runStartedAtMs,
+        stderr: io.stderr,
+        elapsedMs: Date.now() - flags.runStartedAtMs,
+        elapsedLabel: summaryFromCache ? 'Cached' : null,
         label: extractionUi.finishSourceLabel,
         model: usedAttempt.userModelId,
         report: finishReport,
         costUsd,
-        detailed: ctx.metricsDetailed,
+        detailed: flags.metricsDetailed,
         extraParts: buildFinishExtras({
           extracted,
-          metricsDetailed: ctx.metricsDetailed,
+          metricsDetailed: flags.metricsDetailed,
           transcriptionCostLabel,
         }),
-        color: ctx.verboseColor,
+        color: flags.verboseColor,
       })
     }
     return
   }
 
   if (!summaryAlreadyPrinted) {
-    ctx.clearProgressForStdout()
+    hooks.clearProgressForStdout()
     const rendered =
-      !ctx.plain && isRichTty(ctx.stdout)
+      !flags.plain && isRichTty(io.stdout)
         ? renderMarkdownAnsi(prepareMarkdownForTerminal(summary), {
-            width: markdownRenderWidth(ctx.stdout, ctx.env),
+            width: markdownRenderWidth(io.stdout, io.env),
             wrap: true,
-            color: supportsColor(ctx.stdout, ctx.envForRun),
+            color: supportsColor(io.stdout, io.envForRun),
             hyperlinks: true,
           })
         : summary
 
-    if (!ctx.plain && isRichTty(ctx.stdout)) {
-      ctx.stdout.write(`\n${rendered.replace(/^\n+/, '')}`)
+    if (!flags.plain && isRichTty(io.stdout)) {
+      io.stdout.write(`\n${rendered.replace(/^\n+/, '')}`)
     } else {
-      if (isRichTty(ctx.stdout)) ctx.stdout.write('\n')
-      ctx.stdout.write(rendered.replace(/^\n+/, ''))
+      if (isRichTty(io.stdout)) io.stdout.write('\n')
+      io.stdout.write(rendered.replace(/^\n+/, ''))
     }
     if (!rendered.endsWith('\n')) {
-      ctx.stdout.write('\n')
+      io.stdout.write('\n')
     }
   }
 
-  const report = ctx.shouldComputeReport ? await ctx.buildReport() : null
-  if (ctx.metricsEnabled && report) {
-    const costUsd = await ctx.estimateCostUsd()
+  const report = flags.shouldComputeReport ? await hooks.buildReport() : null
+  if (flags.metricsEnabled && report) {
+    const costUsd = await hooks.estimateCostUsd()
     writeFinishLine({
-      stderr: ctx.stderr,
-      elapsedMs: Date.now() - ctx.runStartedAtMs,
+      stderr: io.stderr,
+      elapsedMs: Date.now() - flags.runStartedAtMs,
+      elapsedLabel: summaryFromCache ? 'Cached' : null,
       label: extractionUi.finishSourceLabel,
       model: modelMeta.canonical,
       report,
       costUsd,
-      detailed: ctx.metricsDetailed,
+      detailed: flags.metricsDetailed,
       extraParts: buildFinishExtras({
         extracted,
-        metricsDetailed: ctx.metricsDetailed,
+        metricsDetailed: flags.metricsDetailed,
         transcriptionCostLabel,
       }),
-      color: ctx.verboseColor,
+      color: flags.verboseColor,
     })
   }
 }

@@ -1,7 +1,7 @@
 import type { OutputLanguage } from '../language.js'
 import { formatOutputLanguageInstruction } from '../language.js'
-import type { SummaryLengthTarget } from './link-summary.js'
 import { buildInstructions, buildTaggedPrompt, type PromptOverrides } from './format.js'
+import type { SummaryLengthTarget } from './link-summary.js'
 
 export function buildFileSummaryPrompt({
   filename,

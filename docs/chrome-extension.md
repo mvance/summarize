@@ -1,19 +1,31 @@
+---
+summary: "Chrome side panel extension + daemon architecture, setup, and troubleshooting."
+read_when:
+  - "When working on the extension, daemon, or side panel UX."
+---
+
 # Chrome Side Panel (Chrome Extension + Daemon)
 
 Goal: Chrome **Side Panel** (“real sidebar”) summarizes **what you see** on the current tab. Panel open → navigation → auto summarize (optional) → **streaming** Markdown rendered in-panel.
 
 Quickstart:
 
+- Install summarize (choose one):
+  - `npm i -g @steipete/summarize`
+  - `brew install steipete/tap/summarize` (macOS arm64)
 - Build/load extension: `apps/chrome-extension/README.md`
 - Open side panel → copy token install command → run:
-  - `summarize daemon install --token <TOKEN>`
+  - `summarize daemon install --token <TOKEN>` (macOS: LaunchAgent, Linux: systemd user, Windows: Scheduled Task)
 - Verify:
   - `summarize daemon status`
   - Restart (if needed): `summarize daemon restart`
 
 Dev (repo checkout):
 
-- Use: `pnpm summarize daemon install --token <TOKEN> --dev` (LaunchAgent runs `src/cli.ts` via `tsx`, no `dist/` build required).
+- Use: `pnpm summarize daemon install --token <TOKEN> --dev` (autostart service runs `src/cli.ts` via `tsx`, no `dist/` build required).
+- E2E (Playwright): `pnpm -C apps/chrome-extension test:e2e`
+  - First run: `pnpm -C apps/chrome-extension exec playwright install chromium`
+  - Headless: `HEADLESS=1 pnpm -C apps/chrome-extension test:e2e` (headful is more reliable for extensions)
 
 ## Troubleshooting
 
@@ -30,11 +42,11 @@ Dev (repo checkout):
 ## Architecture
 
 - **Extension (MV3, WXT)**
-  - Side Panel UI: typography controls (font family + size), model selector, auto/manual toggle.
+  - Side Panel UI: length + typography controls (font family + size), auto/manual toggle.
   - Background service worker: tab + navigation tracking, content extraction, starts summarize runs.
   - Content script: extract readable article text from the **rendered DOM** via Readability; also detect SPA URL changes.
   - Panel page streams SSE directly (MV3 service workers can be flaky for long-lived streams).
-- **Daemon (local, LaunchAgent)**
+- **Daemon (local, autostart service)**
   - HTTP server on `127.0.0.1:8787` only.
   - Token-authenticated API.
   - Runs the existing summarize pipeline (env/config-based) and streams tokens to client via SSE.
@@ -76,7 +88,7 @@ The daemon decides the best pipeline:
 ## Model Selection UX
 
 - Settings:
-  - Model preset: `auto` | `free` | custom string (e.g. `openai/gpt-5-mini`, `openrouter/...`).
+  - Model preset (Options → Advanced): `auto` | `free` | custom string (e.g. `openai/gpt-5-mini`, `openrouter/...`).
   - Length: `short|medium|long|xl|xxl` (or a character target like `20k`).
   - Language: `auto` (match source) or a tag like `en`, `de`, `pt-BR` (or free-form like “German”).
   - Prompt override (advanced): custom instruction prefix (context + content still appended).
@@ -91,7 +103,7 @@ Problem: daemon must be secured; extension must discover and pair with it.
 - Side panel “Setup” state:
   - Generates token (random, 32+ bytes).
   - Shows:
-    - `summarize daemon install --token <TOKEN>`
+    - `summarize daemon install --token <TOKEN>` (macOS: LaunchAgent, Linux: systemd user, Windows: Scheduled Task)
     - `summarize daemon status`
   - “Copy command” button.
 - Daemon stores token in `~/.summarize/daemon.json`.
@@ -130,19 +142,24 @@ Notes:
 - SSE keeps the extension simple + streaming-friendly.
 - Requests keyed by `id`; daemon keeps a small in-memory map while streaming.
 
-## LaunchAgent
+## Daemon Autostart
 
 - CLI commands:
   - `summarize daemon install --token <token> [--port 8787]`
     - Writes `~/.summarize/daemon.json`
-    - Writes LaunchAgent plist in `~/Library/LaunchAgents/<label>.plist`
-    - Unloads older label(s) if present; loads new one; verifies `/health`
+    - Installs platform autostart service; verifies `/health`
   - `summarize daemon uninstall`
   - `summarize daemon status`
-  - `summarize daemon run` (foreground; used by LaunchAgent)
+  - `summarize daemon run` (foreground; used by autostart service)
 - Ensure “single daemon”:
-  - Stable `label` + predictable plist path
-  - `install` does unload+load and validates token match
+  - Stable service name + predictable unit/task path
+  - `install` replaces previous install and validates token match
+
+Platform details:
+
+- macOS: LaunchAgent plist in `~/Library/LaunchAgents/<label>.plist`
+- Linux: systemd user unit in `~/.config/systemd/user/summarize-daemon.service`
+- Windows: Scheduled Task “Summarize Daemon” + `~/.summarize/daemon.cmd`
 
 ## Docs
 

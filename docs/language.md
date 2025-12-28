@@ -1,3 +1,9 @@
+---
+summary: "Output language flag and config options."
+read_when:
+  - "When changing language handling."
+---
+
 # Output language
 
 By default, `summarize` writes the summary in the **same language as the source content** (`--language auto`).

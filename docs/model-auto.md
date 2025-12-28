@@ -1,3 +1,9 @@
+---
+summary: "Auto model selection logic and config rules."
+read_when:
+  - "When changing auto selection behavior."
+---
+
 # Auto model selection (`--model auto`)
 
 `--model auto` picks a model based on input kind + token size, and retries with fallbacks when something fails.

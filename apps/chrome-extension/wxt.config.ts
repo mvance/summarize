@@ -2,6 +2,16 @@ import { defineConfig } from 'wxt'
 
 export default defineConfig({
   srcDir: 'src',
+  vite: () => ({
+    resolve: {
+      alias: {
+        react: 'preact/compat',
+        'react-dom': 'preact/compat',
+        'react/jsx-runtime': 'preact/jsx-runtime',
+        'react/jsx-dev-runtime': 'preact/jsx-dev-runtime',
+      },
+    },
+  }),
   manifest: {
     name: 'Summarize',
     description: 'Summarize what you see. Articles, threads, YouTube, podcasts — anything.',
@@ -13,7 +23,15 @@ export default defineConfig({
       48: 'assets/icon-48.png',
       128: 'assets/icon-128.png',
     },
-    permissions: ['tabs', 'activeTab', 'storage', 'sidePanel', 'webNavigation', 'scripting'],
+    permissions: [
+      'tabs',
+      'activeTab',
+      'storage',
+      'sidePanel',
+      'webNavigation',
+      'scripting',
+      'windows',
+    ],
     host_permissions: ['<all_urls>', 'http://127.0.0.1:8787/*'],
     background: {
       type: 'module',

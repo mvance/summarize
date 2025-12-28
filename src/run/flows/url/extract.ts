@@ -57,7 +57,13 @@ export function deriveExtractionUi(extracted: ExtractedLinkContent): UrlExtracti
   if (extracted.diagnostics.strategy === 'nitter') footerParts.push('nitter')
   if (extracted.diagnostics.firecrawl.used) footerParts.push('firecrawl')
   if (extracted.diagnostics.markdown.used) {
-    footerParts.push(extracted.diagnostics.markdown.provider === 'llm' ? 'html→md llm' : 'markdown')
+    if (extracted.diagnostics.markdown.provider === 'llm') {
+      footerParts.push(
+        extracted.diagnostics.markdown.notes === 'transcript' ? 'transcript→md llm' : 'html→md llm'
+      )
+    } else {
+      footerParts.push('markdown')
+    }
   }
   if (extracted.diagnostics.transcript.textProvided) {
     footerParts.push(`transcript ${extracted.diagnostics.transcript.provider ?? 'unknown'}`)

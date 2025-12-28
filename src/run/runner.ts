@@ -2,6 +2,13 @@ import { execFile } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
 import { CommanderError } from 'commander'
 import {
+  type CacheState,
+  clearCacheFiles,
+  DEFAULT_CACHE_MAX_MB,
+  resolveCachePath,
+} from '../cache.js'
+import { loadSummarizeConfig } from '../config.js'
+import {
   parseDurationMs,
   parseExtractFormat,
   parseFirecrawlMode,
@@ -17,6 +24,7 @@ import {
 import type { ExecFileFn } from '../markitdown.js'
 import type { FixedModelSpec } from '../model-spec.js'
 import { formatVersionLine } from '../version.js'
+import { createCacheStateFromConfig } from './cache-state.js'
 import {
   handleDaemonCliRequest,
   handleHelpRequest,
@@ -136,6 +144,59 @@ export async function runCli(
     promptOverride = trimmed
   }
 
+  const clearCacheFlag = normalizedArgv.includes('--clear-cache')
+  if (clearCacheFlag) {
+    const extraArgs = normalizedArgv.filter((arg) => arg !== '--clear-cache')
+    if (extraArgs.length > 0) {
+      throw new Error('--clear-cache must be used alone.')
+    }
+    const { config } = loadSummarizeConfig({ env: envForRun })
+    const cachePath = resolveCachePath({
+      env: envForRun,
+      cachePath: config?.cache?.path ?? null,
+    })
+    if (!cachePath) {
+      throw new Error('Unable to resolve cache path (missing HOME).')
+    }
+    clearCacheFiles(cachePath)
+    stdout.write('Cache cleared.\n')
+    return
+  }
+
+  const cacheStatsFlag = normalizedArgv.includes('--cache-stats')
+  if (cacheStatsFlag) {
+    const extraArgs = normalizedArgv.filter((arg) => arg !== '--cache-stats')
+    if (extraArgs.length > 0) {
+      throw new Error('--cache-stats must be used alone.')
+    }
+    const { config } = loadSummarizeConfig({ env: envForRun })
+    const cachePath = resolveCachePath({
+      env: envForRun,
+      cachePath: config?.cache?.path ?? null,
+    })
+    if (!cachePath) {
+      throw new Error('Unable to resolve cache path (missing HOME).')
+    }
+    const cacheMaxMb =
+      typeof config?.cache?.maxMb === 'number' ? config.cache.maxMb : DEFAULT_CACHE_MAX_MB
+    const cacheMaxBytes = Math.max(0, cacheMaxMb) * 1024 * 1024
+    const { readCacheStats } = await import('../cache.js')
+    const { formatBytes } = await import('../tty/format.js')
+    const stats = await readCacheStats(cachePath)
+    stdout.write(`Cache path: ${cachePath}\n`)
+    if (!stats) {
+      stdout.write('Cache is empty.\n')
+      return
+    }
+    const sizeLabel = formatBytes(stats.sizeBytes)
+    const maxLabel = cacheMaxBytes > 0 ? formatBytes(cacheMaxBytes) : 'disabled'
+    stdout.write(`Size: ${sizeLabel} (max ${maxLabel})\n`)
+    stdout.write(
+      `Entries: total=${stats.totalEntries} extract=${stats.counts.extract} summary=${stats.counts.summary} transcript=${stats.counts.transcript}\n`
+    )
+    return
+  }
+
   const cliFlagPresent = normalizedArgv.some((arg) => arg === '--cli' || arg.startsWith('--cli='))
   let cliProviderArgRaw = typeof program.opts().cli === 'string' ? program.opts().cli : null
   const inputResolution = resolveRunInput({
@@ -170,6 +231,7 @@ export async function runCli(
       arg.startsWith('--lang=')
   )
   const retries = parseRetriesArg(program.opts().retries as string)
+  const noCacheFlag = program.opts().cache === false
   const extractMode = Boolean(program.opts().extract) || Boolean(program.opts().extractOnly)
   const json = Boolean(program.opts().json)
   const streamMode = parseStreamMode(program.opts().stream as string)
@@ -268,292 +330,320 @@ export async function runCli(
     promptOverride && languageExplicitlySet && outputLanguage.kind === 'fixed'
       ? `Output should be ${outputLanguage.label}.`
       : null
-  const {
-    apiKey,
-    openrouterApiKey,
-    openrouterConfigured,
-    openaiTranscriptionKey,
-    xaiApiKey,
-    googleApiKey,
-    anthropicApiKey,
-    zaiApiKey,
-    zaiBaseUrl,
-    firecrawlApiKey,
-    firecrawlConfigured,
-    googleConfigured,
-    anthropicConfigured,
-    apifyToken,
-    ytDlpPath,
-    falApiKey,
-    cliAvailability,
-    envForAuto,
-  } = resolveEnvState({ env, envForRun, configForCli })
-  if (markdownModeExplicitlySet && format !== 'markdown') {
-    throw new Error('--markdown-mode is only supported with --format md')
-  }
-  if (markdownModeExplicitlySet && inputTarget.kind !== 'url') {
-    throw new Error('--markdown-mode is only supported for website URLs')
-  }
-  const metrics = createRunMetrics({
-    env,
-    fetchImpl: fetch,
-    maxOutputTokensArg,
-  })
-  const {
-    llmCalls,
-    trackedFetch,
-    buildReport,
-    estimateCostUsd,
-    getLiteLlmCatalog,
-    resolveMaxOutputTokensForCall,
-    resolveMaxInputTokensForCall,
-    setTranscriptionCost,
-  } = metrics
 
-  const {
-    requestedModel,
-    requestedModelInput,
-    requestedModelLabel,
-    isNamedModelSelection,
-    wantsFreeNamedModel,
-    configForModelSelection,
-    isFallbackModel,
-  } = resolveModelSelection({
+  const transcriptNamespace = `yt:${youtubeMode}`
+  const cacheState: CacheState = await createCacheStateFromConfig({
+    envForRun,
     config,
-    configForCli,
-    configPath,
-    envForRun,
-    explicitModelArg,
+    noCacheFlag,
+    transcriptNamespace,
   })
 
-  const verboseColor = supportsColor(stderr, envForRun)
-  const { streamingEnabled } = resolveStreamSettings({
-    streamMode,
-    stdout,
-    json,
-    extractMode,
-  })
-
-  if (extractMode && inputTarget.kind !== 'url') {
-    throw new Error('--extract is only supported for website/YouTube URLs')
-  }
-
-  // Progress UI (spinner + OSC progress) is shown on stderr. Before writing to stdout (including
-  // streaming output), we stop + clear progress via the progress gate to keep scrollback clean.
-  const progressEnabled = isRichTty(stderr) && !verbose && !json
-  const progressGate = createProgressGate()
-  const { clearProgressForStdout, setClearProgressBeforeStdout, clearProgressIfCurrent } =
-    progressGate
-
-  const fixedModelSpec: FixedModelSpec | null =
-    requestedModel.kind === 'fixed' ? requestedModel : null
-
-  const desiredOutputTokens = resolveDesiredOutputTokens({ lengthArg, maxOutputTokensArg })
-
-  const summaryEngine = createSummaryEngine({
-    env,
-    envForRun,
-    stdout,
-    stderr,
-    execFileImpl,
-    timeoutMs,
-    retries,
-    streamingEnabled,
-    plain,
-    verbose,
-    verboseColor,
-    openaiUseChatCompletions,
-    cliConfigForRun: cliConfigForRun ?? null,
-    cliAvailability,
-    trackedFetch,
-    resolveMaxOutputTokensForCall,
-    resolveMaxInputTokensForCall,
-    llmCalls,
-    clearProgressForStdout,
-    apiKeys: {
-      xaiApiKey,
-      openaiApiKey: apiKey,
-      googleApiKey,
-      anthropicApiKey,
-      openrouterApiKey,
-    },
-    keyFlags: {
-      googleConfigured,
-      anthropicConfigured,
-      openrouterConfigured,
-    },
-    zai: {
-      apiKey: zaiApiKey,
-      baseUrl: zaiBaseUrl,
-    },
-  })
-  const writeViaFooter = (parts: string[]) => {
-    if (json) return
-    if (extractMode) return
-    const filtered = parts.map((p) => p.trim()).filter(Boolean)
-    if (filtered.length === 0) return
-    clearProgressForStdout()
-    stderr.write(`${ansi('2', `via ${filtered.join(', ')}`, verboseColor)}\n`)
-  }
-  const assetSummaryContext = {
-    env,
-    envForRun,
-    stdout,
-    stderr,
-    execFileImpl,
-    timeoutMs,
-    preprocessMode,
-    format,
-    lengthArg,
-    outputLanguage,
-    videoMode,
-    fixedModelSpec,
-    promptOverride,
-    lengthInstruction,
-    languageInstruction,
-    isFallbackModel,
-    desiredOutputTokens,
-    envForAuto,
-    configForModelSelection,
-    cliAvailability,
-    requestedModel,
-    requestedModelInput,
-    requestedModelLabel,
-    wantsFreeNamedModel,
-    isNamedModelSelection,
-    maxOutputTokensArg,
-    json,
-    metricsEnabled,
-    metricsDetailed,
-    shouldComputeReport,
-    runStartedAtMs,
-    verbose,
-    verboseColor,
-    streamingEnabled,
-    plain,
-    summaryEngine,
-    trackedFetch,
-    writeViaFooter,
-    clearProgressForStdout,
-    getLiteLlmCatalog,
-    buildReport,
-    estimateCostUsd,
-    llmCalls,
-    apiStatus: {
-      xaiApiKey,
-      apiKey,
-      openrouterApiKey,
-      apifyToken,
-      firecrawlConfigured,
-      googleConfigured,
-      anthropicConfigured,
-      zaiApiKey,
-      zaiBaseUrl,
-    },
-  }
-
-  const summarizeAsset = (args: Parameters<typeof summarizeAssetFlow>[1]) =>
-    summarizeAssetFlow(assetSummaryContext, args)
-
-  const assetInputContext = {
-    env,
-    stderr,
-    progressEnabled,
-    timeoutMs,
-    trackedFetch,
-    summarizeAsset,
-    setClearProgressBeforeStdout,
-    clearProgressIfCurrent,
-  }
-
-  if (await handleFileInput(assetInputContext, inputTarget)) {
-    return
-  }
-  if (url && (await handleUrlAsset(assetInputContext, url, isYoutubeUrl))) {
-    return
-  }
-
-  if (!url) {
-    throw new Error('Only HTTP and HTTPS URLs can be summarized')
-  }
-
-  const urlFlowContext = {
-    env,
-    envForRun,
-    stdout,
-    stderr,
-    execFileImpl,
-    timeoutMs,
-    retries,
-    format,
-    markdownMode,
-    preprocessMode,
-    youtubeMode,
-    firecrawlMode: requestedFirecrawlMode,
-    videoMode,
-    outputLanguage,
-    lengthArg,
-    promptOverride,
-    lengthInstruction,
-    languageInstruction,
-    maxOutputTokensArg,
-    requestedModel,
-    requestedModelInput,
-    requestedModelLabel,
-    fixedModelSpec,
-    isFallbackModel,
-    isNamedModelSelection,
-    wantsFreeNamedModel,
-    desiredOutputTokens,
-    configForModelSelection,
-    envForAuto,
-    cliAvailability,
-    json,
-    extractMode,
-    metricsEnabled,
-    metricsDetailed,
-    shouldComputeReport,
-    runStartedAtMs,
-    verbose,
-    verboseColor,
-    progressEnabled,
-    streamingEnabled,
-    plain,
-    openaiUseChatCompletions,
-    configPath,
-    configModelLabel,
-    openaiWhisperUsdPerMinute,
-    setTranscriptionCost,
-    apiStatus: {
-      xaiApiKey,
+  try {
+    const {
       apiKey,
       openrouterApiKey,
       openrouterConfigured,
+      openaiTranscriptionKey,
+      xaiApiKey,
       googleApiKey,
-      googleConfigured,
       anthropicApiKey,
-      anthropicConfigured,
       zaiApiKey,
       zaiBaseUrl,
-      firecrawlConfigured,
       firecrawlApiKey,
+      firecrawlConfigured,
+      googleConfigured,
+      anthropicConfigured,
       apifyToken,
       ytDlpPath,
       falApiKey,
-      openaiTranscriptionKey,
-    },
-    trackedFetch,
-    summaryEngine,
-    summarizeAsset,
-    writeViaFooter,
-    clearProgressForStdout,
-    setClearProgressBeforeStdout,
-    clearProgressIfCurrent,
-    getLiteLlmCatalog,
-    buildReport,
-    estimateCostUsd,
-    llmCalls,
-  }
+      cliAvailability,
+      envForAuto,
+    } = resolveEnvState({ env, envForRun, configForCli })
+    if (markdownModeExplicitlySet && format !== 'markdown') {
+      throw new Error('--markdown-mode is only supported with --format md')
+    }
+    if (markdownModeExplicitlySet && inputTarget.kind !== 'url') {
+      throw new Error('--markdown-mode is only supported for URL inputs')
+    }
+    const metrics = createRunMetrics({
+      env,
+      fetchImpl: fetch,
+      maxOutputTokensArg,
+    })
+    const {
+      llmCalls,
+      trackedFetch,
+      buildReport,
+      estimateCostUsd,
+      getLiteLlmCatalog,
+      resolveMaxOutputTokensForCall,
+      resolveMaxInputTokensForCall,
+      setTranscriptionCost,
+    } = metrics
 
-  await runUrlFlow({ ctx: urlFlowContext, url, isYoutubeUrl })
+    const {
+      requestedModel,
+      requestedModelInput,
+      requestedModelLabel,
+      isNamedModelSelection,
+      wantsFreeNamedModel,
+      configForModelSelection,
+      isFallbackModel,
+    } = resolveModelSelection({
+      config,
+      configForCli,
+      configPath,
+      envForRun,
+      explicitModelArg,
+    })
+
+    const verboseColor = supportsColor(stderr, envForRun)
+    const { streamingEnabled } = resolveStreamSettings({
+      streamMode,
+      stdout,
+      json,
+      extractMode,
+    })
+
+    if (extractMode && inputTarget.kind !== 'url') {
+      throw new Error('--extract is only supported for website/YouTube URLs')
+    }
+
+    // Progress UI (spinner + OSC progress) is shown on stderr. Before writing to stdout (including
+    // streaming output), we stop + clear progress via the progress gate to keep scrollback clean.
+    const progressEnabled = isRichTty(stderr) && !verbose && !json
+    const progressGate = createProgressGate()
+    const { clearProgressForStdout, setClearProgressBeforeStdout, clearProgressIfCurrent } =
+      progressGate
+
+    const fixedModelSpec: FixedModelSpec | null =
+      requestedModel.kind === 'fixed' ? requestedModel : null
+
+    const desiredOutputTokens = resolveDesiredOutputTokens({ lengthArg, maxOutputTokensArg })
+
+    const summaryEngine = createSummaryEngine({
+      env,
+      envForRun,
+      stdout,
+      stderr,
+      execFileImpl,
+      timeoutMs,
+      retries,
+      streamingEnabled,
+      plain,
+      verbose,
+      verboseColor,
+      openaiUseChatCompletions,
+      cliConfigForRun: cliConfigForRun ?? null,
+      cliAvailability,
+      trackedFetch,
+      resolveMaxOutputTokensForCall,
+      resolveMaxInputTokensForCall,
+      llmCalls,
+      clearProgressForStdout,
+      apiKeys: {
+        xaiApiKey,
+        openaiApiKey: apiKey,
+        googleApiKey,
+        anthropicApiKey,
+        openrouterApiKey,
+      },
+      keyFlags: {
+        googleConfigured,
+        anthropicConfigured,
+        openrouterConfigured,
+      },
+      zai: {
+        apiKey: zaiApiKey,
+        baseUrl: zaiBaseUrl,
+      },
+    })
+    const writeViaFooter = (parts: string[]) => {
+      if (json) return
+      if (extractMode) return
+      const filtered = parts.map((p) => p.trim()).filter(Boolean)
+      if (filtered.length === 0) return
+      clearProgressForStdout()
+      stderr.write(`${ansi('2', `via ${filtered.join(', ')}`, verboseColor)}\n`)
+    }
+    const assetSummaryContext = {
+      env,
+      envForRun,
+      stdout,
+      stderr,
+      execFileImpl,
+      timeoutMs,
+      preprocessMode,
+      format,
+      lengthArg,
+      outputLanguage,
+      videoMode,
+      fixedModelSpec,
+      promptOverride,
+      lengthInstruction,
+      languageInstruction,
+      isFallbackModel,
+      desiredOutputTokens,
+      envForAuto,
+      configForModelSelection,
+      cliAvailability,
+      requestedModel,
+      requestedModelInput,
+      requestedModelLabel,
+      wantsFreeNamedModel,
+      isNamedModelSelection,
+      maxOutputTokensArg,
+      json,
+      metricsEnabled,
+      metricsDetailed,
+      shouldComputeReport,
+      runStartedAtMs,
+      verbose,
+      verboseColor,
+      streamingEnabled,
+      plain,
+      summaryEngine,
+      trackedFetch,
+      writeViaFooter,
+      clearProgressForStdout,
+      getLiteLlmCatalog,
+      buildReport,
+      estimateCostUsd,
+      llmCalls,
+      cache: cacheState,
+      apiStatus: {
+        xaiApiKey,
+        apiKey,
+        openrouterApiKey,
+        apifyToken,
+        firecrawlConfigured,
+        googleConfigured,
+        anthropicConfigured,
+        zaiApiKey,
+        zaiBaseUrl,
+      },
+    }
+
+    const summarizeAsset = (args: Parameters<typeof summarizeAssetFlow>[1]) =>
+      summarizeAssetFlow(assetSummaryContext, args)
+
+    const assetInputContext = {
+      env,
+      stderr,
+      progressEnabled,
+      timeoutMs,
+      trackedFetch,
+      summarizeAsset,
+      setClearProgressBeforeStdout,
+      clearProgressIfCurrent,
+    }
+
+    if (await handleFileInput(assetInputContext, inputTarget)) {
+      return
+    }
+    if (url && (await handleUrlAsset(assetInputContext, url, isYoutubeUrl))) {
+      return
+    }
+
+    if (!url) {
+      throw new Error('Only HTTP and HTTPS URLs can be summarized')
+    }
+
+    const urlFlowContext = {
+      io: {
+        env,
+        envForRun,
+        stdout,
+        stderr,
+        execFileImpl,
+        fetch: trackedFetch,
+      },
+      flags: {
+        timeoutMs,
+        maxExtractCharacters: null,
+        retries,
+        format,
+        markdownMode,
+        preprocessMode,
+        youtubeMode,
+        firecrawlMode: requestedFirecrawlMode,
+        videoMode,
+        outputLanguage,
+        lengthArg,
+        promptOverride,
+        lengthInstruction,
+        languageInstruction,
+        maxOutputTokensArg,
+        json,
+        extractMode,
+        metricsEnabled,
+        metricsDetailed,
+        shouldComputeReport,
+        runStartedAtMs,
+        verbose,
+        verboseColor,
+        progressEnabled,
+        streamingEnabled,
+        plain,
+        configPath,
+        configModelLabel,
+      },
+      model: {
+        requestedModel,
+        requestedModelInput,
+        requestedModelLabel,
+        fixedModelSpec,
+        isFallbackModel,
+        isNamedModelSelection,
+        wantsFreeNamedModel,
+        desiredOutputTokens,
+        configForModelSelection,
+        envForAuto,
+        cliAvailability,
+        openaiUseChatCompletions,
+        openaiWhisperUsdPerMinute,
+        apiStatus: {
+          xaiApiKey,
+          apiKey,
+          openrouterApiKey,
+          openrouterConfigured,
+          googleApiKey,
+          googleConfigured,
+          anthropicApiKey,
+          anthropicConfigured,
+          zaiApiKey,
+          zaiBaseUrl,
+          firecrawlConfigured,
+          firecrawlApiKey,
+          apifyToken,
+          ytDlpPath,
+          falApiKey,
+          openaiTranscriptionKey,
+        },
+        summaryEngine,
+        getLiteLlmCatalog,
+        llmCalls,
+      },
+      cache: cacheState,
+      hooks: {
+        onModelChosen: null,
+        onExtracted: null,
+        onLinkPreviewProgress: null,
+        onSummaryCached: null,
+        setTranscriptionCost,
+        summarizeAsset,
+        writeViaFooter,
+        clearProgressForStdout,
+        setClearProgressBeforeStdout,
+        clearProgressIfCurrent,
+        buildReport,
+        estimateCostUsd,
+      },
+    }
+
+    await runUrlFlow({ ctx: urlFlowContext, url, isYoutubeUrl })
+  } finally {
+    cacheState.store?.close()
+  }
 }

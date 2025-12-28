@@ -10,11 +10,31 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 const MAX_EMBED_YOUTUBE_TEXT_CHARS = 2000
 const MAX_EMBED_YOUTUBE_READABILITY_CHARS = 2000
 
+type ReadabilityDeps = {
+  Readability: typeof import('@mozilla/readability').Readability
+  JSDOM: typeof import('jsdom').JSDOM
+  VirtualConsole: typeof import('jsdom').VirtualConsole
+}
+
+let readabilityDepsPromise: Promise<ReadabilityDeps> | null = null
+
+async function loadReadabilityDeps(): Promise<ReadabilityDeps> {
+  if (!readabilityDepsPromise) {
+    readabilityDepsPromise = (async () => {
+      const [{ Readability }, { JSDOM, VirtualConsole }] = await Promise.all([
+        import('@mozilla/readability'),
+        import('jsdom'),
+      ])
+      return { Readability, JSDOM, VirtualConsole }
+    })()
+  }
+  return readabilityDepsPromise
+}
+
 async function extractReadabilityText(html: string): Promise<string> {
   try {
     const cleanedHtml = stripCssFromHtml(html)
-    const { Readability } = await import('@mozilla/readability')
-    const { JSDOM, VirtualConsole } = await import('jsdom')
+    const { Readability, JSDOM, VirtualConsole } = await loadReadabilityDeps()
     const virtualConsole = new VirtualConsole()
     virtualConsole.on('jsdomError', (err) => {
       const message =
@@ -49,11 +69,14 @@ export async function extractEmbeddedYouTubeUrlFromHtml(
     const rawText = $('body').text() || $.text()
     const normalizedText = rawText.replace(/\s+/g, ' ').trim()
 
-    const readabilityText = await extractReadabilityText(html)
-    const effectiveLength =
-      readabilityText.length > 0 ? readabilityText.length : normalizedText.length
-    const threshold = readabilityText.length > 0 ? maxReadabilityChars : maxTextChars
-    if (effectiveLength > threshold) return null
+    if (normalizedText.length > maxTextChars) {
+      const readabilityText = await extractReadabilityText(html)
+      if (readabilityText.length > 0) {
+        if (readabilityText.length > maxReadabilityChars) return null
+      } else {
+        return null
+      }
+    }
 
     const candidates: string[] = []
 

@@ -55,21 +55,24 @@ summarize "https://example.com"
 
 Want a one-click “always-on” summarizer in Chrome (real Side Panel, not injected UI)?
 
-This is a **Chrome extension** + a tiny local **daemon** (LaunchAgent) that streams Markdown summaries for the **currently visible tab** into the Side Panel.
+This is a **Chrome extension** + a tiny local **daemon** (autostart service) that streams Markdown summaries for the **currently visible tab** into the Side Panel.
 
 Docs + setup: `https://summarize.sh`
 
 Quickstart (local daemon):
 
-1) Build + load the extension (unpacked):
+1) Install summarize (choose one):
+   - `npm i -g @steipete/summarize`
+   - `brew install steipete/tap/summarize` (macOS arm64)
+2) Build + load the extension (unpacked):
    - `pnpm -C apps/chrome-extension build`
    - Chrome → `chrome://extensions` → Developer mode → “Load unpacked”
    - Pick: `apps/chrome-extension/.output/chrome-mv3`
-2) Open the Side Panel → it shows a token + install command.
-3) Run the install command in Terminal:
+3) Open the Side Panel → it shows a token + install command.
+4) Run the install command in Terminal:
    - Installed binary: `summarize daemon install --token <TOKEN>`
    - Repo/dev checkout: `pnpm summarize daemon install --token <TOKEN> --dev`
-4) Verify / debug:
+5) Verify / debug:
    - `summarize daemon status`
    - `summarize daemon restart`
 
@@ -78,10 +81,11 @@ Notes:
 - Summarization only runs when the Side Panel is open.
 - “Auto” mode summarizes on navigation (incl. SPAs); otherwise use the button.
 - The daemon is localhost-only and requires a shared token.
+- Daemon autostart: macOS (launchd), Linux (systemd user), Windows (Scheduled Task).
+- Tip: configure `free` via `summarize refresh-free` (requires `OPENROUTER_API_KEY`). Add `--set-default` to also set model=`free`, then set Model to `free` in extension settings.
 
 - Docs: `docs/chrome-extension.md`
 - Extension package/dev notes: `apps/chrome-extension/README.md`
-- Side Panel includes a “Docs” link: `https://summarize.sh`
 
 Troubleshooting:
 
@@ -202,7 +206,7 @@ Use `summarize --help` or `summarize help` for the full help text.
 - `--plain`: Keep raw output (no ANSI/OSC Markdown rendering)
 - `--no-color`: disable ANSI colors
 - `--format md|text`: website/file content format (default `text`)
-- `--markdown-mode off|auto|llm|readability`: HTML→Markdown conversion mode (default `readability`; `readability` uses Readability article HTML as input)
+- `--markdown-mode off|auto|llm|readability`: Markdown conversion mode (default `readability`). For websites: HTML→Markdown conversion. For YouTube transcripts: `llm` formats the raw transcript into clean Markdown (headings/paragraphs).
 - `--preprocess off|auto|always`: controls `uvx markitdown` usage (default `auto`; `always` forces file preprocessing)
   - Install `uvx`: `brew install uv` (or https://astral.sh/uv/)
 - `--extract`: print extracted content and exit (no summary) — only for URLs
@@ -280,7 +284,7 @@ Non-YouTube URLs go through a “fetch → extract” pipeline. When the direct 
 
 - `--firecrawl off|auto|always` (default `auto`)
 - `--extract --format md|text` (default `text`; if `--format` is omitted, `--extract` defaults to `md` for non-YouTube URLs)
-- `--markdown-mode off|auto|llm|readability` (default `readability`; only affects `--format md` for non-YouTube URLs)
+- `--markdown-mode off|auto|llm|readability` (default `readability`; for non-YouTube URLs this controls HTML→Markdown conversion)
   - `auto`: use an LLM converter when configured; may fall back to `uvx markitdown`
   - `llm`: force LLM conversion (requires a configured model key)
   - `off`: disable LLM conversion (still may return Firecrawl Markdown when configured)
@@ -302,6 +306,12 @@ Environment variables for yt-dlp mode:
 - `FAL_KEY` - FAL AI Whisper fallback
 
 Apify costs money but tends to be more reliable when captions exist.
+
+Format the extracted transcript as Markdown (headings + paragraphs) via an LLM:
+
+```bash
+summarize "https://www.youtube.com/watch?v=..." --extract --format md --markdown-mode llm
+```
 
 ## Media transcription (Whisper)
 
