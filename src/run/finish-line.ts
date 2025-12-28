@@ -12,6 +12,11 @@ export type FinishLineText = {
   details: string | null
 }
 
+export type FinishLineModel = {
+  lineParts: string[]
+  detailParts: string[]
+}
+
 export type ExtractDiagnosticsForFinishLine = {
   strategy: 'bird' | 'firecrawl' | 'html' | 'nitter'
   firecrawl: { used: boolean }
@@ -250,6 +255,52 @@ export function buildFinishLineText({
   detailed: boolean
   extraParts?: string[] | null
 }): FinishLineText {
+  const modelData = buildFinishLineModel({
+    elapsedMs,
+    elapsedLabel,
+    label,
+    model,
+    report,
+    costUsd,
+    extraParts,
+  })
+  return formatFinishLineText(modelData, detailed)
+}
+
+export function formatFinishLineText(
+  model: FinishLineModel,
+  detailed: boolean
+): FinishLineText {
+  const line = model.lineParts.join(' · ')
+  if (!detailed || model.detailParts.length === 0) return { line, details: null }
+  return { line, details: model.detailParts.join(' | ') }
+}
+
+export function buildFinishLineModel({
+  elapsedMs,
+  elapsedLabel,
+  label,
+  model,
+  report,
+  costUsd,
+  extraParts,
+}: {
+  elapsedMs: number
+  elapsedLabel?: string | null
+  label?: string | null
+  model: string | null
+  report: {
+    llm: Array<{
+      promptTokens: number | null
+      completionTokens: number | null
+      totalTokens: number | null
+      calls: number
+    }>
+    services: { firecrawl: { requests: number }; apify: { requests: number } }
+  }
+  costUsd: number | null
+  extraParts?: string[] | null
+}): FinishLineModel {
   const resolvedElapsedLabel =
     typeof elapsedLabel === 'string' && elapsedLabel.trim().length > 0
       ? elapsedLabel
@@ -309,7 +360,7 @@ export function buildFinishLineText({
     model ? formatModelLabelForDisplay(model) : null,
     tokensPart,
   ]
-  const line = summaryParts.filter((part): part is string => typeof part === 'string').join(' · ')
+  const lineParts = summaryParts.filter((part): part is string => typeof part === 'string')
 
   const totalCalls = report.llm.reduce((sum, row) => sum + row.calls, 0)
   const lenParts =
@@ -340,8 +391,7 @@ export function buildFinishLineText({
     line2Segments.push(...miscParts)
   }
 
-  if (!detailed || line2Segments.length === 0) return { line, details: null }
-  return { line, details: line2Segments.join(' | ') }
+  return { lineParts, detailParts: line2Segments }
 }
 
 export function buildExtractFinishLabel(args: {
