@@ -78,6 +78,8 @@ let streamController: AbortController | null = null
 let streamedAnyNonWhitespace = false
 let rememberedUrl = false
 let streaming = false
+let progressTimer = 0
+let showProgress = false
 let baseTitle = 'Summarize'
 let baseSubtitle = ''
 let statusText = ''
@@ -101,6 +103,16 @@ function setBaseTitle(text: string) {
 
 function setStatus(text: string) {
   statusText = text
+  if (streaming) {
+    const split = splitStatusPercent(text)
+    if (split.percent) {
+      showProgress = true
+      if (progressTimer) {
+        clearTimeout(progressTimer)
+        progressTimer = 0
+      }
+    }
+  }
   updateHeader()
 }
 
@@ -114,13 +126,13 @@ function updateHeader() {
   const isError =
     showStatus &&
     (trimmed.toLowerCase().startsWith('error:') || trimmed.toLowerCase().includes(' error'))
-  const isRunning = streaming || (showStatus && !isError)
+  const isRunning = showProgress && !isError
   const shouldShowStatus = showStatus && (!streaming || !baseSubtitle)
 
   titleEl.textContent = baseTitle
   headerEl.classList.toggle('isError', isError)
-  headerEl.classList.toggle('isRunning', isRunning && !isError)
-  headerEl.classList.toggle('isIndeterminate', isRunning && !isError && percentNum == null)
+  headerEl.classList.toggle('isRunning', isRunning)
+  headerEl.classList.toggle('isIndeterminate', isRunning && percentNum == null)
 
   if (
     !isError &&
@@ -140,6 +152,27 @@ function updateHeader() {
     : shouldShowStatus
       ? split.text || trimmed
       : baseSubtitle
+}
+
+function armProgress() {
+  showProgress = false
+  if (progressTimer) clearTimeout(progressTimer)
+  progressTimer = window.setTimeout(() => {
+    progressTimer = 0
+    if (!streaming) return
+    showProgress = true
+    updateHeader()
+  }, 240)
+}
+
+function stopProgress() {
+  if (progressTimer) {
+    clearTimeout(progressTimer)
+    progressTimer = 0
+  }
+  if (!showProgress) return
+  showProgress = false
+  updateHeader()
 }
 
 window.addEventListener('error', (event) => {
@@ -659,6 +692,7 @@ async function startStream(run: RunStart) {
   const controller = new AbortController()
   streamController = controller
   streaming = true
+  armProgress()
   streamedAnyNonWhitespace = false
   rememberedUrl = false
   currentSource = { url: run.url, title: run.title }
@@ -760,6 +794,9 @@ async function startStream(run: RunStart) {
     const message = friendlyFetchError(err, 'Stream failed')
     setStatus(`Error: ${message}`)
   } finally {
-    if (streamController === controller) streaming = false
+    if (streamController === controller) {
+      streaming = false
+      stopProgress()
+    }
   }
 }
