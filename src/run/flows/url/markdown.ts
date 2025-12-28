@@ -183,7 +183,11 @@ export function createMarkdownConverters(
           openaiApiKey: markdownModel.openaiApiKeyOverride ?? ctx.model.apiStatus.apiKey,
           anthropicApiKey: ctx.model.apiStatus.anthropicApiKey,
           openrouterApiKey: ctx.model.apiStatus.openrouterApiKey,
-          openaiBaseUrlOverride: markdownModel.openaiBaseUrlOverride ?? null,
+          openaiBaseUrlOverride:
+            markdownModel.openaiBaseUrlOverride ?? ctx.model.apiStatus.providerBaseUrls.openai,
+          anthropicBaseUrlOverride: ctx.model.apiStatus.providerBaseUrls.anthropic,
+          googleBaseUrlOverride: ctx.model.apiStatus.providerBaseUrls.google,
+          xaiBaseUrlOverride: ctx.model.apiStatus.providerBaseUrls.xai,
           forceChatCompletions:
             markdownModel.forceChatCompletions ??
             (ctx.model.openaiUseChatCompletions && markdownProvider === 'openai'),
@@ -277,7 +281,11 @@ export function createMarkdownConverters(
           openaiApiKey: markdownModel.openaiApiKeyOverride ?? ctx.model.apiStatus.apiKey,
           anthropicApiKey: ctx.model.apiStatus.anthropicApiKey,
           openrouterApiKey: ctx.model.apiStatus.openrouterApiKey,
-          openaiBaseUrlOverride: markdownModel.openaiBaseUrlOverride ?? null,
+          openaiBaseUrlOverride:
+            markdownModel.openaiBaseUrlOverride ?? ctx.model.apiStatus.providerBaseUrls.openai,
+          anthropicBaseUrlOverride: ctx.model.apiStatus.providerBaseUrls.anthropic,
+          googleBaseUrlOverride: ctx.model.apiStatus.providerBaseUrls.google,
+          xaiBaseUrlOverride: ctx.model.apiStatus.providerBaseUrls.xai,
           forceChatCompletions:
             markdownModel.forceChatCompletions ??
             (ctx.model.openaiUseChatCompletions && markdownProvider === 'openai'),

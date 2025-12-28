@@ -103,6 +103,12 @@ export type AssetSummaryContext = {
     firecrawlConfigured: boolean
     googleConfigured: boolean
     anthropicConfigured: boolean
+    providerBaseUrls: {
+      openai: string | null
+      anthropic: string | null
+      google: string | null
+      xai: string | null
+    }
     zaiApiKey: string | null
     zaiBaseUrl: string
   }

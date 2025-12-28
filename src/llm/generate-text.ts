@@ -104,6 +104,11 @@ function normalizeTokenUsage(raw: unknown): LlmTokenUsage | null {
   return { promptTokens, completionTokens, totalTokens }
 }
 
+function resolveBaseUrlOverride(raw: string | null | undefined): string | null {
+  const trimmed = typeof raw === 'string' ? raw.trim() : ''
+  return trimmed.length > 0 ? trimmed : null
+}
+
 function resolveOpenAiClientConfig({
   apiKeys,
   forceOpenRouter,
@@ -236,12 +241,18 @@ function resolveModelForCall({
   openaiConfig,
   context,
   openaiBaseUrlOverride,
+  anthropicBaseUrlOverride,
+  googleBaseUrlOverride,
+  xaiBaseUrlOverride,
 }: {
   modelId: string
   parsedProvider: 'xai' | 'openai' | 'google' | 'anthropic' | 'zai'
   openaiConfig: OpenAiClientConfig | null
   context: Context
   openaiBaseUrlOverride?: string | null
+  anthropicBaseUrlOverride?: string | null
+  googleBaseUrlOverride?: string | null
+  xaiBaseUrlOverride?: string | null
 }): Model<Api> {
   const allowImages = wantsImages(context)
 
@@ -282,6 +293,20 @@ function resolveModelForCall({
 
   if (parsedProvider === 'xai') {
     const base = tryGetModel('xai', modelId)
+    const override = resolveBaseUrlOverride(xaiBaseUrlOverride)
+    if (override) {
+      return {
+        ...(base ??
+          createSyntheticModel({
+            provider: 'xai',
+            modelId,
+            api: 'openai-completions',
+            baseUrl: override,
+            allowImages,
+          })),
+        baseUrl: override,
+      }
+    }
     return (
       base ??
       createSyntheticModel({
@@ -296,6 +321,20 @@ function resolveModelForCall({
 
   if (parsedProvider === 'google') {
     const base = tryGetModel('google', modelId)
+    const override = resolveBaseUrlOverride(googleBaseUrlOverride)
+    if (override) {
+      return {
+        ...(base ??
+          createSyntheticModel({
+            provider: 'google',
+            modelId,
+            api: 'google-generative-ai',
+            baseUrl: override,
+            allowImages,
+          })),
+        baseUrl: override,
+      }
+    }
     return (
       base ??
       createSyntheticModel({
@@ -309,6 +348,20 @@ function resolveModelForCall({
   }
 
   const base = tryGetModel('anthropic', modelId)
+  const override = resolveBaseUrlOverride(anthropicBaseUrlOverride)
+  if (override) {
+    return {
+      ...(base ??
+        createSyntheticModel({
+          provider: 'anthropic',
+          modelId,
+          api: 'anthropic-messages',
+          baseUrl: override,
+          allowImages,
+        })),
+      baseUrl: override,
+    }
+  }
   return (
     base ??
     createSyntheticModel({
@@ -332,6 +385,9 @@ export async function generateTextWithModelId({
   fetchImpl: _fetchImpl,
   forceOpenRouter,
   openaiBaseUrlOverride,
+  anthropicBaseUrlOverride,
+  googleBaseUrlOverride,
+  xaiBaseUrlOverride,
   forceChatCompletions,
   retries = 0,
   onRetry,
@@ -346,6 +402,9 @@ export async function generateTextWithModelId({
   fetchImpl: typeof fetch
   forceOpenRouter?: boolean
   openaiBaseUrlOverride?: string | null
+  anthropicBaseUrlOverride?: string | null
+  googleBaseUrlOverride?: string | null
+  xaiBaseUrlOverride?: string | null
   forceChatCompletions?: boolean
   retries?: number
   onRetry?: (notice: RetryNotice) => void
@@ -380,6 +439,7 @@ export async function generateTextWithModelId({
           parsedProvider: parsed.provider,
           openaiConfig: null,
           context,
+          xaiBaseUrlOverride,
         })
         const result = await completeSimple(model, context, {
           ...(typeof effectiveTemperature === 'number'
@@ -410,6 +470,7 @@ export async function generateTextWithModelId({
           parsedProvider: parsed.provider,
           openaiConfig: null,
           context,
+          googleBaseUrlOverride,
         })
         const result = await completeSimple(model, context, {
           ...(typeof effectiveTemperature === 'number'
@@ -437,6 +498,7 @@ export async function generateTextWithModelId({
           parsedProvider: parsed.provider,
           openaiConfig: null,
           context,
+          anthropicBaseUrlOverride,
         })
         const result = await completeSimple(model, context, {
           ...(typeof effectiveTemperature === 'number'
@@ -499,6 +561,10 @@ export async function generateTextWithModelId({
         parsedProvider: parsed.provider,
         openaiConfig,
         context,
+        openaiBaseUrlOverride,
+        anthropicBaseUrlOverride,
+        googleBaseUrlOverride,
+        xaiBaseUrlOverride,
       })
 
       const result = await completeSimple(model, context, {
@@ -575,6 +641,9 @@ export async function streamTextWithModelId({
   fetchImpl: _fetchImpl,
   forceOpenRouter,
   openaiBaseUrlOverride,
+  anthropicBaseUrlOverride,
+  googleBaseUrlOverride,
+  xaiBaseUrlOverride,
   forceChatCompletions,
 }: {
   modelId: string
@@ -587,6 +656,9 @@ export async function streamTextWithModelId({
   fetchImpl: typeof fetch
   forceOpenRouter?: boolean
   openaiBaseUrlOverride?: string | null
+  anthropicBaseUrlOverride?: string | null
+  googleBaseUrlOverride?: string | null
+  xaiBaseUrlOverride?: string | null
   forceChatCompletions?: boolean
 }): Promise<{
   textStream: AsyncIterable<string>
@@ -677,6 +749,7 @@ export async function streamTextWithModelId({
         parsedProvider: parsed.provider,
         openaiConfig: null,
         context,
+        xaiBaseUrlOverride,
       })
       const stream = streamSimple(model, context, {
         ...(typeof temperature === 'number' ? { temperature } : {}),
@@ -719,6 +792,7 @@ export async function streamTextWithModelId({
         parsedProvider: parsed.provider,
         openaiConfig: null,
         context,
+        googleBaseUrlOverride,
       })
       const stream = streamSimple(model, context, {
         ...(typeof temperature === 'number' ? { temperature } : {}),
@@ -758,6 +832,7 @@ export async function streamTextWithModelId({
         parsedProvider: parsed.provider,
         openaiConfig: null,
         context,
+        anthropicBaseUrlOverride,
       })
       const stream = streamSimple(model, context, {
         ...(typeof temperature === 'number' ? { temperature } : {}),
@@ -840,6 +915,10 @@ export async function streamTextWithModelId({
       parsedProvider: parsed.provider,
       openaiConfig,
       context,
+      openaiBaseUrlOverride,
+      anthropicBaseUrlOverride,
+      googleBaseUrlOverride,
+      xaiBaseUrlOverride,
     })
     const stream = streamSimple(model, context, {
       ...(typeof temperature === 'number' ? { temperature } : {}),

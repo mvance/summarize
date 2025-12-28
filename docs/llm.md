@@ -18,6 +18,7 @@ installed, auto mode can use local CLI models when `cli.enabled` is set (see `do
 
 - `.env` (optional): when running the CLI, `summarize` also reads `.env` in the current working directory and merges it into the environment (real env vars win).
 - `XAI_API_KEY` (required for `xai/...` models)
+- `XAI_BASE_URL` (optional; override xAI API endpoint)
 - `OPENAI_API_KEY` (required for `openai/...` models)
 - `OPENAI_BASE_URL` (optional; OpenAI-compatible API endpoint, e.g. OpenRouter)
 - `OPENAI_USE_CHAT_COMPLETIONS` (optional; force OpenAI chat completions)
@@ -25,7 +26,9 @@ installed, auto mode can use local CLI models when `cli.enabled` is set (see `do
 - `Z_AI_API_KEY` (required for `zai/...` models; supports `ZAI_API_KEY` alias)
 - `Z_AI_BASE_URL` (optional; override default Z.AI base URL)
 - `GEMINI_API_KEY` (required for `google/...` models; also accepts `GOOGLE_GENERATIVE_AI_API_KEY` / `GOOGLE_API_KEY`)
+- `GOOGLE_BASE_URL` / `GEMINI_BASE_URL` (optional; override Google API endpoint)
 - `ANTHROPIC_API_KEY` (required for `anthropic/...` models)
+- `ANTHROPIC_BASE_URL` (optional; override Anthropic API endpoint)
 - `SUMMARIZE_MODEL` (optional; overrides default model selection)
 - `CLAUDE_PATH` / `CODEX_PATH` / `GEMINI_PATH` (optional; override CLI binary paths)
 
@@ -65,6 +68,7 @@ installed, auto mode can use local CLI models when `cli.enabled` is set (see `do
   - This is *soft guidance* to the model (no hard truncation).
   - Minimum numeric value: 50 chars.
   - Default: `long`.
+  - Output format stays paragraph-based for all presets unless you override the prompt.
 - `--max-output-tokens <count>`
   - Hard cap for output tokens (optional).
   - If omitted, no max token parameter is sent (provider default).

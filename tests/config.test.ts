@@ -410,4 +410,48 @@ describe('config loading', () => {
       openai: { useChatCompletions: true },
     })
   })
+
+  it('parses provider baseUrl config sections', () => {
+    const { root } = writeJsonConfig({
+      model: { id: 'openai/gpt-5.2' },
+      openai: { baseUrl: 'https://openai-proxy.example.com/v1' },
+      anthropic: { baseUrl: 'https://anthropic-proxy.example.com' },
+      google: { baseUrl: 'https://google-proxy.example.com' },
+      xai: { baseUrl: 'https://xai-proxy.example.com' },
+    })
+    const result = loadSummarizeConfig({ env: { HOME: root } })
+    expect(result.config).toEqual({
+      model: { id: 'openai/gpt-5.2' },
+      openai: { baseUrl: 'https://openai-proxy.example.com/v1' },
+      anthropic: { baseUrl: 'https://anthropic-proxy.example.com' },
+      google: { baseUrl: 'https://google-proxy.example.com' },
+      xai: { baseUrl: 'https://xai-proxy.example.com' },
+    })
+  })
+
+  it('rejects non-object provider baseUrl sections', () => {
+    const { root } = writeJsonConfig({ anthropic: 'nope' })
+    expect(() => loadSummarizeConfig({ env: { HOME: root } })).toThrow(
+      /"anthropic" must be an object/i
+    )
+
+    const { root: root2 } = writeJsonConfig({ google: 123 })
+    expect(() => loadSummarizeConfig({ env: { HOME: root2 } })).toThrow(
+      /"google" must be an object/i
+    )
+
+    const { root: root3 } = writeJsonConfig({ xai: [] })
+    expect(() => loadSummarizeConfig({ env: { HOME: root3 } })).toThrow(/"xai" must be an object/i)
+  })
+
+  it('trims provider baseUrl strings and ignores empty strings', () => {
+    const { root } = writeJsonConfig({
+      openai: { baseUrl: '  https://example.com/v1  ' },
+      anthropic: { baseUrl: '   ' },
+    })
+    const result = loadSummarizeConfig({ env: { HOME: root } })
+    expect(result.config).toEqual({
+      openai: { baseUrl: 'https://example.com/v1' },
+    })
+  })
 })

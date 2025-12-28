@@ -72,6 +72,12 @@ export type UrlFlowModel = {
     googleConfigured: boolean
     anthropicApiKey: string | null
     anthropicConfigured: boolean
+    providerBaseUrls: {
+      openai: string | null
+      anthropic: string | null
+      google: string | null
+      xai: string | null
+    }
     zaiApiKey: string | null
     zaiBaseUrl: string
     firecrawlConfigured: boolean

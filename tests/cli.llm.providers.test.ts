@@ -1,3 +1,6 @@
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { Writable } from 'node:stream'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -44,6 +47,13 @@ function collectStdout() {
     },
   })
   return { stdout, getText: () => text }
+}
+
+function writeJsonConfig(value: unknown) {
+  const root = mkdtempSync(join(tmpdir(), 'summarize-config-'))
+  mkdirSync(join(root, '.summarize'), { recursive: true })
+  writeFileSync(join(root, '.summarize', 'config.json'), JSON.stringify(value), 'utf8')
+  return root
 }
 
 describe('cli LLM provider selection (direct keys)', () => {
@@ -204,5 +214,99 @@ describe('cli LLM provider selection (direct keys)', () => {
     expect(out.getText().trim()).toBe('OK')
     const model = mocks.completeSimple.mock.calls[0]?.[0] as { provider?: string }
     expect(model.provider).toBe('anthropic')
+  })
+
+  it('applies provider baseUrl overrides from env', async () => {
+    mocks.completeSimple.mockClear()
+
+    const html =
+      '<!doctype html><html><head><title>Hello</title></head>' +
+      '<body><article><p>Hi</p></article></body></html>'
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.url
+      if (url === 'https://example.com') return htmlResponse(html)
+      throw new Error(`Unexpected fetch call: ${url}`)
+    })
+
+    const out = collectStdout()
+    await runCli(
+      ['--model', 'anthropic/claude-sonnet-4-5', '--timeout', '2s', 'https://example.com'],
+      {
+        env: {
+          ANTHROPIC_API_KEY: 'test',
+          ANTHROPIC_BASE_URL: 'https://anthropic-proxy.example.com',
+        },
+        fetch: fetchMock as unknown as typeof fetch,
+        stdout: out.stdout,
+        stderr: new Writable({
+          write(_c, _e, cb) {
+            cb()
+          },
+        }),
+      }
+    )
+
+    expect(out.getText().trim()).toBe('OK')
+    const model = mocks.completeSimple.mock.calls[0]?.[0] as { provider?: string; baseUrl?: string }
+    expect(model.provider).toBe('anthropic')
+    expect(model.baseUrl).toBe('https://anthropic-proxy.example.com')
+  })
+
+  it('applies provider baseUrl overrides from config when env is absent', async () => {
+    mocks.completeSimple.mockClear()
+
+    const home = writeJsonConfig({
+      anthropic: { baseUrl: 'https://anthropic-proxy.example.com' },
+      openai: { baseUrl: 'https://openai-proxy.example.com/v1' },
+    })
+
+    const html =
+      '<!doctype html><html><head><title>Hello</title></head>' +
+      '<body><article><p>Hi</p></article></body></html>'
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.url
+      if (url === 'https://example.com') return htmlResponse(html)
+      throw new Error(`Unexpected fetch call: ${url}`)
+    })
+
+    const out = collectStdout()
+    await runCli(
+      ['--model', 'anthropic/claude-sonnet-4-5', '--timeout', '2s', 'https://example.com'],
+      {
+        env: { HOME: home, ANTHROPIC_API_KEY: 'test' },
+        fetch: fetchMock as unknown as typeof fetch,
+        stdout: out.stdout,
+        stderr: new Writable({
+          write(_c, _e, cb) {
+            cb()
+          },
+        }),
+      }
+    )
+
+    const model = mocks.completeSimple.mock.calls[0]?.[0] as { provider?: string; baseUrl?: string }
+    expect(model.provider).toBe('anthropic')
+    expect(model.baseUrl).toBe('https://anthropic-proxy.example.com')
+
+    mocks.completeSimple.mockClear()
+    await runCli(['--model', 'openai/gpt-5.2', '--timeout', '2s', 'https://example.com'], {
+      env: { HOME: home, OPENAI_API_KEY: 'test' },
+      fetch: fetchMock as unknown as typeof fetch,
+      stdout: out.stdout,
+      stderr: new Writable({
+        write(_c, _e, cb) {
+          cb()
+        },
+      }),
+    })
+
+    const openaiModel = mocks.completeSimple.mock.calls[0]?.[0] as {
+      provider?: string
+      baseUrl?: string
+    }
+    expect(openaiModel.provider).toBe('openai')
+    expect(openaiModel.baseUrl).toBe('https://openai-proxy.example.com/v1')
   })
 })

@@ -25,6 +25,7 @@
 - Daemon/Chrome: stream extra run metadata (`inputSummary`, `modelLabel`, `summaryFromCache`) over SSE for richer panel status.
 - Core: expose lightweight URL helpers at `@steipete/summarize-core/content/url` (YouTube/Twitter/podcast/direct-media detection).
 - Chrome Side Panel: new icon + extension `homepage_url` set to `summarize.sh`.
+- Providers: add configurable API base URLs (config + env) for OpenAI/Anthropic/Google/xAI (thanks @bunchjesse for the nudge).
 
 ### Fixed
 

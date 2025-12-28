@@ -101,6 +101,7 @@ export function createDaemonUrlFlowContext(args: DaemonUrlFlowContextArgs): UrlF
     anthropicApiKey,
     zaiApiKey,
     zaiBaseUrl,
+    providerBaseUrls,
     firecrawlApiKey,
     firecrawlConfigured,
     googleConfigured,
@@ -172,6 +173,7 @@ export function createDaemonUrlFlowContext(args: DaemonUrlFlowContextArgs): UrlF
       openrouterConfigured,
     },
     zai: { apiKey: zaiApiKey, baseUrl: zaiBaseUrl },
+    providerBaseUrls,
   })
 
   const outputLanguage = resolveDaemonOutputLanguage({
@@ -245,6 +247,7 @@ export function createDaemonUrlFlowContext(args: DaemonUrlFlowContextArgs): UrlF
       firecrawlConfigured,
       googleConfigured,
       anthropicConfigured,
+      providerBaseUrls,
       zaiApiKey,
       zaiBaseUrl,
     },
@@ -312,6 +315,7 @@ export function createDaemonUrlFlowContext(args: DaemonUrlFlowContextArgs): UrlF
         googleConfigured,
         anthropicApiKey,
         anthropicConfigured,
+        providerBaseUrls,
         zaiApiKey,
         zaiBaseUrl,
         firecrawlConfigured,

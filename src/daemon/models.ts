@@ -204,9 +204,7 @@ export async function buildModelPickerOptions({
   }
 
   const openaiBaseUrl = (() => {
-    const raw = typeof envForRun.OPENAI_BASE_URL === 'string' ? envForRun.OPENAI_BASE_URL : null
-    const trimmed = raw?.trim() ?? ''
-    return trimmed.length > 0 ? trimmed : null
+    return envState.providerBaseUrls.openai
   })()
 
   let localModelsSource: { kind: 'openai-compatible'; baseUrlHost: string } | null = null

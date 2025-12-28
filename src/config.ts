@@ -19,6 +19,12 @@ export type CliConfig = {
 }
 
 export type OpenAiConfig = {
+  /**
+   * Override the OpenAI-compatible API base URL (e.g. a proxy, OpenRouter, or a local gateway).
+   *
+   * Prefer env `OPENAI_BASE_URL` when you need per-run overrides.
+   */
+  baseUrl?: string
   useChatCompletions?: boolean
   /**
    * USD per minute for OpenAI Whisper transcription cost estimation.
@@ -26,6 +32,33 @@ export type OpenAiConfig = {
    * Default: 0.006 (per OpenAI pricing as of 2025-12-24).
    */
   whisperUsdPerMinute?: number
+}
+
+export type AnthropicConfig = {
+  /**
+   * Override the Anthropic API base URL (e.g. a proxy).
+   *
+   * Prefer env `ANTHROPIC_BASE_URL` when you need per-run overrides.
+   */
+  baseUrl?: string
+}
+
+export type GoogleConfig = {
+  /**
+   * Override the Google Generative Language API base URL (e.g. a proxy).
+   *
+   * Prefer env `GOOGLE_BASE_URL` / `GEMINI_BASE_URL` when you need per-run overrides.
+   */
+  baseUrl?: string
+}
+
+export type XaiConfig = {
+  /**
+   * Override the xAI API base URL (e.g. a proxy).
+   *
+   * Prefer env `XAI_BASE_URL` when you need per-run overrides.
+   */
+  baseUrl?: string
 }
 
 export type AutoRule = {
@@ -106,10 +139,30 @@ export type SummarizeConfig = {
   }
   cli?: CliConfig
   openai?: OpenAiConfig
+  anthropic?: AnthropicConfig
+  google?: GoogleConfig
+  xai?: XaiConfig
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function parseOptionalBaseUrl(raw: unknown): string | undefined {
+  return typeof raw === 'string' && raw.trim().length > 0 ? raw.trim() : undefined
+}
+
+function parseProviderBaseUrlConfig(
+  raw: unknown,
+  path: string,
+  providerName: string
+): { baseUrl: string } | undefined {
+  if (typeof raw === 'undefined') return undefined
+  if (!isRecord(raw)) {
+    throw new Error(`Invalid config file ${path}: "${providerName}" must be an object.`)
+  }
+  const baseUrl = parseOptionalBaseUrl(raw.baseUrl)
+  return typeof baseUrl === 'string' ? { baseUrl } : undefined
 }
 
 function parseAutoRuleKind(value: unknown): AutoRuleKind | null {
@@ -660,6 +713,7 @@ export function loadSummarizeConfig({ env }: { env: Record<string, string | unde
     if (!isRecord(value)) {
       throw new Error(`Invalid config file ${path}: "openai" must be an object.`)
     }
+    const baseUrl = parseOptionalBaseUrl(value.baseUrl)
     const useChatCompletions =
       typeof value.useChatCompletions === 'boolean' ? value.useChatCompletions : undefined
     const whisperUsdPerMinuteRaw = (value as { whisperUsdPerMinute?: unknown }).whisperUsdPerMinute
@@ -670,13 +724,20 @@ export function loadSummarizeConfig({ env }: { env: Record<string, string | unde
         ? whisperUsdPerMinuteRaw
         : undefined
 
-    return typeof useChatCompletions === 'boolean' || typeof whisperUsdPerMinute === 'number'
+    return typeof baseUrl === 'string' ||
+      typeof useChatCompletions === 'boolean' ||
+      typeof whisperUsdPerMinute === 'number'
       ? {
+          ...(typeof baseUrl === 'string' ? { baseUrl } : {}),
           ...(typeof useChatCompletions === 'boolean' ? { useChatCompletions } : {}),
           ...(typeof whisperUsdPerMinute === 'number' ? { whisperUsdPerMinute } : {}),
         }
       : undefined
   })()
+
+  const anthropic = parseProviderBaseUrlConfig(parsed.anthropic, path, 'anthropic')
+  const google = parseProviderBaseUrlConfig(parsed.google, path, 'google')
+  const xai = parseProviderBaseUrlConfig(parsed.xai, path, 'xai')
 
   return {
     config: {
@@ -689,6 +750,9 @@ export function loadSummarizeConfig({ env }: { env: Record<string, string | unde
       ...(output ? { output } : {}),
       ...(cli ? { cli } : {}),
       ...(openai ? { openai } : {}),
+      ...(anthropic ? { anthropic } : {}),
+      ...(google ? { google } : {}),
+      ...(xai ? { xai } : {}),
     },
     path,
   }

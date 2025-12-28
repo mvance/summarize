@@ -350,6 +350,7 @@ export async function runCli(
       anthropicApiKey,
       zaiApiKey,
       zaiBaseUrl,
+      providerBaseUrls,
       firecrawlApiKey,
       firecrawlConfigured,
       googleConfigured,
@@ -458,6 +459,7 @@ export async function runCli(
         apiKey: zaiApiKey,
         baseUrl: zaiBaseUrl,
       },
+      providerBaseUrls,
     })
     const writeViaFooter = (parts: string[]) => {
       if (json) return
@@ -520,6 +522,7 @@ export async function runCli(
         firecrawlConfigured,
         googleConfigured,
         anthropicConfigured,
+        providerBaseUrls,
         zaiApiKey,
         zaiBaseUrl,
       },
@@ -612,6 +615,7 @@ export async function runCli(
           googleConfigured,
           anthropicApiKey,
           anthropicConfigured,
+          providerBaseUrls,
           zaiApiKey,
           zaiBaseUrl,
           firecrawlConfigured,

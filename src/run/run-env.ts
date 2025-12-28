@@ -20,6 +20,17 @@ export type EnvState = {
   falApiKey: string | null
   cliAvailability: Partial<Record<CliProvider, boolean>>
   envForAuto: Record<string, string | undefined>
+  providerBaseUrls: {
+    openai: string | null
+    anthropic: string | null
+    google: string | null
+    xai: string | null
+  }
+}
+
+function normalizeBaseUrl(raw: string | null | undefined): string | null {
+  const trimmed = typeof raw === 'string' ? raw.trim() : ''
+  return trimmed.length > 0 ? trimmed : null
 }
 
 export function resolveEnvState({
@@ -32,8 +43,26 @@ export function resolveEnvState({
   configForCli: SummarizeConfig | null
 }): EnvState {
   const xaiKeyRaw = typeof envForRun.XAI_API_KEY === 'string' ? envForRun.XAI_API_KEY : null
-  const openaiBaseUrl =
-    typeof envForRun.OPENAI_BASE_URL === 'string' ? envForRun.OPENAI_BASE_URL : null
+  const openaiBaseUrl = (() => {
+    const envValue = normalizeBaseUrl(envForRun.OPENAI_BASE_URL)
+    if (envValue) return envValue
+    return normalizeBaseUrl(configForCli?.openai?.baseUrl)
+  })()
+  const anthropicBaseUrl = (() => {
+    const envValue = normalizeBaseUrl(envForRun.ANTHROPIC_BASE_URL)
+    if (envValue) return envValue
+    return normalizeBaseUrl(configForCli?.anthropic?.baseUrl)
+  })()
+  const googleBaseUrl = (() => {
+    const envValue = normalizeBaseUrl(envForRun.GOOGLE_BASE_URL ?? envForRun.GEMINI_BASE_URL)
+    if (envValue) return envValue
+    return normalizeBaseUrl(configForCli?.google?.baseUrl)
+  })()
+  const xaiBaseUrl = (() => {
+    const envValue = normalizeBaseUrl(envForRun.XAI_BASE_URL)
+    if (envValue) return envValue
+    return normalizeBaseUrl(configForCli?.xai?.baseUrl)
+  })()
   const zaiKeyRaw =
     typeof envForRun.Z_AI_API_KEY === 'string'
       ? envForRun.Z_AI_API_KEY
@@ -85,7 +114,7 @@ export function resolveEnvState({
   const openrouterApiKey = (() => {
     const explicit = openRouterKeyRaw?.trim() ?? ''
     if (explicit.length > 0) return explicit
-    const baseUrl = openaiBaseUrl?.trim() ?? ''
+    const baseUrl = openaiBaseUrl ?? ''
     const openaiKey = openaiKeyRaw?.trim() ?? ''
     if (baseUrl.length > 0 && /openrouter\.ai/i.test(baseUrl) && openaiKey.length > 0) {
       return openaiKey
@@ -98,6 +127,12 @@ export function resolveEnvState({
   const openrouterConfigured = typeof openrouterApiKey === 'string' && openrouterApiKey.length > 0
   const cliAvailability = resolveCliAvailability({ env, config: configForCli })
   const envForAuto = openrouterApiKey ? { ...env, OPENROUTER_API_KEY: openrouterApiKey } : env
+  const providerBaseUrls = {
+    openai: openaiBaseUrl,
+    anthropic: anthropicBaseUrl,
+    google: googleBaseUrl,
+    xai: xaiBaseUrl,
+  }
 
   return {
     apiKey: apiKey?.trim() ?? null,
@@ -118,5 +153,6 @@ export function resolveEnvState({
     falApiKey,
     cliAvailability,
     envForAuto,
+    providerBaseUrls,
   }
 }

@@ -48,6 +48,9 @@ export function createTranscriptToMarkdownConverter({
   googleApiKey,
   openaiApiKey,
   openaiBaseUrlOverride,
+  anthropicBaseUrlOverride,
+  googleBaseUrlOverride,
+  xaiBaseUrlOverride,
   anthropicApiKey,
   openrouterApiKey,
   fetchImpl,
@@ -62,6 +65,9 @@ export function createTranscriptToMarkdownConverter({
   googleApiKey: string | null
   openaiApiKey: string | null
   openaiBaseUrlOverride?: string | null
+  anthropicBaseUrlOverride?: string | null
+  googleBaseUrlOverride?: string | null
+  xaiBaseUrlOverride?: string | null
   fetchImpl: typeof fetch
   anthropicApiKey: string | null
   openrouterApiKey: string | null
@@ -95,6 +101,9 @@ export function createTranscriptToMarkdownConverter({
       apiKeys: { xaiApiKey, googleApiKey, openaiApiKey, anthropicApiKey, openrouterApiKey },
       forceOpenRouter,
       openaiBaseUrlOverride,
+      anthropicBaseUrlOverride,
+      googleBaseUrlOverride,
+      xaiBaseUrlOverride,
       forceChatCompletions,
       system,
       prompt,

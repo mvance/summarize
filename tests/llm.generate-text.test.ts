@@ -372,6 +372,47 @@ describe('llm generate/stream', () => {
     expect(model.headers?.['X-Title']).toBe('summarize')
   })
 
+  it('applies provider baseUrl overrides (google/xai)', async () => {
+    mocks.completeSimple.mockClear()
+
+    await generateTextWithModelId({
+      modelId: 'google/gemini-3-flash-preview',
+      apiKeys: {
+        openaiApiKey: null,
+        openrouterApiKey: null,
+        xaiApiKey: null,
+        googleApiKey: 'k',
+        anthropicApiKey: null,
+      },
+      prompt: 'hi',
+      timeoutMs: 2000,
+      fetchImpl: globalThis.fetch.bind(globalThis),
+      googleBaseUrlOverride: 'https://google-proxy.example.com',
+    })
+
+    const googleModel = mocks.completeSimple.mock.calls[0]?.[0] as { baseUrl?: string }
+    expect(googleModel.baseUrl).toBe('https://google-proxy.example.com')
+
+    mocks.completeSimple.mockClear()
+    await generateTextWithModelId({
+      modelId: 'xai/grok-4-fast-non-reasoning',
+      apiKeys: {
+        openaiApiKey: null,
+        openrouterApiKey: null,
+        xaiApiKey: 'k',
+        googleApiKey: null,
+        anthropicApiKey: null,
+      },
+      prompt: 'hi',
+      timeoutMs: 2000,
+      fetchImpl: globalThis.fetch.bind(globalThis),
+      xaiBaseUrlOverride: 'https://xai-proxy.example.com/v1',
+    })
+
+    const xaiModel = mocks.completeSimple.mock.calls[0]?.[0] as { baseUrl?: string }
+    expect(xaiModel.baseUrl).toBe('https://xai-proxy.example.com/v1')
+  })
+
   it('wraps anthropic model access errors with a helpful message', async () => {
     mocks.completeSimple.mockImplementationOnce(async () => {
       const error = Object.assign(new Error('model: claude-3-5-sonnet-latest'), {
