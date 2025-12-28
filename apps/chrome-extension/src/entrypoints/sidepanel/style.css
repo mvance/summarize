@@ -737,7 +737,7 @@ select {
 
 .pickerPositioner {
   position: absolute;
-  z-index: 50;
+  z-index: 2000;
   top: calc(100% + 6px);
   left: 0;
   right: 0;
@@ -745,14 +745,14 @@ select {
 }
 
 .pickerContent {
-  background: rgba(20, 26, 36, 0.72);
-  background: color-mix(in srgb, var(--panel) 82%, transparent);
+  background: rgba(20, 26, 36, 0.58);
+  background: color-mix(in srgb, var(--panel) 62%, transparent);
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 6px;
   box-shadow: var(--shadow);
-  backdrop-filter: blur(18px) saturate(1.08);
-  -webkit-backdrop-filter: blur(18px) saturate(1.08);
+  backdrop-filter: blur(22px) saturate(1.16);
+  -webkit-backdrop-filter: blur(22px) saturate(1.16);
 }
 
 .pickerContent[hidden] {

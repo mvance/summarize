@@ -32,7 +32,7 @@ export function useZagSelect({ id, items, value, onValueChange }: UseZagSelectAr
   const service = useMachine(select.machine, {
     id,
     collection,
-    positioning: { placement: 'bottom-start', gutter: 6, sameWidth: true },
+    positioning: { placement: 'bottom-start', gutter: 6, sameWidth: true, strategy: 'fixed' },
     defaultValue: value ? [value] : [],
     onValueChange: ({ value: next }: select.ValueChangeDetails) => {
       if (syncing.current) return

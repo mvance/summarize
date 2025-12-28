@@ -526,7 +526,7 @@ select {
 
 .pickerPositioner {
   position: absolute;
-  z-index: 20;
+  z-index: 2000;
   top: calc(100% + 6px);
   left: 0;
   right: 0;
