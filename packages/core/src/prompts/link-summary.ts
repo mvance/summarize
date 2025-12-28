@@ -24,12 +24,14 @@ const SUMMARY_LENGTH_DIRECTIVES: Record<SummaryLength, { guidance: string; forma
   xl: {
     guidance:
       'Write a detailed summary in 4–6 short paragraphs. Focus on what the text says (facts, events, arguments) and include concrete numbers or quotes when present.',
-    formatting: 'Use Markdown paragraphs separated by single blank lines.',
+    formatting:
+      'Use Markdown paragraphs separated by single blank lines. Add short Markdown headings to break up longer blocks when it improves scanability.',
   },
   xxl: {
     guidance:
       'Write a comprehensive summary in 6–10 short paragraphs. Cover background, main points, evidence, and stated outcomes in the source text; avoid adding implications or recommendations unless explicitly stated.',
-    formatting: 'Use Markdown paragraphs separated by single blank lines.',
+    formatting:
+      'Use Markdown paragraphs separated by single blank lines. Add short Markdown headings to break up longer blocks when it improves scanability.',
   },
 }
 
