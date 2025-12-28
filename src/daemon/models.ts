@@ -1,3 +1,4 @@
+import { getModels } from '@mariozechner/pi-ai'
 import type { SummarizeConfig } from '../config.js'
 import { resolveEnvState } from '../run/run-env.js'
 
@@ -34,6 +35,27 @@ function describeBaseUrlHost(baseUrl: string): string | null {
     return host.length > 0 ? host : null
   } catch {
     return null
+  }
+}
+
+function pushPiAiModels({
+  options,
+  provider,
+  prefix,
+  labelPrefix,
+}: {
+  options: ModelPickerOption[]
+  provider: Parameters<typeof getModels>[0]
+  prefix: string
+  labelPrefix: string
+}) {
+  const models = getModels(provider)
+    .slice()
+    .sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id))
+  for (const m of models) {
+    const id = `${prefix}${m.id}`
+    const label = `${labelPrefix}${m.name || m.id}`
+    options.push({ id, label })
   }
 }
 
@@ -128,30 +150,57 @@ export async function buildModelPickerOptions({
 
   if (providers.openrouter) {
     options.push({ id: 'free', label: 'Free (OpenRouter)' })
-    options.push({ id: 'openrouter/openai/gpt-5-mini', label: 'OpenRouter: OpenAI gpt-5-mini' })
+    pushPiAiModels({
+      options,
+      provider: 'openrouter',
+      prefix: 'openrouter/',
+      labelPrefix: 'OpenRouter: ',
+    })
   }
 
   if (providers.openai) {
-    options.push({ id: 'openai/gpt-5-mini', label: 'OpenAI gpt-5-mini' })
-    options.push({ id: 'openai/gpt-5-nano', label: 'OpenAI gpt-5-nano' })
-    options.push({ id: 'openai/gpt-5.2', label: 'OpenAI gpt-5.2' })
+    pushPiAiModels({
+      options,
+      provider: 'openai',
+      prefix: 'openai/',
+      labelPrefix: 'OpenAI: ',
+    })
   }
 
   if (providers.anthropic) {
-    options.push({ id: 'anthropic/claude-sonnet-4-5', label: 'Anthropic Claude Sonnet 4.5' })
-    options.push({ id: 'anthropic/claude-opus-4-1', label: 'Anthropic Claude Opus 4.1' })
+    pushPiAiModels({
+      options,
+      provider: 'anthropic',
+      prefix: 'anthropic/',
+      labelPrefix: 'Anthropic: ',
+    })
   }
 
   if (providers.google) {
-    options.push({ id: 'google/gemini-3-flash-preview', label: 'Google Gemini 3 Flash' })
+    pushPiAiModels({
+      options,
+      provider: 'google',
+      prefix: 'google/',
+      labelPrefix: 'Google: ',
+    })
   }
 
   if (providers.xai) {
-    options.push({ id: 'xai/grok-4-fast-non-reasoning', label: 'xAI Grok 4 Fast' })
+    pushPiAiModels({
+      options,
+      provider: 'xai',
+      prefix: 'xai/',
+      labelPrefix: 'xAI: ',
+    })
   }
 
   if (providers.zai) {
-    options.push({ id: 'zai/glm-4.7', label: 'Z.AI glm-4.7' })
+    pushPiAiModels({
+      options,
+      provider: 'zai',
+      prefix: 'zai/',
+      labelPrefix: 'Z.AI: ',
+    })
   }
 
   const openaiBaseUrl = (() => {
