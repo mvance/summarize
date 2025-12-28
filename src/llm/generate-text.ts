@@ -349,6 +349,10 @@ export async function generateTextWithModelId({
   const parsed = parseGatewayStyleModelId(modelId)
   const context = promptToContext({ system, prompt })
 
+  const isOpenaiGpt5 = parsed.provider === 'openai' && /^gpt-5([-.].+)?$/i.test(parsed.model)
+  const effectiveTemperature =
+    typeof temperature === 'number' && !(isOpenaiGpt5 && temperature === 0) ? temperature : undefined
+
   const maxRetries = Math.max(0, retries)
   let attempt = 0
 
@@ -366,7 +370,9 @@ export async function generateTextWithModelId({
           context,
         })
         const result = await completeSimple(model, context, {
-          ...(typeof temperature === 'number' ? { temperature } : {}),
+          ...(typeof effectiveTemperature === 'number'
+            ? { temperature: effectiveTemperature }
+            : {}),
           ...(typeof maxOutputTokens === 'number' ? { maxTokens: maxOutputTokens } : {}),
           apiKey,
           signal: controller.signal,
@@ -394,7 +400,9 @@ export async function generateTextWithModelId({
           context,
         })
         const result = await completeSimple(model, context, {
-          ...(typeof temperature === 'number' ? { temperature } : {}),
+          ...(typeof effectiveTemperature === 'number'
+            ? { temperature: effectiveTemperature }
+            : {}),
           ...(typeof maxOutputTokens === 'number' ? { maxTokens: maxOutputTokens } : {}),
           apiKey,
           signal: controller.signal,
@@ -419,7 +427,9 @@ export async function generateTextWithModelId({
           context,
         })
         const result = await completeSimple(model, context, {
-          ...(typeof temperature === 'number' ? { temperature } : {}),
+          ...(typeof effectiveTemperature === 'number'
+            ? { temperature: effectiveTemperature }
+            : {}),
           ...(typeof maxOutputTokens === 'number' ? { maxTokens: maxOutputTokens } : {}),
           apiKey,
           signal: controller.signal,
@@ -455,7 +465,9 @@ export async function generateTextWithModelId({
           openaiBaseUrlOverride,
         })
         const result = await completeSimple(model, context, {
-          ...(typeof temperature === 'number' ? { temperature } : {}),
+          ...(typeof effectiveTemperature === 'number'
+            ? { temperature: effectiveTemperature }
+            : {}),
           ...(typeof maxOutputTokens === 'number' ? { maxTokens: maxOutputTokens } : {}),
           apiKey,
           signal: controller.signal,
@@ -478,7 +490,7 @@ export async function generateTextWithModelId({
       })
 
       const result = await completeSimple(model, context, {
-        ...(typeof temperature === 'number' ? { temperature } : {}),
+        ...(typeof effectiveTemperature === 'number' ? { temperature: effectiveTemperature } : {}),
         ...(typeof maxOutputTokens === 'number' ? { maxTokens: maxOutputTokens } : {}),
         apiKey: openaiConfig?.apiKey ?? apiKeys.openaiApiKey ?? undefined,
         signal: controller.signal,
