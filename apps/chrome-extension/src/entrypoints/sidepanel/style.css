@@ -771,6 +771,18 @@ select {
   gap: 4px;
 }
 
+.pickerPositioner[data-picker="length"] .pickerContent {
+  min-width: 220px;
+}
+
+.pickerPositioner[data-picker="length"] .pickerList {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.pickerPositioner[data-picker="length"] .pickerOption {
+  justify-content: flex-start;
+}
+
 .pickerOption {
   display: inline-flex;
   align-items: center;
