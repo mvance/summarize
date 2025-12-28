@@ -1,5 +1,6 @@
 import MarkdownIt from 'markdown-it'
 
+import { mergeStreamingChunk } from '../../../../../src/shared/streaming-merge.js'
 import { buildIdleSubtitle } from '../../lib/header'
 import { defaultSettings, loadSettings, patchSettings } from '../../lib/settings'
 import { parseSseStream } from '../../lib/sse'
@@ -476,23 +477,7 @@ function renderMetricsSummary(summary: string, options?: { shortenOpenRouter?: b
 }
 
 function mergeStreamText(current: string, incoming: string): string {
-  if (!incoming) return current
-  if (!current) return incoming
-
-  // Some providers stream cumulative buffers; prefer replacement if the incoming chunk contains everything so far.
-  if (incoming.length >= current.length && incoming.startsWith(current)) {
-    return incoming
-  }
-
-  // Overlap-merge to avoid duplicated tails/heads.
-  const maxOverlap = Math.min(current.length, incoming.length, 2000)
-  for (let overlap = maxOverlap; overlap >= 8; overlap -= 1) {
-    if (current.endsWith(incoming.slice(0, overlap))) {
-      return current + incoming.slice(overlap)
-    }
-  }
-
-  return current + incoming
+  return mergeStreamingChunk(current, incoming).next
 }
 
 function applyTypography(fontFamily: string, fontSize: number) {
