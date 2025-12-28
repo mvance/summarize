@@ -525,12 +525,8 @@ select {
 }
 
 .pickerPositioner {
-  position: absolute;
+  position: fixed;
   z-index: 2000;
-  top: calc(100% + 6px);
-  left: 0;
-  right: 0;
-  min-width: 100%;
 }
 
 .pickerContent {

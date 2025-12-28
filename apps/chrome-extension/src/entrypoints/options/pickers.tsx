@@ -1,6 +1,8 @@
 import { render } from 'preact'
+import { createPortal } from 'preact/compat'
 
 import type { ColorMode, ColorScheme } from '../../lib/theme'
+import { getOverlayRoot } from '../../ui/portal'
 import { SchemeChips } from '../../ui/scheme-chips'
 import { type SelectItem, useZagSelect } from '../../ui/zag-select'
 
@@ -49,6 +51,20 @@ function SelectField({
   const selectedValue = api.value[0] ?? ''
   const selectedLabel =
     api.valueAsString || items.find((item) => item.value === selectedValue)?.label || ''
+  const portalRoot = getOverlayRoot()
+  const content = (
+    <div className="pickerPositioner" {...api.getPositionerProps()}>
+      <div className="pickerContent" {...api.getContentProps()}>
+        <div className="pickerList" {...api.getListProps()}>
+          {items.map((item) => (
+            <button key={item.value} className="pickerOption" {...api.getItemProps({ item })}>
+              {optionContent(item)}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
 
   return (
     <label className={labelClassName} {...api.getLabelProps()}>
@@ -57,17 +73,7 @@ function SelectField({
         <button className="pickerTrigger" {...api.getTriggerProps()}>
           {triggerContent(selectedLabel, selectedValue)}
         </button>
-        <div className="pickerPositioner" {...api.getPositionerProps()}>
-          <div className="pickerContent" {...api.getContentProps()}>
-            <div className="pickerList" {...api.getListProps()}>
-              {items.map((item) => (
-                <button key={item.value} className="pickerOption" {...api.getItemProps({ item })}>
-                  {optionContent(item)}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
+        {portalRoot ? createPortal(content, portalRoot) : content}
         <select className="pickerHidden" {...api.getHiddenSelectProps()} />
       </div>
     </label>

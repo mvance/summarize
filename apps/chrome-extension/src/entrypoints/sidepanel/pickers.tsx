@@ -1,9 +1,11 @@
 import { render } from 'preact'
+import { createPortal } from 'preact/compat'
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
 
 import { readPresetOrCustomValue, resolvePresetOrCustom } from '../../lib/combo'
 import { defaultSettings } from '../../lib/settings'
 import type { ColorMode, ColorScheme } from '../../lib/theme'
+import { getOverlayRoot } from '../../ui/portal'
 import { SchemeChips } from '../../ui/scheme-chips'
 import { type SelectItem, useZagSelect } from '../../ui/zag-select'
 
@@ -86,6 +88,21 @@ function SelectField({
   const selectedValue = api.value[0] ?? ''
   const selectedLabel =
     api.valueAsString || items.find((item) => item.value === selectedValue)?.label || ''
+  const portalRoot = getOverlayRoot()
+
+  const content = (
+    <div className="pickerPositioner" {...api.getPositionerProps()}>
+      <div className="pickerContent" {...api.getContentProps()}>
+        <div className="pickerList" {...api.getListProps()}>
+          {items.map((item) => (
+            <button key={item.value} className="pickerOption" {...api.getItemProps({ item })}>
+              {optionContent(item)}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
 
   return (
     <label className={labelClassName} {...api.getLabelProps()}>
@@ -94,17 +111,7 @@ function SelectField({
         <button className="pickerTrigger" {...api.getTriggerProps()}>
           {triggerContent(selectedLabel, selectedValue)}
         </button>
-        <div className="pickerPositioner" {...api.getPositionerProps()}>
-          <div className="pickerContent" {...api.getContentProps()}>
-            <div className="pickerList" {...api.getListProps()}>
-              {items.map((item) => (
-                <button key={item.value} className="pickerOption" {...api.getItemProps({ item })}>
-                  {optionContent(item)}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
+        {portalRoot ? createPortal(content, portalRoot) : content}
         <select className="pickerHidden" {...api.getHiddenSelectProps()} />
       </div>
     </label>
@@ -124,6 +131,7 @@ function LengthField({
   const resolved = useMemo(() => resolvePresetOrCustom({ value, presets: lengthPresets }), [value])
   const [presetValue, setPresetValue] = useState(resolved.presetValue)
   const [customValue, setCustomValue] = useState(resolved.customValue)
+  const portalRoot = getOverlayRoot()
 
   useEffect(() => {
     setPresetValue(resolved.presetValue)
@@ -154,6 +162,20 @@ function LengthField({
     onValueChange(next)
   }
 
+  const content = (
+    <div className="pickerPositioner" {...api.getPositionerProps()}>
+      <div className="pickerContent" {...api.getContentProps()}>
+        <div className="pickerList" {...api.getListProps()}>
+          {lengthItems.map((item) => (
+            <button key={item.value} className="pickerOption" {...api.getItemProps({ item })}>
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+
   return (
     <label className={variant === 'mini' ? 'length mini' : 'length wide'} {...api.getLabelProps()}>
       {variant !== 'mini' ? <span className="pickerTitle">Length</span> : null}
@@ -162,17 +184,7 @@ function LengthField({
           <button className="pickerTrigger" {...api.getTriggerProps()}>
             <span>{api.valueAsString || 'Length'}</span>
           </button>
-          <div className="pickerPositioner" {...api.getPositionerProps()}>
-            <div className="pickerContent" {...api.getContentProps()}>
-              <div className="pickerList" {...api.getListProps()}>
-                {lengthItems.map((item) => (
-                  <button key={item.value} className="pickerOption" {...api.getItemProps({ item })}>
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
+          {portalRoot ? createPortal(content, portalRoot) : content}
           <select className="pickerHidden" {...api.getHiddenSelectProps()} />
         </div>
         <input
