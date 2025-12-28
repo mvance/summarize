@@ -214,7 +214,39 @@ const isLikelyDomain = (value: string) =>
 
 function renderMetricsSummary(summary: string) {
   metricsEl.replaceChildren()
-  const parts = summary.split(' · ')
+
+  const inputSummary = lastMeta.inputSummary?.trim() ?? ''
+  const inputParts = inputSummary
+    ? inputSummary
+        .split(' · ')
+        .map((part) => part.trim())
+        .filter(Boolean)
+    : []
+  const inputHasWords = inputParts.some((part) => /\bwords\b/i.test(part))
+  const inputHasMediaDuration = inputParts.some((part) => {
+    if (!/\b(YouTube|podcast|video)\b/i.test(part)) return false
+    return /\bmin\b/i.test(part) || /\b\d+m\b/i.test(part) || /\b\d+s\b/i.test(part)
+  })
+  const normalize = (value: string) => value.replaceAll(/\s+/g, ' ').trim().toLowerCase()
+  const inputPartsNormalized = new Set(inputParts.map(normalize))
+
+  const shouldOmitPart = (raw: string) => {
+    const trimmed = raw.trim()
+    if (!trimmed) return true
+    if (inputPartsNormalized.has(normalize(trimmed))) return true
+    if (inputHasWords && /\bwords\b/i.test(trimmed)) return true
+    if (
+      inputHasMediaDuration &&
+      /\b(YouTube|podcast|video)\b/i.test(trimmed) &&
+      (/\bmin\b/i.test(trimmed) || /\b\d+m\b/i.test(trimmed) || /\b\d+s\b/i.test(trimmed))
+    ) {
+      return true
+    }
+    return false
+  }
+
+  const parts = summary.split(' · ').filter((part) => !shouldOmitPart(part))
+
   parts.forEach((part, index) => {
     if (index) metricsEl.append(document.createTextNode(' · '))
     const trimmed = part.trim()
