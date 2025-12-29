@@ -14,6 +14,8 @@ const HOVER_DELAY_MS = 420
 const CACHE_TTL_MS = 12 * 60 * 1000
 const TOOLTIP_ID = '__summarize_hover_tooltip__'
 const STYLE_ID = '__summarize_hover_tooltip_style__'
+const ERRORISH_PATTERN =
+  /(^error:|failed to load|failed to fetch|failed to connect|unable to load|unable to fetch|unable to connect|something went wrong|try again|technical error|privacy[- ]related|please disable|access denied|forbidden|captcha|verify you are human|enable javascript|cloudflare|rate limit|too many requests|temporarily unavailable|page not found|404|403|500|no summary returned|summary failed|daemon unreachable)/i
 
 function isValidUrl(raw: string): boolean {
   return /^https?:\/\//i.test(raw)
@@ -37,6 +39,12 @@ function resolveUrl(anchor: HTMLAnchorElement): string | null {
 
 function clampText(input: string): string {
   return input.replace(/\s+/g, ' ').trim()
+}
+
+function looksLikeErrorText(input: string): boolean {
+  const text = clampText(input)
+  if (!text) return false
+  return ERRORISH_PATTERN.test(text)
 }
 
 function ensureStyle() {
@@ -68,7 +76,7 @@ function ensureStyle() {
 
     #${TOOLTIP_ID} .summary {
       display: -webkit-box;
-      -webkit-line-clamp: 5;
+      -webkit-line-clamp: 8;
       -webkit-box-orient: vertical;
       overflow: hidden;
     }
@@ -128,6 +136,10 @@ function positionTooltip(anchor: HTMLElement, tooltip: Tooltip) {
 }
 
 function showTooltip(anchor: HTMLElement, text: string, { status = false } = {}) {
+  if (looksLikeErrorText(text)) {
+    hideTooltip()
+    return
+  }
   const tooltip = ensureTooltip()
   tooltip.textEl.textContent = text
   tooltip.textEl.classList.toggle('status', status)
@@ -235,6 +247,10 @@ export default defineContentScript({
 
       const cached = cache.get(url)
       if (cached && Date.now() - cached.updatedAt < CACHE_TTL_MS) {
+        if (looksLikeErrorText(cached.summary)) {
+          cache.delete(url)
+          return
+        }
         showTooltip(anchor, cached.summary)
         return
       }
@@ -263,7 +279,8 @@ export default defineContentScript({
             model,
             length: 'short',
             language,
-            prompt: 'Summarize the linked page concisely. Best effort to keep it short.',
+            prompt:
+              'Plain text only (no Markdown). Summarize the linked page concisely in 1-2 sentences; aim for ~200 characters.',
             mode: 'url',
             maxCharacters: settings.maxChars,
           }),
@@ -296,7 +313,11 @@ export default defineContentScript({
             summary = merged.next
             const cleaned = clampText(summary)
             if (cleaned) {
-              showTooltip(anchor, cleaned)
+              if (!looksLikeErrorText(cleaned)) {
+                showTooltip(anchor, cleaned)
+              } else {
+                hideTooltip()
+              }
             }
           } else if (event.event === 'error') {
             throw new Error(event.data.message)
@@ -306,16 +327,20 @@ export default defineContentScript({
         }
 
         const finalText = clampText(summary)
-        if (finalText) {
+        if (finalText && !looksLikeErrorText(finalText)) {
           cache.set(url, { summary: finalText, updatedAt: Date.now() })
           showTooltip(anchor, finalText)
         } else {
-          showTooltip(anchor, 'No summary returned.', { status: true })
+          hideTooltip()
         }
       } catch (error) {
         if (!controller.signal.aborted && activeAnchor && activeUrl === url) {
           const message = error instanceof Error ? error.message : 'Summary failed'
-          showTooltip(anchor, message, { status: true })
+          if (!looksLikeErrorText(message)) {
+            showTooltip(anchor, message, { status: true })
+          } else {
+            hideTooltip()
+          }
         }
       }
     }

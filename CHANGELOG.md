@@ -11,6 +11,7 @@
 ### Fixes
 
 - Auto model selection: OpenRouter fallback now resolves provider-specific ids (including dash/dot slug normalization) and skips fallback when no unique match.
+- Chrome extension: hide hover tooltips when the returned text looks like an error page.
 
 ## 0.8.0 - 2025-12-28
 
