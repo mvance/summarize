@@ -39,7 +39,20 @@ function buildMetadataBlock(metadata?: ChatContextMetadata): string {
   if (!metadata) return ''
   const lines: string[] = []
 
-  if (metadata.url) lines.push(`URL: ${metadata.url}`)
+  const durationLabel =
+    metadata.mediaDurationSeconds && metadata.mediaDurationSeconds > 0
+      ? formatDuration(metadata.mediaDurationSeconds)
+      : null
+
+  if (metadata.url) {
+    const urlLine = durationLabel
+      ? `URL: ${metadata.url} (duration ${durationLabel})`
+      : `URL: ${metadata.url}`
+    lines.push(urlLine)
+  } else if (durationLabel) {
+    lines.push(`Media duration: ${durationLabel}`)
+  }
+
   if (metadata.title) lines.push(`Title: ${metadata.title}`)
 
   if (metadata.source) {
@@ -65,9 +78,10 @@ function buildMetadataBlock(metadata?: ChatContextMetadata): string {
   }
 
   if (metadata.transcriptSource || metadata.transcriptionProvider) {
-    const parts = [metadata.transcriptSource ?? 'unknown']
+    const parts: string[] = []
+    if (metadata.transcriptSource) parts.push(metadata.transcriptSource)
     if (metadata.transcriptionProvider) parts.push(metadata.transcriptionProvider)
-    lines.push(`Transcript source: ${parts.join(' · ')}`)
+    lines.push(`Transcription method: ${parts.join(' · ')}`)
   }
 
   if (metadata.transcriptCache) {
@@ -76,10 +90,6 @@ function buildMetadataBlock(metadata?: ChatContextMetadata): string {
 
   if (metadata.attemptedTranscriptProviders?.length) {
     lines.push(`Transcript attempts: ${metadata.attemptedTranscriptProviders.join(', ')}`)
-  }
-
-  if (metadata.mediaDurationSeconds && metadata.mediaDurationSeconds > 0) {
-    lines.push(`Media duration: ${formatDuration(metadata.mediaDurationSeconds)}`)
   }
 
   const contentParts: string[] = []

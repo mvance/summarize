@@ -23,8 +23,8 @@ describe('chrome/chat-context', () => {
     expect(content).toContain('Title: Example')
     expect(content).toContain('Source: URL extraction (daemon)')
     expect(content).toContain('Extraction strategy: html')
-    expect(content).toContain('Media duration: 2m 00s')
-    expect(content).toContain('Transcript source: yt-dlp')
+    expect(content).toContain('URL: https://example.com (duration 2m 00s)')
+    expect(content).toContain('Transcription method: yt-dlp')
     expect(content).toContain('Summary (auto-generated):')
   })
 
