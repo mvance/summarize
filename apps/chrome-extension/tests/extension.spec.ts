@@ -116,6 +116,43 @@ async function sendPanelMessage(page: Page, message: object) {
   }, message)
 }
 
+async function mockDaemonSummarize(harness: ExtensionHarness) {
+  const background =
+    harness.context.serviceWorkers()[0] ??
+    (await harness.context.waitForEvent('serviceworker', { timeout: 15_000 }))
+  await background.evaluate(() => {
+    const originalFetch = globalThis.fetch
+    globalThis.__summarizeCalls = 0
+    globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+      if (url === 'http://127.0.0.1:8787/health') {
+        return new Response('', { status: 200 })
+      }
+      if (url === 'http://127.0.0.1:8787/v1/ping') {
+        return new Response('', { status: 200 })
+      }
+      if (url === 'http://127.0.0.1:8787/v1/summarize') {
+        globalThis.__summarizeCalls += 1
+        return new Response(
+          JSON.stringify({ ok: true, id: `run-${globalThis.__summarizeCalls}` }),
+          {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }
+        )
+      }
+      return originalFetch(input, init)
+    }
+  })
+}
+
+async function getSummarizeCalls(harness: ExtensionHarness) {
+  const background =
+    harness.context.serviceWorkers()[0] ??
+    (await harness.context.waitForEvent('serviceworker', { timeout: 15_000 }))
+  return background.evaluate(() => (globalThis.__summarizeCalls as number | undefined) ?? 0)
+}
+
 async function seedSettings(harness: ExtensionHarness, settings: Record<string, unknown>) {
   const background =
     harness.context.serviceWorkers()[0] ??
@@ -382,15 +419,7 @@ test('auto summarize reruns after panel reopen', async () => {
   const harness = await launchExtension()
 
   try {
-    let summarizeCalls = 0
-    await harness.context.route('http://127.0.0.1:8787/v1/summarize', async (route) => {
-      summarizeCalls += 1
-      await route.fulfill({
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ ok: true, id: `run-${summarizeCalls}` }),
-      })
-    })
+    await mockDaemonSummarize(harness)
 
     const sseBody = [
       'event: chunk',
@@ -425,16 +454,18 @@ test('auto summarize reruns after panel reopen', async () => {
     await activateTabByUrl(harness, 'https://example.com')
     await waitForActiveTabUrl(harness, 'https://example.com')
     await sendPanelMessage(panel, { type: 'panel:ready' })
-    await expect.poll(() => summarizeCalls).toBeGreaterThanOrEqual(1)
+    await expect.poll(async () => await getSummarizeCalls(harness)).toBeGreaterThanOrEqual(1)
     await sendPanelMessage(panel, { type: 'panel:rememberUrl', url: activeUrl })
 
-    const callsBeforeClose = summarizeCalls
+    const callsBeforeClose = await getSummarizeCalls(harness)
     await sendPanelMessage(panel, { type: 'panel:closed' })
     await contentPage.bringToFront()
     await activateTabByUrl(harness, 'https://example.com')
     await waitForActiveTabUrl(harness, 'https://example.com')
     await sendPanelMessage(panel, { type: 'panel:ready' })
-    await expect.poll(() => summarizeCalls).toBeGreaterThan(callsBeforeClose)
+    await expect
+      .poll(async () => await getSummarizeCalls(harness))
+      .toBeGreaterThan(callsBeforeClose)
     assertNoErrors(harness)
   } finally {
     await closeExtension(harness.context, harness.userDataDir)
