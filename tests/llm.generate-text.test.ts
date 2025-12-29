@@ -2,6 +2,8 @@ import type { Api } from '@mariozechner/pi-ai'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { generateTextWithModelId, streamTextWithModelId } from '../src/llm/generate-text.js'
 import { makeAssistantMessage, makeTextDeltaStream } from './helpers/pi-ai-mock.js'
+import { buildDocumentPrompt } from './helpers/document-prompt.js'
+import { buildMinimalPdf } from './helpers/pdf.js'
 
 type MockModel = { provider: string; id: string; api: Api }
 
@@ -161,6 +163,7 @@ describe('llm generate/stream', () => {
       )
     })
 
+    const pdfBytes = buildMinimalPdf('Hello PDF')
     const result = await generateTextWithModelId({
       modelId: 'anthropic/claude-opus-4-5',
       apiKeys: {
@@ -170,17 +173,11 @@ describe('llm generate/stream', () => {
         anthropicApiKey: 'k',
         openrouterApiKey: null,
       },
-      prompt: {
-        userText: 'Summarize the attached PDF.',
-        attachments: [
-          {
-            kind: 'document',
-            bytes: new Uint8Array([1, 2, 3]),
-            mediaType: 'application/pdf',
-            filename: 'test.pdf',
-          },
-        ],
-      },
+      prompt: buildDocumentPrompt({
+        text: 'Summarize the attached PDF.',
+        bytes: pdfBytes,
+        filename: 'test.pdf',
+      }),
       timeoutMs: 2000,
       fetchImpl: fetchMock as unknown as typeof fetch,
     })
@@ -211,6 +208,7 @@ describe('llm generate/stream', () => {
       )
     })
 
+    const pdfBytes = buildMinimalPdf('Hello PDF')
     const result = await generateTextWithModelId({
       modelId: 'openai/gpt-5.2',
       apiKeys: {
@@ -220,17 +218,11 @@ describe('llm generate/stream', () => {
         anthropicApiKey: null,
         openrouterApiKey: null,
       },
-      prompt: {
-        userText: 'Summarize the attached PDF.',
-        attachments: [
-          {
-            kind: 'document',
-            bytes: new Uint8Array([4, 5, 6]),
-            mediaType: 'application/pdf',
-            filename: 'test.pdf',
-          },
-        ],
-      },
+      prompt: buildDocumentPrompt({
+        text: 'Summarize the attached PDF.',
+        bytes: pdfBytes,
+        filename: 'test.pdf',
+      }),
       timeoutMs: 2000,
       fetchImpl: fetchMock as unknown as typeof fetch,
     })
@@ -265,6 +257,7 @@ describe('llm generate/stream', () => {
       )
     })
 
+    const pdfBytes = buildMinimalPdf('Hello PDF')
     const result = await generateTextWithModelId({
       modelId: 'google/gemini-3-flash-preview',
       apiKeys: {
@@ -274,17 +267,11 @@ describe('llm generate/stream', () => {
         anthropicApiKey: null,
         openrouterApiKey: null,
       },
-      prompt: {
-        userText: 'Summarize the attached PDF.',
-        attachments: [
-          {
-            kind: 'document',
-            bytes: new Uint8Array([7, 8, 9]),
-            mediaType: 'application/pdf',
-            filename: 'test.pdf',
-          },
-        ],
-      },
+      prompt: buildDocumentPrompt({
+        text: 'Summarize the attached PDF.',
+        bytes: pdfBytes,
+        filename: 'test.pdf',
+      }),
       timeoutMs: 2000,
       fetchImpl: fetchMock as unknown as typeof fetch,
     })
