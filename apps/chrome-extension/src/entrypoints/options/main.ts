@@ -26,6 +26,8 @@ const autoToggleRoot = byId<HTMLDivElement>('autoToggle')
 const maxCharsEl = byId<HTMLInputElement>('maxChars')
 const advancedFieldsEl = byId<HTMLDivElement>('advancedFields')
 const advancedToggleEl = byId<HTMLButtonElement>('advancedToggle')
+const hoverPromptEl = byId<HTMLTextAreaElement>('hoverPrompt')
+const hoverPromptResetBtn = byId<HTMLButtonElement>('hoverPromptReset')
 const requestModeEl = byId<HTMLSelectElement>('requestMode')
 const firecrawlModeEl = byId<HTMLSelectElement>('firecrawlMode')
 const markdownModeEl = byId<HTMLSelectElement>('markdownMode')
@@ -332,6 +334,7 @@ async function load() {
     languageCustomEl.value = resolved.customValue
   }
   promptOverrideEl.value = s.promptOverride
+  hoverPromptEl.value = s.hoverPrompt || defaultSettings.hoverPrompt
   autoValue = s.autoSummarize
   autoToggle.update({
     id: 'options-auto',
@@ -391,6 +394,10 @@ advancedToggleEl.addEventListener('click', () => {
   updateAdvancedVisibility()
 })
 
+hoverPromptResetBtn.addEventListener('click', () => {
+  hoverPromptEl.value = defaultSettings.hoverPrompt
+})
+
 modelPresetEl.addEventListener('change', () => {
   modelCustomEl.hidden = modelPresetEl.value !== 'custom'
   if (!modelCustomEl.hidden) modelCustomEl.focus()
@@ -411,6 +418,7 @@ formEl.addEventListener('submit', (e) => {
         defaultValue: defaultSettings.language,
       }),
       promptOverride: promptOverrideEl.value || defaultSettings.promptOverride,
+      hoverPrompt: hoverPromptEl.value || defaultSettings.hoverPrompt,
       autoSummarize: autoValue,
       hoverSummaries: current.hoverSummaries,
       maxChars: Number(maxCharsEl.value) || defaultSettings.maxChars,

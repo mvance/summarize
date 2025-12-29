@@ -11,6 +11,7 @@ export type Settings = {
   token: string
   autoSummarize: boolean
   hoverSummaries: boolean
+  hoverPrompt: string
   model: string
   length: string
   language: string
@@ -75,6 +76,13 @@ function normalizeLanguage(value: unknown): string {
 
 function normalizePromptOverride(value: unknown): string {
   if (typeof value !== 'string') return defaultSettings.promptOverride
+  return value
+}
+
+function normalizeHoverPrompt(value: unknown): string {
+  if (typeof value !== 'string') return defaultSettings.hoverPrompt
+  const trimmed = value.trim()
+  if (!trimmed) return defaultSettings.hoverPrompt
   return value
 }
 
@@ -158,6 +166,8 @@ export const defaultSettings: Settings = {
   token: '',
   autoSummarize: true,
   hoverSummaries: false,
+  hoverPrompt:
+    'Plain text only (no Markdown). Summarize the linked page concisely in 1-2 sentences; aim for 100-200 characters.',
   model: 'auto',
   length: 'xl',
   language: 'auto',
@@ -192,6 +202,7 @@ export async function loadSettings(): Promise<Settings> {
       typeof raw.autoSummarize === 'boolean' ? raw.autoSummarize : defaultSettings.autoSummarize,
     hoverSummaries:
       typeof raw.hoverSummaries === 'boolean' ? raw.hoverSummaries : defaultSettings.hoverSummaries,
+    hoverPrompt: normalizeHoverPrompt(raw.hoverPrompt),
     maxChars: typeof raw.maxChars === 'number' ? raw.maxChars : defaultSettings.maxChars,
     requestMode: normalizeRequestMode(raw.requestMode),
     firecrawlMode: normalizeFirecrawlMode(raw.firecrawlMode),
@@ -216,6 +227,7 @@ export async function saveSettings(settings: Settings): Promise<void> {
       length: normalizeLength(settings.length),
       language: normalizeLanguage(settings.language),
       promptOverride: normalizePromptOverride(settings.promptOverride),
+      hoverPrompt: normalizeHoverPrompt(settings.hoverPrompt),
       requestMode: normalizeRequestMode(settings.requestMode),
       firecrawlMode: normalizeFirecrawlMode(settings.firecrawlMode),
       markdownMode: normalizeMarkdownMode(settings.markdownMode),

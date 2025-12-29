@@ -97,6 +97,7 @@ The daemon decides the best pipeline:
   - Typography: font family (dropdown + custom), font size (slider).
 - Advanced overrides (collapsed by default; click the section title to expand).
   - Leave blank to use daemon config/defaults; set a value to override.
+  - Hover summary prompt: customize the prompt used for link hover summaries (prefilled; reset to default).
   - Pipeline mode: `page|url` (default auto).
   - Firecrawl: `off|auto|always`.
   - Markdown mode: `readability|llm|auto|off`.

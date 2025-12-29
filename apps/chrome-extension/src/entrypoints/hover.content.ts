@@ -279,10 +279,10 @@ export default defineContentScript({
             model,
             length: 'short',
             language,
-            prompt:
-              'Plain text only (no Markdown). Summarize the linked page concisely in 1-2 sentences; aim for 100-200 characters.',
+            prompt: settings.hoverPrompt,
             mode: 'url',
             maxCharacters: settings.maxChars,
+            timeout: '30s',
           }),
           signal: controller.signal,
         })
