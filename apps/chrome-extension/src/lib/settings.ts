@@ -29,6 +29,7 @@ export type Settings = {
   maxOutputTokens: string
   fontFamily: string
   fontSize: number
+  lineHeight: number
   colorScheme: ColorScheme
   colorMode: ColorMode
 }
@@ -164,6 +165,12 @@ function normalizeMaxOutputTokens(value: unknown): string {
   return value.trim()
 }
 
+function normalizeLineHeight(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return defaultSettings.lineHeight
+  if (value < 1.1 || value > 2.2) return defaultSettings.lineHeight
+  return Math.round(value * 100) / 100
+}
+
 export const defaultSettings: Settings = {
   token: '',
   autoSummarize: true,
@@ -187,6 +194,7 @@ export const defaultSettings: Settings = {
   maxOutputTokens: '',
   fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif',
   fontSize: 14,
+  lineHeight: 1.45,
   colorScheme: defaultColorScheme,
   colorMode: defaultColorMode,
 }
@@ -238,6 +246,7 @@ export async function loadSettings(): Promise<Settings> {
     maxOutputTokens: normalizeMaxOutputTokens(raw.maxOutputTokens),
     fontFamily: normalizeFontFamily(raw.fontFamily),
     fontSize: typeof raw.fontSize === 'number' ? raw.fontSize : defaultSettings.fontSize,
+    lineHeight: normalizeLineHeight(raw.lineHeight),
     colorScheme: normalizeColorScheme(raw.colorScheme),
     colorMode: normalizeColorMode(raw.colorMode),
   }
@@ -261,6 +270,7 @@ export async function saveSettings(settings: Settings): Promise<void> {
       retries: normalizeRetries(settings.retries),
       maxOutputTokens: normalizeMaxOutputTokens(settings.maxOutputTokens),
       fontFamily: normalizeFontFamily(settings.fontFamily),
+      lineHeight: normalizeLineHeight(settings.lineHeight),
       colorScheme: normalizeColorScheme(settings.colorScheme),
       colorMode: normalizeColorMode(settings.colorMode),
     },

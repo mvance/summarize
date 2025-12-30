@@ -111,36 +111,34 @@ const modeItems: SelectItem[] = [
 const modeIcons: Record<string, JSX.Element> = {
   system: (
     <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        d="M8 4h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-4l-2 3-2-3H8a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"
+      <rect
+        x="4"
+        y="5"
+        width="16"
+        height="11"
+        rx="2"
         fill="none"
         stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinejoin="round"
+        strokeWidth="1.5"
       />
-      <path d="M9 9h6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-      <path d="M9 12h6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M8 19h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M12 16v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
     </svg>
   ),
   light: (
     <svg viewBox="0 0 24 24" aria-hidden="true">
-      <circle cx="12" cy="12" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
-      <path d="M12 2v3M12 19v3M2 12h3M19 12h3" stroke="currentColor" strokeWidth="1.6" />
-      <path
-        d="M4.6 4.6 6.7 6.7M17.3 17.3l2.1 2.1M17.3 6.7l2.1-2.1M4.6 19.4l2.1-2.1"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-      />
+      <circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M12 3.5v2.5M12 18v2.5M3.5 12h2.5M18 12h2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
     </svg>
   ),
   dark: (
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path
-        d="M20 14.5A7.5 7.5 0 1 1 9.5 4a6.5 6.5 0 1 0 10.5 10.5Z"
+        d="M20.5 15a7.5 7.5 0 1 1-10-10 6.2 6.2 0 0 0 10 10Z"
         fill="none"
         stroke="currentColor"
-        strokeWidth="1.6"
+        strokeWidth="1.5"
+        strokeLinecap="round"
         strokeLinejoin="round"
       />
     </svg>

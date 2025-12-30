@@ -76,6 +76,8 @@ const lengthRoot = byId<HTMLDivElement>('lengthRoot')
 const pickersRoot = byId<HTMLDivElement>('pickersRoot')
 const sizeSmBtn = byId<HTMLButtonElement>('sizeSm')
 const sizeLgBtn = byId<HTMLButtonElement>('sizeLg')
+const lineTightBtn = byId<HTMLButtonElement>('lineTight')
+const lineLooseBtn = byId<HTMLButtonElement>('lineLoose')
 const advancedSettingsEl = byId<HTMLDetailsElement>('advancedSettings')
 const modelPresetEl = byId<HTMLSelectElement>('modelPreset')
 const modelCustomEl = byId<HTMLInputElement>('modelCustom')
@@ -614,14 +616,19 @@ function setActiveMetricsMode(mode: MetricsMode) {
   renderMetricsMode(mode)
 }
 
-function applyTypography(fontFamily: string, fontSize: number) {
+function applyTypography(fontFamily: string, fontSize: number, lineHeight: number) {
   document.documentElement.style.setProperty('--font-body', fontFamily)
   document.documentElement.style.setProperty('--font-size', `${fontSize}px`)
+  document.documentElement.style.setProperty('--line-height', `${lineHeight}`)
 }
 
 const MIN_FONT_SIZE = 12
 const MAX_FONT_SIZE = 20
 let currentFontSize = defaultSettings.fontSize
+const MIN_LINE_HEIGHT = 1.2
+const MAX_LINE_HEIGHT = 1.9
+const LINE_HEIGHT_STEP = 0.1
+let currentLineHeight = defaultSettings.lineHeight
 
 function clampFontSize(value: number) {
   return Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, Math.round(value)))
@@ -635,6 +642,21 @@ function updateSizeControls() {
 function setCurrentFontSize(value: number) {
   currentFontSize = clampFontSize(value)
   updateSizeControls()
+}
+
+function clampLineHeight(value: number) {
+  const rounded = Math.round(value * 10) / 10
+  return Math.min(MAX_LINE_HEIGHT, Math.max(MIN_LINE_HEIGHT, rounded))
+}
+
+function updateLineHeightControls() {
+  lineTightBtn.disabled = currentLineHeight <= MIN_LINE_HEIGHT
+  lineLooseBtn.disabled = currentLineHeight >= MAX_LINE_HEIGHT
+}
+
+function setCurrentLineHeight(value: number) {
+  currentLineHeight = clampLineHeight(value)
+  updateLineHeightControls()
 }
 
 let pickerSettings = {
@@ -663,8 +685,9 @@ const pickerHandlers = {
     void (async () => {
       const next = await patchSettings({ fontFamily: value })
       pickerSettings = { ...pickerSettings, fontFamily: next.fontFamily }
-      applyTypography(next.fontFamily, next.fontSize)
+      applyTypography(next.fontFamily, next.fontSize, next.lineHeight)
       setCurrentFontSize(next.fontSize)
+      setCurrentLineHeight(next.lineHeight)
     })()
   },
   onLengthChange: (value) => {
@@ -1804,13 +1827,26 @@ const bumpFontSize = (delta: number) => {
   void (async () => {
     const nextSize = clampFontSize(currentFontSize + delta)
     const next = await patchSettings({ fontSize: nextSize })
-    applyTypography(next.fontFamily, next.fontSize)
+    applyTypography(next.fontFamily, next.fontSize, next.lineHeight)
     setCurrentFontSize(next.fontSize)
+    setCurrentLineHeight(next.lineHeight)
   })()
 }
 
 sizeSmBtn.addEventListener('click', () => bumpFontSize(-1))
 sizeLgBtn.addEventListener('click', () => bumpFontSize(1))
+
+const bumpLineHeight = (delta: number) => {
+  void (async () => {
+    const nextHeight = clampLineHeight(currentLineHeight + delta)
+    const next = await patchSettings({ lineHeight: nextHeight })
+    applyTypography(next.fontFamily, next.fontSize, next.lineHeight)
+    setCurrentLineHeight(next.lineHeight)
+  })()
+}
+
+lineTightBtn.addEventListener('click', () => bumpLineHeight(-LINE_HEIGHT_STEP))
+lineLooseBtn.addEventListener('click', () => bumpLineHeight(LINE_HEIGHT_STEP))
 
 modelPresetEl.addEventListener('change', () => {
   updateModelRowUI()
@@ -1849,6 +1885,7 @@ modelRefreshBtn.addEventListener('click', () => {
 void (async () => {
   const s = await loadSettings()
   setCurrentFontSize(s.fontSize)
+  setCurrentLineHeight(s.lineHeight)
   autoValue = s.autoSummarize
   chatEnabledValue = s.chatEnabled
   autoToggle.update({
@@ -1884,7 +1921,7 @@ void (async () => {
   setModelPlaceholderFromDiscovery({})
   updateModelRowUI()
   modelRefreshBtn.disabled = !s.token.trim()
-  applyTypography(s.fontFamily, s.fontSize)
+  applyTypography(s.fontFamily, s.fontSize, s.lineHeight)
   applyTheme({ scheme: s.colorScheme, mode: s.colorMode })
   toggleDrawer(false, { animate: false })
   chrome.runtime.onMessage.addListener((msg: BgToPanel) => {

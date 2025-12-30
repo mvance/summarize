@@ -7,6 +7,7 @@
   --font-body: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
   --ui-font-size: 14px;
   --font-size: 14px;
+  --line-height: 1.45;
 }
 
 :root[data-mode="light"] {
@@ -658,6 +659,13 @@ button.ghost:hover {
   font-size: 11px;
 }
 
+.drawer .lineHeight {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
 .sizeControl {
   display: inline-flex;
   align-items: center;
@@ -674,7 +682,7 @@ button.ghost:hover {
   flex: 1;
   border: 0;
   background: transparent;
-  padding: 7px 10px;
+  padding: 6px 10px;
   min-width: 0;
   color: var(--text);
   font: inherit;
@@ -684,31 +692,10 @@ button.ghost:hover {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
 }
 
 .sizeBtnLg {
   font-size: 14px;
-}
-
-.sizeBtn::after {
-  content: "";
-  width: 10px;
-  height: 10px;
-  border-radius: 2px;
-  background:
-    linear-gradient(var(--muted), var(--muted)) 0 1px/10px 1px,
-    linear-gradient(var(--muted), var(--muted)) 0 4px/10px 1px,
-    linear-gradient(var(--muted), var(--muted)) 0 7px/10px 1px;
-  background-repeat: no-repeat;
-  opacity: 0.6;
-}
-
-.sizeBtnLg::after {
-  background:
-    linear-gradient(var(--muted), var(--muted)) 0 0/10px 1px,
-    linear-gradient(var(--muted), var(--muted)) 0 4px/10px 1px,
-    linear-gradient(var(--muted), var(--muted)) 0 8px/10px 1px;
 }
 
 .sizeBtn:disabled {
@@ -720,6 +707,57 @@ button.ghost:hover {
   width: 1px;
   align-self: stretch;
   background: color-mix(in srgb, var(--border) 90%, transparent);
+}
+
+.lineHeightControl {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--field-bg);
+  overflow: hidden;
+  min-height: 32px;
+  width: 100%;
+}
+
+.lineHeightBtn {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  padding: 6px 10px;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.lineHeightBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.lineIcon {
+  width: 14px;
+  height: 12px;
+  border-radius: 2px;
+  background-repeat: no-repeat;
+  opacity: 0.7;
+}
+
+.lineIconTight {
+  background:
+    linear-gradient(var(--muted), var(--muted)) 0 2px/14px 1px,
+    linear-gradient(var(--muted), var(--muted)) 0 5px/14px 1px,
+    linear-gradient(var(--muted), var(--muted)) 0 8px/14px 1px;
+}
+
+.lineIconLoose {
+  background:
+    linear-gradient(var(--muted), var(--muted)) 0 1px/14px 1px,
+    linear-gradient(var(--muted), var(--muted)) 0 6px/14px 1px,
+    linear-gradient(var(--muted), var(--muted)) 0 11px/14px 1px;
 }
 
 .drawer .toggleRow {
@@ -1022,14 +1060,14 @@ select {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   color: var(--muted);
 }
 
 .modeIcon svg {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
 }
 
 .pickerPositioner {
@@ -1476,7 +1514,7 @@ button.setup__pill.isActive {
 }
 
 .render {
-  line-height: 1.45;
+  line-height: var(--line-height, 1.45);
 }
 
 .render > :first-child {
@@ -1584,7 +1622,7 @@ button.setup__pill.isActive {
 .chatMessage {
   padding: 8px 10px;
   border-radius: 12px;
-  line-height: 1.45;
+  line-height: var(--line-height, 1.45);
   max-width: 88%;
   word-wrap: break-word;
 }
