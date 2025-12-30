@@ -19,6 +19,7 @@
 - Chrome Side Panel: add refresh summary control and bypass cache for explicit refreshes.
 - Chrome Side Panel: status text now says “Connecting…” during daemon handshake.
 - Chrome Side Panel: show page word count and video duration in the summarize source dropdown.
+- Chrome Side Panel: tighten the summarize source dropdown width.
 - Chrome Side Panel: prefer media on video/podcast sites and show selected source on the summarize button.
 - Chrome Side Panel: replace font size slider with A/AA toggle and label San Francisco explicitly.
 - Chrome Side Panel: widen font selector and unify model control into a single row.
