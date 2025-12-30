@@ -192,7 +192,21 @@ export const defaultSettings: Settings = {
 }
 
 export async function loadSettings(): Promise<Settings> {
-  const res = await chrome.storage.local.get(storageKey)
+  const res = await new Promise<Record<string, unknown>>((resolve, reject) => {
+    let settled = false
+    const maybePromise = chrome.storage.local.get(storageKey, (result) => {
+      settled = true
+      resolve(result as Record<string, unknown>)
+    })
+    if (maybePromise && typeof (maybePromise as Promise<unknown>).then === 'function') {
+      ;(maybePromise as Promise<Record<string, unknown>>)
+        .then((result) => {
+          if (settled) return
+          resolve(result as Record<string, unknown>)
+        })
+        .catch(reject)
+    }
+  })
   const raw = (res[storageKey] ?? {}) as Partial<Settings>
   return {
     ...defaultSettings,

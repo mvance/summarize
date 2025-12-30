@@ -43,7 +43,13 @@ type BgToPanel =
   | { type: 'chat:start'; payload: ChatStartPayload }
 
 type HoverToBg =
-  | { type: 'hover:summarize'; requestId: string; url: string; title: string | null }
+  | {
+      type: 'hover:summarize'
+      requestId: string
+      url: string
+      title: string | null
+      token?: string
+    }
   | { type: 'hover:abort'; requestId: string }
 
 type BgToHover =
@@ -702,6 +708,20 @@ export default defineBackground(() => {
     hoverControllersByTabId.delete(tabId)
   }
 
+  const resolveHoverTabId = async (
+    sender: chrome.runtime.MessageSender
+  ): Promise<number | null> => {
+    if (sender.tab?.id) return sender.tab.id
+    const senderUrl = typeof sender.url === 'string' ? sender.url : null
+    const tabs = await chrome.tabs.query({})
+    if (senderUrl) {
+      const match = tabs.find((tab) => tab.url === senderUrl)
+      if (match?.id) return match.id
+    }
+    const active = tabs.find((tab) => tab.active)
+    return active?.id ?? null
+  }
+
   const runHoverSummarize = async (tabId: number, msg: HoverToBg & { type: 'hover:summarize' }) => {
     abortHoverForTab(tabId)
 
@@ -721,7 +741,7 @@ export default defineBackground(() => {
       const payload = detail ? { event, ...detail } : { event }
       console.debug('[summarize][hover:bg]', payload)
     }
-    const token = settings.token.trim()
+    const token = msg.token?.trim() || settings.token.trim()
     if (!token) {
       await sendHover(tabId, {
         type: 'hover:error',
@@ -990,24 +1010,26 @@ export default defineBackground(() => {
       }
 
       if (type === 'hover:summarize') {
-        const tabId = sender.tab?.id
-        if (!tabId) {
+        const msg = raw as HoverToBg & { type: 'hover:summarize' }
+        void (async () => {
+          const tabId = await resolveHoverTabId(sender)
+          if (!tabId) {
+            try {
+              sendResponse({ ok: false, error: 'Missing sender tab' })
+            } catch {
+              // ignore
+            }
+            return
+          }
+
+          void runHoverSummarize(tabId, msg)
           try {
-            sendResponse({ ok: false, error: 'Missing sender tab' })
+            sendResponse({ ok: true })
           } catch {
             // ignore
           }
-          return
-        }
-
-        const msg = raw as HoverToBg & { type: 'hover:summarize' }
-        void runHoverSummarize(tabId, msg)
-        try {
-          sendResponse({ ok: true })
-        } catch {
-          // ignore
-        }
-        return
+        })()
+        return true
       }
 
       if (type === 'hover:abort') {

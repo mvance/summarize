@@ -174,9 +174,20 @@ function hideTooltip() {
   delete el.dataset.visible
 }
 
-function isAnchorTarget(eventTarget: EventTarget | null): HTMLAnchorElement | null {
-  if (!(eventTarget instanceof Element)) return null
-  return eventTarget.closest('a[href]')
+function getAnchorFromEvent(event: Event): HTMLAnchorElement | null {
+  const target = event.target as Element | null
+  if (target && typeof target.closest === 'function') {
+    return target.closest('a[href]')
+  }
+  const composedPath = typeof event.composedPath === 'function' ? event.composedPath() : []
+  for (const node of composedPath) {
+    const element = node as Element
+    if (element && typeof element.closest === 'function') {
+      const anchor = element.closest('a[href]')
+      if (anchor) return anchor
+    }
+  }
+  return null
 }
 
 export default defineContentScript({
@@ -381,9 +392,8 @@ export default defineContentScript({
       }
     }
 
-    document.addEventListener('pointerover', (event) => {
-      if (!(event instanceof PointerEvent)) return
-      const anchor = isAnchorTarget(event.target)
+    document.addEventListener('mouseover', (event) => {
+      const anchor = getAnchorFromEvent(event)
       if (!anchor) return
       if (activeAnchor === anchor) {
         const resolved = resolveUrl(anchor)
@@ -398,8 +408,7 @@ export default defineContentScript({
       scheduleHover(anchor)
     })
 
-    document.addEventListener('pointerout', (event) => {
-      if (!(event instanceof PointerEvent)) return
+    document.addEventListener('mouseout', (event) => {
       if (!activeAnchor) return
       if (event.relatedTarget && activeAnchor.contains(event.relatedTarget as Node)) return
       clearActive()
