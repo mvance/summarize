@@ -87,4 +87,20 @@ describe('chrome/daemon-payload', () => {
     expect(body.mode).toBe('url')
     expect(body.videoMode).toBe('transcript')
   })
+
+  it('forces page mode when inputMode=page', () => {
+    const body = buildSummarizeRequestBody({
+      extracted: {
+        url: 'https://example.com/article',
+        title: 'Article',
+        text: 'Hello',
+        truncated: false,
+      },
+      settings: defaultSettings,
+      inputMode: 'page',
+    })
+
+    expect(body.mode).toBe('page')
+    expect(body.videoMode).toBeUndefined()
+  })
 })

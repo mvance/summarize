@@ -21,18 +21,34 @@ type ExtensionHarness = {
 type UiState = {
   panelOpen: boolean
   daemon: { ok: boolean; authed: boolean; error?: string }
-  tab: { url: string | null; title: string | null }
+  tab: { id: number | null; url: string | null; title: string | null }
+  media: { hasVideo: boolean; hasAudio: boolean; hasCaptions: boolean } | null
   stats: { pageWords: number | null; videoDurationSeconds: number | null }
-  settings: { autoSummarize: boolean; model: string; length: string; tokenPresent: boolean }
+  settings: {
+    autoSummarize: boolean
+    hoverSummaries: boolean
+    chatEnabled: boolean
+    model: string
+    length: string
+    tokenPresent: boolean
+  }
   status: string
 }
 
 const defaultUiState: UiState = {
   panelOpen: true,
   daemon: { ok: true, authed: true },
-  tab: { url: null, title: null },
+  tab: { id: null, url: null, title: null },
+  media: null,
   stats: { pageWords: null, videoDurationSeconds: null },
-  settings: { autoSummarize: true, model: 'auto', length: 'xl', tokenPresent: true },
+  settings: {
+    autoSummarize: true,
+    hoverSummaries: false,
+    chatEnabled: true,
+    model: 'auto',
+    length: 'xl',
+    tokenPresent: true,
+  },
   status: '',
 }
 
@@ -164,6 +180,7 @@ async function mockDaemonSummarize(harness: ExtensionHarness) {
     if (typeof globalThis.__summarizeCalls !== 'number') {
       globalThis.__summarizeCalls = 0
     }
+    globalThis.__summarizeLastBody = null
     globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
       if (url === 'http://127.0.0.1:8787/health') {
@@ -174,6 +191,14 @@ async function mockDaemonSummarize(harness: ExtensionHarness) {
       }
       if (url === 'http://127.0.0.1:8787/v1/summarize') {
         globalThis.__summarizeCalls += 1
+        const body = typeof init?.body === 'string' ? init.body : null
+        if (body) {
+          try {
+            globalThis.__summarizeLastBody = JSON.parse(body)
+          } catch {
+            globalThis.__summarizeLastBody = null
+          }
+        }
         return new Response(
           JSON.stringify({ ok: true, id: `run-${globalThis.__summarizeCalls}` }),
           {
@@ -192,6 +217,13 @@ async function getSummarizeCalls(harness: ExtensionHarness) {
     harness.context.serviceWorkers()[0] ??
     (await harness.context.waitForEvent('serviceworker', { timeout: 15_000 }))
   return background.evaluate(() => (globalThis.__summarizeCalls as number | undefined) ?? 0)
+}
+
+async function getSummarizeLastBody(harness: ExtensionHarness) {
+  const background =
+    harness.context.serviceWorkers()[0] ??
+    (await harness.context.waitForEvent('serviceworker', { timeout: 15_000 }))
+  return background.evaluate(() => globalThis.__summarizeLastBody ?? null)
 }
 
 async function seedSettings(harness: ExtensionHarness, settings: Record<string, unknown>) {
@@ -267,6 +299,9 @@ test('sidepanel scheme picker supports keyboard selection', async () => {
 
   try {
     const page = await openExtensionPage(harness, 'sidepanel.html', '#title')
+    await expect(page.locator('#title')).toContainText('Example')
+    await activateTabByUrl(harness, 'https://example.com')
+    await waitForActiveTabUrl(harness, 'https://example.com')
     await page.click('#drawerToggle')
     await expect(page.locator('#drawer')).toBeVisible()
 
@@ -350,6 +385,9 @@ test('sidepanel refresh free models from advanced settings', async () => {
     )
 
     const page = await openExtensionPage(harness, 'sidepanel.html', '#title')
+    await expect(page.locator('#title')).toContainText('Example')
+    await activateTabByUrl(harness, 'https://example.com')
+    await waitForActiveTabUrl(harness, 'https://example.com')
     await page.click('#drawerToggle')
     await expect(page.locator('#drawer')).toBeVisible()
     await sendBgMessage(harness, {
@@ -603,6 +641,72 @@ test('sidepanel clears summary when tab url changes', async () => {
   }
 })
 
+test('sidepanel video selection forces transcript mode', async () => {
+  const harness = await launchExtension()
+
+  try {
+    await mockDaemonSummarize(harness)
+    await seedSettings(harness, { token: 'test-token', autoSummarize: false })
+    const contentPage = await harness.context.newPage()
+    await contentPage.goto('https://example.com', { waitUntil: 'domcontentloaded' })
+    await contentPage.evaluate(() => {
+      document.body.innerHTML = `<article><p>${'Hello '.repeat(40)}</p></article>`
+    })
+    await contentPage.bringToFront()
+    await activateTabByUrl(harness, 'https://example.com')
+    await waitForActiveTabUrl(harness, 'https://example.com')
+    await injectContentScript(harness, 'content-scripts/extract.js', 'https://example.com')
+
+    const page = await openExtensionPage(harness, 'sidepanel.html', '#title')
+    await sendBgMessage(harness, {
+      type: 'ui:state',
+      state: buildUiState({
+        tab: { url: 'https://example.com', title: 'Example' },
+        media: { hasVideo: true, hasAudio: false, hasCaptions: false },
+        stats: { pageWords: 120, videoDurationSeconds: 90 },
+        status: '',
+      }),
+    })
+
+    const sseBody = [
+      'event: chunk',
+      'data: {"text":"Hello world"}',
+      '',
+      'event: done',
+      'data: {}',
+      '',
+    ].join('\n')
+    await page.route('http://127.0.0.1:8787/v1/summarize/**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+        body: sseBody,
+      })
+    })
+
+    await contentPage.bringToFront()
+    await activateTabByUrl(harness, 'https://example.com')
+    await waitForActiveTabUrl(harness, 'https://example.com')
+
+    const button = page.locator('button.summarizeButton')
+    const box = await button.boundingBox()
+    if (!box) throw new Error('Missing summarize button')
+    await page.mouse.click(box.x + box.width - 6, box.y + box.height / 2)
+    const list = getOpenPickerList(page)
+    await list.locator('button', { hasText: /Video/ }).click()
+
+    await page.click('button.summarizeButton', { position: { x: 10, y: 10 } })
+    await expect.poll(() => getSummarizeCalls(harness)).toBe(1)
+
+    const body = (await getSummarizeLastBody(harness)) as Record<string, unknown> | null
+    expect(body?.mode).toBe('url')
+    expect(body?.videoMode).toBe('transcript')
+    assertNoErrors(harness)
+  } finally {
+    await closeExtension(harness.context, harness.userDataDir)
+  }
+})
+
 test('sidepanel shows an error when chat stream ends without done', async () => {
   const harness = await launchExtension()
 
@@ -654,6 +758,7 @@ test('sidepanel chat queue sends next message after stream completes', async () 
     const page = await openExtensionPage(harness, 'sidepanel.html', '#title')
 
     let chatRequestCount = 0
+    let eventsCalls = 0
     let releaseFirstSse: (() => void) | null = null
     const firstGate = new Promise<void>((resolve) => {
       releaseFirstSse = resolve
@@ -671,6 +776,7 @@ test('sidepanel chat queue sends next message after stream completes', async () 
     await harness.context.route(
       /http:\/\/127\.0\.0\.1:8787\/v1\/summarize\/[^/]+\/events/,
       async (route) => {
+        eventsCalls += 1
         const match = route
           .request()
           .url()
@@ -709,16 +815,13 @@ test('sidepanel chat queue sends next message after stream completes', async () 
     await waitForActiveTabUrl(harness, 'https://example.com')
     await sendChat('First question')
     await expect.poll(() => chatRequestCount).toBe(1)
+    await expect.poll(() => eventsCalls).toBe(1)
     await sendChat('Second question')
-
-    const queueItems = page.locator('#chatQueue .chatQueueItem')
-    await expect(queueItems).toHaveCount(1)
-    await expect(queueItems.first().locator('.chatQueueText')).toHaveText('Second question')
+    await expect.poll(() => chatRequestCount, { timeout: 1_000 }).toBe(1)
 
     releaseFirstSse?.()
 
     await expect.poll(() => chatRequestCount).toBe(2)
-    await expect(page.locator('#chatQueue')).toBeHidden()
     await expect(page.locator('#chatMessages')).toContainText('Second question')
 
     assertNoErrors(harness)
@@ -727,7 +830,7 @@ test('sidepanel chat queue sends next message after stream completes', async () 
   }
 })
 
-test('sidepanel chat queue removes items before sending', async () => {
+test('sidepanel chat queue drains messages after stream completes', async () => {
   const harness = await launchExtension()
 
   try {
@@ -803,22 +906,13 @@ test('sidepanel chat queue removes items before sending', async () => {
     await sendChat('Second question')
     await sendChat('Third question')
 
-    const queueItems = page.locator('#chatQueue .chatQueueItem')
-    await expect(queueItems).toHaveCount(2)
-    await expect(queueItems.nth(0).locator('.chatQueueText')).toHaveText('Second question')
-    await expect(queueItems.nth(1).locator('.chatQueueText')).toHaveText('Third question')
-
-    await queueItems.nth(0).locator('.chatQueueRemove').click()
-    await expect(queueItems).toHaveCount(1)
-    await expect(queueItems.first().locator('.chatQueueText')).toHaveText('Third question')
+    await expect.poll(() => chatRequestCount, { timeout: 1_000 }).toBe(1)
 
     releaseFirstSse?.()
 
-    await expect.poll(() => chatRequestCount).toBe(2)
-    await new Promise((resolve) => setTimeout(resolve, 200))
-    expect(chatRequestCount).toBe(2)
+    await expect.poll(() => chatRequestCount).toBe(3)
+    await expect(page.locator('#chatMessages')).toContainText('Second question')
     await expect(page.locator('#chatMessages')).toContainText('Third question')
-    await expect(page.locator('#chatQueue')).toBeHidden()
 
     assertNoErrors(harness)
   } finally {
