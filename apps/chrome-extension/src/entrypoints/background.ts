@@ -1066,6 +1066,13 @@ export default defineBackground(() => {
     }
   )
 
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName !== 'local') return
+    if (!changes.settings) return
+    if (!isPanelOpen()) return
+    void emitState('')
+  })
+
   chrome.webNavigation.onHistoryStateUpdated.addListener(() => {
     const now = Date.now()
     if (now - lastNavAt < 700) return
