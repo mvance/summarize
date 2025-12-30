@@ -1720,12 +1720,13 @@ function sendChatMessage() {
   chatInputEl.value = ''
   chatInputEl.style.height = 'auto'
 
-  if (panelState.chatStreaming || chatQueue.length > 0) {
+  const chatBusy = panelState.chatStreaming || chatStreamController.isStreaming()
+  if (chatBusy || chatQueue.length > 0) {
     const queued = enqueueChatMessage(input)
     if (!queued) {
       chatInputEl.value = rawInput
       chatInputEl.style.height = `${Math.min(chatInputEl.scrollHeight, 120)}px`
-    } else if (!panelState.chatStreaming) {
+    } else if (!chatBusy) {
       maybeSendQueuedChat()
     }
     return
