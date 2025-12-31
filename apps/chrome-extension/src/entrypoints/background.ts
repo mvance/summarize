@@ -1253,13 +1253,23 @@ export default defineBackground(() => {
                 automationEnabled: settings.automationEnabled,
               }),
             })
-            const json = (await res.json()) as {
-              ok: boolean
-              assistant?: AssistantMessage
-              error?: string
+            const rawText = await res.text()
+            let json: { ok?: boolean; assistant?: AssistantMessage; error?: string } | null = null
+            if (rawText) {
+              try {
+                json = JSON.parse(rawText) as typeof json
+              } catch {
+                json = null
+              }
             }
-            if (!res.ok || !json.ok || !json.assistant) {
-              throw new Error(json.error || `${res.status} ${res.statusText}`)
+            if (!res.ok || !json?.ok || !json.assistant) {
+              const isMissingAgent = res.status === 404 || rawText.trim().toLowerCase() === 'not found'
+              const error =
+                json?.error ??
+                (isMissingAgent
+                  ? 'Daemon does not support /v1/agent. Restart the daemon after updating (summarize daemon restart).'
+                  : rawText.trim() || `${res.status} ${res.statusText}`)
+              throw new Error(error)
             }
 
             void send(session, {
