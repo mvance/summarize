@@ -1686,6 +1686,7 @@ const slidesTestHooks = (
       renderSlidesNow?: () => void
       applyUiState?: (state: UiState) => void
       forceRenderSlides?: () => void
+      flushSlidesRender?: () => void
       showInlineError?: (message: string) => void
       isInlineErrorVisible?: () => boolean
       getInlineErrorMessage?: () => string
@@ -1739,6 +1740,21 @@ if (slidesTestHooks) {
       renderSlideStrip(renderSlidesHostEl)
     }
     return renderSlidesHostEl.children.length
+  }
+  slidesTestHooks.flushSlidesRender = () => {
+    if (slideGalleryRenderQueued) {
+      clearTimeout(slideGalleryRenderQueued)
+      slideGalleryRenderQueued = 0
+    }
+    if (slideStripRenderQueued) {
+      clearTimeout(slideStripRenderQueued)
+      slideStripRenderQueued = 0
+    }
+    if (slidesLayoutValue === 'gallery') {
+      renderSlideGallery(renderSlidesHostEl)
+    } else {
+      renderSlideStrip(renderSlidesHostEl)
+    }
   }
   slidesTestHooks.showInlineError = (message) => {
     errorController.showInlineError(message)

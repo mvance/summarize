@@ -2108,15 +2108,18 @@ test('sidepanel switches between page, video, and slides modes', async ({
     const renderedCount = await page.evaluate(() => {
       const hooks = (
         window as typeof globalThis & {
-          __summarizeTestHooks?: { forceRenderSlides?: () => number }
+          __summarizeTestHooks?: {
+            forceRenderSlides?: () => number
+            flushSlidesRender?: () => void
+          }
         }
       ).__summarizeTestHooks
-      return hooks?.forceRenderSlides?.() ?? 0
+      const count = hooks?.forceRenderSlides?.() ?? 0
+      hooks?.flushSlidesRender?.()
+      return count
     })
     expect(renderedCount).toBeGreaterThan(0)
 
-    // Wait for the debounced re-render (120ms) to settle before interacting with slides
-    await page.waitForTimeout(250)
     const slideImages = page.locator('img.slideInline__thumbImage, img.slideStrip__thumbImage')
     // Re-verify count after debounce settles
     await expect(slideImages).toHaveCount(2, { timeout: 10_000 })
@@ -2249,15 +2252,17 @@ test('sidepanel scrolls YouTube slides and shows text for each slide', async ({
     const renderedCount = await page.evaluate(() => {
       const hooks = (
         window as typeof globalThis & {
-          __summarizeTestHooks?: { forceRenderSlides?: () => number }
+          __summarizeTestHooks?: {
+            forceRenderSlides?: () => number
+            flushSlidesRender?: () => void
+          }
         }
       ).__summarizeTestHooks
-      return hooks?.forceRenderSlides?.() ?? 0
+      const count = hooks?.forceRenderSlides?.() ?? 0
+      hooks?.flushSlidesRender?.()
+      return count
     })
     expect(renderedCount).toBeGreaterThan(0)
-
-    // Wait for the debounced re-render (120ms) to settle before interacting with slides
-    await page.waitForTimeout(250)
 
     const slideItems = page.locator('.slideGallery__item')
     // Re-verify count after debounce settles - items may have been cleared and re-rendered
