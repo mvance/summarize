@@ -120,12 +120,13 @@ function buildUiState(overrides: Partial<UiState>): UiState {
 }
 
 async function attachModeChanges(
-  page: Page,
+  page: Page | null | undefined,
   testInfo: {
     attach: (name: string, options: { body: string; contentType: string }) => Promise<void>
   },
   label: string
 ) {
+  if (!page) return
   const changes = await page.evaluate(() => {
     const hooks = (
       window as typeof globalThis & {
