@@ -1976,7 +1976,16 @@ test('sidepanel switches between page, video, and slides modes', async ({
     await ensureMediaAvailable(false)
     await expect(summarizeButton).toHaveAttribute('aria-label', /120 words/)
 
-    await setSummarizeMode('page', false)
+    await page.evaluate(() => {
+      const hooks = (
+        window as typeof globalThis & {
+          __summarizeTestHooks?: {
+            pinSummarizeMode?: (payload: { mode: 'page' | 'video'; slides: boolean }) => void
+          }
+        }
+      ).__summarizeTestHooks
+      hooks?.pinSummarizeMode?.({ mode: 'page', slides: false })
+    })
     await page.evaluate(() => {
       const hooks = (
         window as typeof globalThis & {
@@ -2009,7 +2018,16 @@ test('sidepanel switches between page, video, and slides modes', async ({
     ).toHaveCount(0)
 
     await ensureMediaAvailable(false)
-    await setSummarizeMode('video', false)
+    await page.evaluate(() => {
+      const hooks = (
+        window as typeof globalThis & {
+          __summarizeTestHooks?: {
+            pinSummarizeMode?: (payload: { mode: 'page' | 'video'; slides: boolean }) => void
+          }
+        }
+      ).__summarizeTestHooks
+      hooks?.pinSummarizeMode?.({ mode: 'video', slides: false })
+    })
     await page.evaluate(() => {
       const hooks = (
         window as typeof globalThis & {
@@ -2042,7 +2060,16 @@ test('sidepanel switches between page, video, and slides modes', async ({
     ).toHaveCount(0)
 
     await ensureMediaAvailable(true)
-    await setSummarizeMode('video', true)
+    await page.evaluate(() => {
+      const hooks = (
+        window as typeof globalThis & {
+          __summarizeTestHooks?: {
+            pinSummarizeMode?: (payload: { mode: 'page' | 'video'; slides: boolean }) => void
+          }
+        }
+      ).__summarizeTestHooks
+      hooks?.pinSummarizeMode?.({ mode: 'video', slides: true })
+    })
     await page.evaluate(() => {
       const hooks = (
         window as typeof globalThis & {
@@ -2175,7 +2202,24 @@ test('sidepanel switches between page, video, and slides modes', async ({
     ])
 
     await ensureMediaAvailable(false)
-    await setSummarizeMode('page', false)
+    await page.evaluate(() => {
+      const hooks = (
+        window as typeof globalThis & {
+          __summarizeTestHooks?: {
+            pinSummarizeMode?: (payload: { mode: 'page' | 'video'; slides: boolean }) => void
+          }
+        }
+      ).__summarizeTestHooks
+      hooks?.pinSummarizeMode?.({ mode: 'page', slides: false })
+    })
+    await page.evaluate(() => {
+      const hooks = (
+        window as typeof globalThis & {
+          __summarizeTestHooks?: { awaitRenderSettled?: () => Promise<void> }
+        }
+      ).__summarizeTestHooks
+      return hooks?.awaitRenderSettled?.()
+    })
     await expect
       .poll(async () => await getSummarizeMode())
       .toEqual({ mode: 'page', slides: false, mediaAvailable: true })

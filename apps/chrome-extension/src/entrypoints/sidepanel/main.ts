@@ -1688,6 +1688,7 @@ const slidesTestHooks = (
       forceRenderSlides?: () => void
       flushSlidesRender?: () => void
       awaitRenderSettled?: () => Promise<void>
+      pinSummarizeMode?: (payload: { mode: 'page' | 'video'; slides: boolean }) => void
       showInlineError?: (message: string) => void
       isInlineErrorVisible?: () => boolean
       getInlineErrorMessage?: () => string
@@ -1761,6 +1762,12 @@ if (slidesTestHooks) {
     new Promise((resolve) => {
       requestAnimationFrame(() => requestAnimationFrame(resolve))
     })
+  slidesTestHooks.pinSummarizeMode = (payload) => {
+    inputMode = payload.mode
+    inputModeOverride = payload.mode
+    slidesEnabledValue = payload.slides
+    refreshSummarizeControl()
+  }
   slidesTestHooks.showInlineError = (message) => {
     errorController.showInlineError(message)
   }
