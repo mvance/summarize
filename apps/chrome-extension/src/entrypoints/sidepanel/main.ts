@@ -1689,6 +1689,7 @@ const slidesTestHooks = (
       flushSlidesRender?: () => void
       awaitRenderSettled?: () => Promise<void>
       pinSummarizeMode?: (payload: { mode: 'page' | 'video'; slides: boolean }) => void
+      freezeSlidesRender?: (frozen: boolean) => void
       showInlineError?: (message: string) => void
       isInlineErrorVisible?: () => boolean
       getInlineErrorMessage?: () => string
@@ -1768,6 +1769,9 @@ if (slidesTestHooks) {
     slidesEnabledValue = payload.slides
     refreshSummarizeControl()
   }
+  slidesTestHooks.freezeSlidesRender = (frozen) => {
+    slidesRenderFrozen = frozen
+  }
   slidesTestHooks.showInlineError = (message) => {
     errorController.showInlineError(message)
   }
@@ -1789,6 +1793,7 @@ async function requestSlidesContext() {
 const MAX_SLIDE_STRIP = 12
 let slideStripRenderQueued = 0
 let slideGalleryRenderQueued = 0
+const slidesRenderFrozen = false
 
 function queueSlidesRender() {
   if (slidesLayoutValue === 'gallery') {
@@ -1805,6 +1810,7 @@ function shouldRenderSlides() {
 }
 
 function queueSlideStripRender() {
+  if (slidesRenderFrozen) return
   if (slidesLayoutValue !== 'strip') {
     clearSlideStrip(renderSlidesHostEl)
     return
@@ -1817,6 +1823,7 @@ function queueSlideStripRender() {
 }
 
 function queueSlideGalleryRender() {
+  if (slidesRenderFrozen) return
   if (slidesLayoutValue !== 'gallery') {
     clearSlideGallery(renderSlidesHostEl)
     return

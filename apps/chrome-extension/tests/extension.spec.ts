@@ -2163,9 +2163,11 @@ test('sidepanel switches between page, video, and slides modes', async ({
             forceRenderSlides?: () => number
             flushSlidesRender?: () => void
             awaitRenderSettled?: () => Promise<void>
+            freezeSlidesRender?: (frozen: boolean) => void
           }
         }
       ).__summarizeTestHooks
+      hooks?.freezeSlidesRender?.(true)
       const count = hooks?.forceRenderSlides?.() ?? 0
       hooks?.flushSlidesRender?.()
       return count
@@ -2200,6 +2202,15 @@ test('sidepanel switches between page, video, and slides modes', async ({
       'Slide one shows the overview',
       'Slide two breaks down the details',
     ])
+
+    await page.evaluate(() => {
+      const hooks = (
+        window as typeof globalThis & {
+          __summarizeTestHooks?: { freezeSlidesRender?: (frozen: boolean) => void }
+        }
+      ).__summarizeTestHooks
+      hooks?.freezeSlidesRender?.(false)
+    })
 
     await ensureMediaAvailable(false)
     await page.evaluate(() => {
@@ -2334,9 +2345,11 @@ test('sidepanel scrolls YouTube slides and shows text for each slide', async ({
             forceRenderSlides?: () => number
             flushSlidesRender?: () => void
             awaitRenderSettled?: () => Promise<void>
+            freezeSlidesRender?: (frozen: boolean) => void
           }
         }
       ).__summarizeTestHooks
+      hooks?.freezeSlidesRender?.(true)
       const count = hooks?.forceRenderSlides?.() ?? 0
       hooks?.flushSlidesRender?.()
       return count
@@ -2390,6 +2403,15 @@ test('sidepanel scrolls YouTube slides and shows text for each slide', async ({
     const slideDescriptions = await getPanelSlideDescriptions(page)
     expect(slideDescriptions).toHaveLength(12)
     expect(slideDescriptions.every(([, text]) => text.trim().length > 0)).toBe(true)
+
+    await page.evaluate(() => {
+      const hooks = (
+        window as typeof globalThis & {
+          __summarizeTestHooks?: { freezeSlidesRender?: (frozen: boolean) => void }
+        }
+      ).__summarizeTestHooks
+      hooks?.freezeSlidesRender?.(false)
+    })
 
     assertNoErrors(harness)
   } finally {
