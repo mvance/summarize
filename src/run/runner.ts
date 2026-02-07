@@ -1,5 +1,7 @@
 import { execFile } from 'node:child_process'
-import { readFile } from 'node:fs/promises'
+import fs from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
 import { CommanderError } from 'commander'
 import {
   type CacheState,
@@ -8,6 +10,7 @@ import {
   resolveCachePath,
 } from '../cache.js'
 import { loadSummarizeConfig } from '../config.js'
+import type { InputTarget } from '../content/asset.js'
 import {
   parseExtractFormat,
   parseMaxExtractCharactersArg,
@@ -47,17 +50,34 @@ import { createSummaryEngine } from './summary-engine.js'
 import { isRichTty, supportsColor } from './terminal.js'
 import { handleTranscriberCliRequest } from './transcriber-cli.js'
 
+async function streamToString(stream: NodeJS.ReadableStream, maxBytes: number): Promise<string> {
+  const chunks: Buffer[] = []
+  let totalSize = 0
+  for await (const chunk of stream) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+    totalSize += buffer.length
+    if (totalSize > maxBytes) {
+      throw new Error(
+        `Stdin content exceeds maximum size of ${(maxBytes / 1024 / 1024).toFixed(1)}MB`
+      )
+    }
+    chunks.push(buffer)
+  }
+  return Buffer.concat(chunks).toString('utf8')
+}
+
 type RunEnv = {
   env: Record<string, string | undefined>
   fetch: typeof fetch
   execFile?: ExecFileFn
+  stdin?: NodeJS.ReadableStream
   stdout: NodeJS.WritableStream
   stderr: NodeJS.WritableStream
 }
 
 export async function runCli(
   argv: string[],
-  { env, fetch, execFile: execFileOverride, stdout, stderr }: RunEnv
+  { env, fetch, execFile: execFileOverride, stdin, stdout, stderr }: RunEnv
 ): Promise<void> {
   ;(globalThis as unknown as { AI_SDK_LOG_WARNINGS?: boolean }).AI_SDK_LOG_WARNINGS = false
 
@@ -148,7 +168,7 @@ export async function runCli(
   if (promptFileArg) {
     let text: string
     try {
-      text = await readFile(promptFileArg, 'utf8')
+      text = await fs.readFile(promptFileArg, 'utf8')
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       throw new Error(`Failed to read --prompt-file ${promptFileArg}: ${message}`)
@@ -496,8 +516,22 @@ export async function runCli(
     if (markdownModeExplicitlySet && format !== 'markdown') {
       throw new Error('--markdown-mode is only supported with --format md')
     }
-    if (markdownModeExplicitlySet && inputTarget.kind !== 'url') {
-      throw new Error('--markdown-mode is only supported for URL inputs')
+    if (
+      markdownModeExplicitlySet &&
+      inputTarget.kind !== 'url' &&
+      inputTarget.kind !== 'file' &&
+      inputTarget.kind !== 'stdin'
+    ) {
+      throw new Error('--markdown-mode is only supported for URL or file inputs')
+    }
+    if (
+      markdownModeExplicitlySet &&
+      (inputTarget.kind === 'file' || inputTarget.kind === 'stdin') &&
+      markdownMode !== 'llm'
+    ) {
+      throw new Error(
+        'Only --markdown-mode llm is supported for file/stdin inputs; other modes require a URL'
+      )
     }
     const metrics = createRunMetrics({
       env,
@@ -551,6 +585,9 @@ export async function runCli(
     })
 
     if (extractMode && inputTarget.kind !== 'url') {
+      if (inputTarget.kind === 'stdin') {
+        throw new Error('--extract is not supported for piped stdin input')
+      }
       throw new Error('--extract is only supported for website/YouTube URLs')
     }
 
@@ -699,6 +736,28 @@ export async function runCli(
       summarizeMediaFile,
       setClearProgressBeforeStdout,
       clearProgressIfCurrent,
+    }
+
+    if (inputTarget.kind === 'stdin') {
+      const tempPath = path.join(
+        os.tmpdir(),
+        `summarize-stdin-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.txt`
+      )
+      const MAX_STDIN_BYTES = 50 * 1024 * 1024 // 50MB limit
+      try {
+        const stdinContent = await streamToString(stdin ?? process.stdin, MAX_STDIN_BYTES)
+        if (!stdinContent.trim()) {
+          throw new Error('Stdin is empty')
+        }
+        await fs.writeFile(tempPath, stdinContent, { mode: 0o600 })
+        const stdinInputTarget: InputTarget = { kind: 'file', filePath: tempPath }
+        if (await handleFileInput(assetInputContext, stdinInputTarget)) {
+          return
+        }
+        throw new Error('Failed to process stdin input')
+      } finally {
+        await fs.rm(tempPath, { force: true }).catch(() => {})
+      }
     }
 
     if (await handleFileInput(assetInputContext, inputTarget)) {
