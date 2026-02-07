@@ -2252,23 +2252,40 @@ test('sidepanel scrolls YouTube slides and shows text for each slide', async ({
     const slideItems = page.locator('.slideGallery__item')
     await expect(slideItems).toHaveCount(12)
 
+    // Use a more resilient approach for virtualized/scrolling lists
     for (let index = 0; index < 12; index += 1) {
-      // Re-query the item each iteration to avoid DOM detachment issues
-      const item = page.locator('.slideGallery__item').nth(index)
-      await expect(async () => {
-        await item.scrollIntoViewIfNeeded()
-        await expect(item).toBeVisible()
-      }).toPass({ timeout: 10_000 })
+      // Wait for the specific item to be visible (handles virtualization)
+      const item = slideItems.nth(index)
+      await expect(item).toBeVisible({ timeout: 15_000 })
 
-      const img = item.locator('img.slideInline__thumbImage')
-      await expect(img).toBeVisible()
+      // Scroll using JavaScript to avoid locator detachment issues
+      await page.evaluate((idx) => {
+        const items = document.querySelectorAll('.slideGallery__item')
+        const target = items[idx]
+        if (target) {
+          target.scrollIntoView({ behavior: 'instant', block: 'center' })
+        }
+      }, index)
+
+      // Small delay to let any lazy loading complete
+      await page.waitForTimeout(100)
+
+      // Re-acquire the locator after scroll and verify visibility
+      await expect(slideItems.nth(index)).toBeVisible({ timeout: 10_000 })
+
+      const img = slideItems.nth(index).locator('img.slideInline__thumbImage')
+      await expect(img).toBeVisible({ timeout: 10_000 })
       await expect
-        .poll(async () => (await img.evaluate((node) => node.dataset.slideImageUrl ?? '')).trim(), {
-          timeout: 10_000,
-        })
+        .poll(
+          async () => {
+            const src = await img.evaluate((node) => node.dataset.slideImageUrl ?? '')
+            return src.trim()
+          },
+          { timeout: 10_000 }
+        )
         .not.toBe('')
 
-      const text = item.locator('.slideGallery__text')
+      const text = slideItems.nth(index).locator('.slideGallery__text')
       await expect
         .poll(async () => (await text.textContent())?.trim() ?? '', { timeout: 10_000 })
         .not.toBe('')
