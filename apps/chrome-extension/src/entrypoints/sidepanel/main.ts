@@ -1686,12 +1686,14 @@ const slidesTestHooks = (
       renderSlidesNow?: () => void
       applyUiState?: (state: UiState) => void
       forceRenderSlides?: () => void
+      awaitRenderSettled?: () => Promise<void>
       showInlineError?: (message: string) => void
       isInlineErrorVisible?: () => boolean
       getInlineErrorMessage?: () => string
     }
   }
 ).__summarizeTestHooks
+const isTestMode = Boolean(slidesTestHooks)
 if (slidesTestHooks) {
   slidesTestHooks.applySlidesPayload = applySlidesPayload
   slidesTestHooks.getRunId = () => panelState.runId
@@ -1740,6 +1742,10 @@ if (slidesTestHooks) {
     }
     return renderSlidesHostEl.children.length
   }
+  slidesTestHooks.awaitRenderSettled = () =>
+    new Promise((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(resolve))
+    })
   slidesTestHooks.showInlineError = (message) => {
     errorController.showInlineError(message)
   }
@@ -1781,6 +1787,10 @@ function queueSlideStripRender() {
     clearSlideStrip(renderSlidesHostEl)
     return
   }
+  if (isTestMode) {
+    renderSlideStrip(renderSlidesHostEl)
+    return
+  }
   if (slideStripRenderQueued) return
   slideStripRenderQueued = window.setTimeout(() => {
     slideStripRenderQueued = 0
@@ -1791,6 +1801,10 @@ function queueSlideStripRender() {
 function queueSlideGalleryRender() {
   if (slidesLayoutValue !== 'gallery') {
     clearSlideGallery(renderSlidesHostEl)
+    return
+  }
+  if (isTestMode) {
+    renderSlideGallery(renderSlidesHostEl)
     return
   }
   if (slideGalleryRenderQueued) return

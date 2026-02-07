@@ -119,6 +119,17 @@ function buildUiState(overrides: Partial<UiState>): UiState {
   }
 }
 
+async function awaitRenderSettled(page: Page) {
+  await page.evaluate(() => {
+    const hooks = (
+      window as typeof globalThis & {
+        __summarizeTestHooks?: { awaitRenderSettled?: () => Promise<void> }
+      }
+    ).__summarizeTestHooks
+    return hooks?.awaitRenderSettled?.()
+  })
+}
+
 function buildAssistant(text: string) {
   return {
     role: 'assistant',
@@ -1977,6 +1988,7 @@ test('sidepanel switches between page, video, and slides modes', async ({
     await expect(summarizeButton).toHaveAttribute('aria-label', /120 words/)
 
     await setSummarizeMode('page', false)
+    await awaitRenderSettled(page)
     await expect
       .poll(async () => await getSummarizeMode())
       .toEqual({ mode: 'page', slides: false, mediaAvailable: true })
@@ -2001,6 +2013,7 @@ test('sidepanel switches between page, video, and slides modes', async ({
 
     await ensureMediaAvailable(false)
     await setSummarizeMode('video', false)
+    await awaitRenderSettled(page)
     await expect
       .poll(async () => await getSummarizeMode())
       .toEqual({ mode: 'video', slides: false, mediaAvailable: true })
@@ -2025,6 +2038,7 @@ test('sidepanel switches between page, video, and slides modes', async ({
 
     await ensureMediaAvailable(true)
     await setSummarizeMode('video', true)
+    await awaitRenderSettled(page)
     await expect
       .poll(async () => await getSummarizeMode())
       .toEqual({ mode: 'video', slides: true, mediaAvailable: true })
@@ -2109,6 +2123,8 @@ test('sidepanel switches between page, video, and slides modes', async ({
       return hooks?.forceRenderSlides?.() ?? 0
     })
     expect(renderedCount).toBeGreaterThan(0)
+    await awaitRenderSettled(page)
+    await awaitRenderSettled(page)
 
     const slideImages = page.locator('img.slideInline__thumbImage, img.slideStrip__thumbImage')
     await expect(slideImages).toHaveCount(2)
@@ -2131,6 +2147,7 @@ test('sidepanel switches between page, video, and slides modes', async ({
 
     await ensureMediaAvailable(false)
     await setSummarizeMode('page', false)
+    await awaitRenderSettled(page)
     await expect
       .poll(async () => await getSummarizeMode())
       .toEqual({ mode: 'page', slides: false, mediaAvailable: true })
@@ -2620,6 +2637,7 @@ test('sidepanel loads slide images after they become ready', async ({
       hooks?.applySlidesPayload?.(payload)
       hooks?.forceRenderSlides?.()
     }, slidesPayload)
+    await awaitRenderSettled(page)
 
     const img = page.locator('img.slideStrip__thumbImage, img.slideInline__thumbImage')
     await expect(img).toHaveCount(1, { timeout: 10_000 })
