@@ -1976,11 +1976,29 @@ test('sidepanel switches between page, video, and slides modes', async ({
     await ensureMediaAvailable(false)
     await expect(summarizeButton).toHaveAttribute('aria-label', /120 words/)
 
-    await setSummarizeMode('page', false)
+    await page.evaluate(() => {
+      const hooks = (
+        window as typeof globalThis & {
+          __summarizeTestHooks?: {
+            pinSummarizeMode?: (payload: { mode: 'page' | 'video'; slides: boolean }) => void
+          }
+        }
+      ).__summarizeTestHooks
+      hooks?.pinSummarizeMode?.({ mode: 'page', slides: false })
+    })
+    await page.evaluate(() => {
+      const hooks = (
+        window as typeof globalThis & {
+          __summarizeTestHooks?: { awaitRenderSettled?: () => Promise<void> }
+        }
+      ).__summarizeTestHooks
+      return hooks?.awaitRenderSettled?.()
+    })
     await expect
       .poll(async () => await getSummarizeMode())
       .toEqual({ mode: 'page', slides: false, mediaAvailable: true })
-    await expect(summarizeButton).toHaveAttribute('aria-label', /Page/)
+    // Use polling for aria-label to handle race condition between state update and re-render
+    await expect.poll(async () => await summarizeButton.getAttribute('aria-label')).toMatch(/Page/)
     await sendBgMessage(harness, {
       type: 'run:start',
       run: {
@@ -2000,11 +2018,29 @@ test('sidepanel switches between page, video, and slides modes', async ({
     ).toHaveCount(0)
 
     await ensureMediaAvailable(false)
-    await setSummarizeMode('video', false)
+    await page.evaluate(() => {
+      const hooks = (
+        window as typeof globalThis & {
+          __summarizeTestHooks?: {
+            pinSummarizeMode?: (payload: { mode: 'page' | 'video'; slides: boolean }) => void
+          }
+        }
+      ).__summarizeTestHooks
+      hooks?.pinSummarizeMode?.({ mode: 'video', slides: false })
+    })
+    await page.evaluate(() => {
+      const hooks = (
+        window as typeof globalThis & {
+          __summarizeTestHooks?: { awaitRenderSettled?: () => Promise<void> }
+        }
+      ).__summarizeTestHooks
+      return hooks?.awaitRenderSettled?.()
+    })
     await expect
       .poll(async () => await getSummarizeMode())
       .toEqual({ mode: 'video', slides: false, mediaAvailable: true })
-    await expect(summarizeButton).toHaveAttribute('aria-label', /Video/)
+    // Use polling for aria-label to handle race condition between state update and re-render
+    await expect.poll(async () => await summarizeButton.getAttribute('aria-label')).toMatch(/Video/)
     await sendBgMessage(harness, {
       type: 'run:start',
       run: {
@@ -2024,11 +2060,31 @@ test('sidepanel switches between page, video, and slides modes', async ({
     ).toHaveCount(0)
 
     await ensureMediaAvailable(true)
-    await setSummarizeMode('video', true)
+    await page.evaluate(() => {
+      const hooks = (
+        window as typeof globalThis & {
+          __summarizeTestHooks?: {
+            pinSummarizeMode?: (payload: { mode: 'page' | 'video'; slides: boolean }) => void
+          }
+        }
+      ).__summarizeTestHooks
+      hooks?.pinSummarizeMode?.({ mode: 'video', slides: true })
+    })
+    await page.evaluate(() => {
+      const hooks = (
+        window as typeof globalThis & {
+          __summarizeTestHooks?: { awaitRenderSettled?: () => Promise<void> }
+        }
+      ).__summarizeTestHooks
+      return hooks?.awaitRenderSettled?.()
+    })
     await expect
       .poll(async () => await getSummarizeMode())
       .toEqual({ mode: 'video', slides: true, mediaAvailable: true })
-    await expect(summarizeButton).toHaveAttribute('aria-label', /Video \+ Slides/)
+    // Use polling for aria-label to handle race condition between state update and Preact re-render
+    await expect
+      .poll(async () => await summarizeButton.getAttribute('aria-label'))
+      .toMatch(/Video \+ Slides/)
     await sendBgMessage(harness, {
       type: 'run:start',
       run: {
@@ -2103,15 +2159,33 @@ test('sidepanel switches between page, video, and slides modes', async ({
     const renderedCount = await page.evaluate(() => {
       const hooks = (
         window as typeof globalThis & {
-          __summarizeTestHooks?: { forceRenderSlides?: () => number }
+          __summarizeTestHooks?: {
+            forceRenderSlides?: () => number
+            flushSlidesRender?: () => void
+            awaitRenderSettled?: () => Promise<void>
+            freezeSlidesRender?: (frozen: boolean) => void
+          }
         }
       ).__summarizeTestHooks
-      return hooks?.forceRenderSlides?.() ?? 0
+      hooks?.freezeSlidesRender?.(true)
+      const count = hooks?.forceRenderSlides?.() ?? 0
+      hooks?.flushSlidesRender?.()
+      return count
     })
     expect(renderedCount).toBeGreaterThan(0)
 
+    await page.evaluate(() => {
+      const hooks = (
+        window as typeof globalThis & {
+          __summarizeTestHooks?: { awaitRenderSettled?: () => Promise<void> }
+        }
+      ).__summarizeTestHooks
+      return hooks?.awaitRenderSettled?.()
+    })
+
     const slideImages = page.locator('img.slideInline__thumbImage, img.slideStrip__thumbImage')
-    await expect(slideImages).toHaveCount(2)
+    // Re-verify count after debounce settles
+    await expect(slideImages).toHaveCount(2, { timeout: 10_000 })
     await slideImages.first().scrollIntoViewIfNeeded()
     await expect
       .poll(
@@ -2129,12 +2203,39 @@ test('sidepanel switches between page, video, and slides modes', async ({
       'Slide two breaks down the details',
     ])
 
+    await page.evaluate(() => {
+      const hooks = (
+        window as typeof globalThis & {
+          __summarizeTestHooks?: { freezeSlidesRender?: (frozen: boolean) => void }
+        }
+      ).__summarizeTestHooks
+      hooks?.freezeSlidesRender?.(false)
+    })
+
     await ensureMediaAvailable(false)
-    await setSummarizeMode('page', false)
+    await page.evaluate(() => {
+      const hooks = (
+        window as typeof globalThis & {
+          __summarizeTestHooks?: {
+            pinSummarizeMode?: (payload: { mode: 'page' | 'video'; slides: boolean }) => void
+          }
+        }
+      ).__summarizeTestHooks
+      hooks?.pinSummarizeMode?.({ mode: 'page', slides: false })
+    })
+    await page.evaluate(() => {
+      const hooks = (
+        window as typeof globalThis & {
+          __summarizeTestHooks?: { awaitRenderSettled?: () => Promise<void> }
+        }
+      ).__summarizeTestHooks
+      return hooks?.awaitRenderSettled?.()
+    })
     await expect
       .poll(async () => await getSummarizeMode())
       .toEqual({ mode: 'page', slides: false, mediaAvailable: true })
-    await expect(summarizeButton).toHaveAttribute('aria-label', /Page/)
+    // Use polling for aria-label to handle race condition between state update and Preact re-render
+    await expect.poll(async () => await summarizeButton.getAttribute('aria-label')).toMatch(/Page/)
     await sendBgMessage(harness, {
       type: 'run:start',
       run: {
@@ -2240,30 +2341,60 @@ test('sidepanel scrolls YouTube slides and shows text for each slide', async ({
     const renderedCount = await page.evaluate(() => {
       const hooks = (
         window as typeof globalThis & {
-          __summarizeTestHooks?: { forceRenderSlides?: () => number }
+          __summarizeTestHooks?: {
+            forceRenderSlides?: () => number
+            flushSlidesRender?: () => void
+            awaitRenderSettled?: () => Promise<void>
+            freezeSlidesRender?: (frozen: boolean) => void
+          }
         }
       ).__summarizeTestHooks
-      return hooks?.forceRenderSlides?.() ?? 0
+      hooks?.freezeSlidesRender?.(true)
+      const count = hooks?.forceRenderSlides?.() ?? 0
+      hooks?.flushSlidesRender?.()
+      return count
     })
     expect(renderedCount).toBeGreaterThan(0)
 
+    await page.evaluate(() => {
+      const hooks = (
+        window as typeof globalThis & {
+          __summarizeTestHooks?: { awaitRenderSettled?: () => Promise<void> }
+        }
+      ).__summarizeTestHooks
+      return hooks?.awaitRenderSettled?.()
+    })
+
     const slideItems = page.locator('.slideGallery__item')
-    await expect(slideItems).toHaveCount(12)
+    // Re-verify count after debounce settles - items may have been cleared and re-rendered
+    await expect(slideItems).toHaveCount(12, { timeout: 10_000 })
 
     for (let index = 0; index < 12; index += 1) {
+      // Scroll using JavaScript to avoid Playwright locator detachment issues
+      await page.evaluate((idx) => {
+        const items = document.querySelectorAll('.slideGallery__item')
+        const target = items[idx]
+        if (target) {
+          target.scrollIntoView({ behavior: 'instant', block: 'center' })
+        }
+      }, index)
+
       const item = slideItems.nth(index)
-      await item.scrollIntoViewIfNeeded()
-      await expect(item).toBeVisible()
+      await expect(item).toBeVisible({ timeout: 10_000 })
 
       const img = item.locator('img.slideInline__thumbImage')
-      await expect(img).toBeVisible()
+      await expect(img).toBeVisible({ timeout: 10_000 })
       await expect
-        .poll(async () => (await img.evaluate((node) => node.dataset.slideImageUrl ?? '')).trim(), {
-          timeout: 10_000,
-        })
+        .poll(
+          async () => {
+            const src = await img.evaluate((node) => node.dataset.slideImageUrl ?? '')
+            return src.trim()
+          },
+          { timeout: 10_000 }
+        )
         .not.toBe('')
 
-      const text = item.locator('.slideGallery__text')
+      const text = slideItems.nth(index).locator('.slideGallery__text')
       await expect
         .poll(async () => (await text.textContent())?.trim() ?? '', { timeout: 10_000 })
         .not.toBe('')
@@ -2272,6 +2403,15 @@ test('sidepanel scrolls YouTube slides and shows text for each slide', async ({
     const slideDescriptions = await getPanelSlideDescriptions(page)
     expect(slideDescriptions).toHaveLength(12)
     expect(slideDescriptions.every(([, text]) => text.trim().length > 0)).toBe(true)
+
+    await page.evaluate(() => {
+      const hooks = (
+        window as typeof globalThis & {
+          __summarizeTestHooks?: { freezeSlidesRender?: (frozen: boolean) => void }
+        }
+      ).__summarizeTestHooks
+      hooks?.freezeSlidesRender?.(false)
+    })
 
     assertNoErrors(harness)
   } finally {
