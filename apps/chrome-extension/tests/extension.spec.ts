@@ -119,6 +119,27 @@ function buildUiState(overrides: Partial<UiState>): UiState {
   }
 }
 
+async function attachModeChanges(
+  page: Page,
+  testInfo: {
+    attach: (name: string, options: { body: string; contentType: string }) => Promise<void>
+  },
+  label: string
+) {
+  const changes = await page.evaluate(() => {
+    const hooks = (
+      window as typeof globalThis & {
+        __summarizeTestHooks?: { getModeChanges?: () => Array<unknown> }
+      }
+    ).__summarizeTestHooks
+    return hooks?.getModeChanges?.() ?? []
+  })
+  await testInfo.attach(`mode-changes-${label}`, {
+    body: JSON.stringify(changes, null, 2),
+    contentType: 'application/json',
+  })
+}
+
 async function awaitRenderSettled(page: Page) {
   await page.evaluate(() => {
     const hooks = (
@@ -1035,6 +1056,7 @@ test('sidepanel loads without runtime errors', async ({ browserName: _browserNam
     await new Promise((resolve) => setTimeout(resolve, 500))
     assertNoErrors(harness)
   } finally {
+    await attachModeChanges(page, testInfo, 'switch-modes')
     await closeExtension(harness.context, harness.userDataDir)
   }
 })
@@ -1063,6 +1085,7 @@ test('sidepanel hides chat dock when chat is disabled', async ({
     await expect(page.locator('#chatContainer')).toBeHidden()
     assertNoErrors(harness)
   } finally {
+    await attachModeChanges(page, testInfo, 'scroll-slides')
     await closeExtension(harness.context, harness.userDataDir)
   }
 })
