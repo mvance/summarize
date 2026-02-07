@@ -2030,7 +2030,10 @@ test('sidepanel switches between page, video, and slides modes', async ({
     await expect
       .poll(async () => await getSummarizeMode())
       .toEqual({ mode: 'video', slides: true, mediaAvailable: true })
-    await expect(summarizeButton).toHaveAttribute('aria-label', /Video \+ Slides/)
+    // Use polling for aria-label to handle race condition between state update and Preact re-render
+    await expect
+      .poll(async () => await summarizeButton.getAttribute('aria-label'))
+      .toMatch(/Video \+ Slides/)
     await sendBgMessage(harness, {
       type: 'run:start',
       run: {
@@ -2112,8 +2115,11 @@ test('sidepanel switches between page, video, and slides modes', async ({
     })
     expect(renderedCount).toBeGreaterThan(0)
 
+    // Wait for the debounced re-render (120ms) to settle before interacting with slides
+    await page.waitForTimeout(250)
     const slideImages = page.locator('img.slideInline__thumbImage, img.slideStrip__thumbImage')
-    await expect(slideImages).toHaveCount(2)
+    // Re-verify count after debounce settles
+    await expect(slideImages).toHaveCount(2, { timeout: 10_000 })
     await slideImages.first().scrollIntoViewIfNeeded()
     await expect
       .poll(
@@ -2136,7 +2142,8 @@ test('sidepanel switches between page, video, and slides modes', async ({
     await expect
       .poll(async () => await getSummarizeMode())
       .toEqual({ mode: 'page', slides: false, mediaAvailable: true })
-    await expect(summarizeButton).toHaveAttribute('aria-label', /Page/)
+    // Use polling for aria-label to handle race condition between state update and Preact re-render
+    await expect.poll(async () => await summarizeButton.getAttribute('aria-label')).toMatch(/Page/)
     await sendBgMessage(harness, {
       type: 'run:start',
       run: {
@@ -2249,16 +2256,15 @@ test('sidepanel scrolls YouTube slides and shows text for each slide', async ({
     })
     expect(renderedCount).toBeGreaterThan(0)
 
+    // Wait for the debounced re-render (120ms) to settle before interacting with slides
+    await page.waitForTimeout(250)
+
     const slideItems = page.locator('.slideGallery__item')
-    await expect(slideItems).toHaveCount(12)
+    // Re-verify count after debounce settles - items may have been cleared and re-rendered
+    await expect(slideItems).toHaveCount(12, { timeout: 10_000 })
 
-    // Use a more resilient approach for virtualized/scrolling lists
     for (let index = 0; index < 12; index += 1) {
-      // Wait for the specific item to be visible (handles virtualization)
-      const item = slideItems.nth(index)
-      await expect(item).toBeVisible({ timeout: 15_000 })
-
-      // Scroll using JavaScript to avoid locator detachment issues
+      // Scroll using JavaScript to avoid Playwright locator detachment issues
       await page.evaluate((idx) => {
         const items = document.querySelectorAll('.slideGallery__item')
         const target = items[idx]
@@ -2267,13 +2273,10 @@ test('sidepanel scrolls YouTube slides and shows text for each slide', async ({
         }
       }, index)
 
-      // Small delay to let any lazy loading complete
-      await page.waitForTimeout(100)
+      const item = slideItems.nth(index)
+      await expect(item).toBeVisible({ timeout: 10_000 })
 
-      // Re-acquire the locator after scroll and verify visibility
-      await expect(slideItems.nth(index)).toBeVisible({ timeout: 10_000 })
-
-      const img = slideItems.nth(index).locator('img.slideInline__thumbImage')
+      const img = item.locator('img.slideInline__thumbImage')
       await expect(img).toBeVisible({ timeout: 10_000 })
       await expect
         .poll(
