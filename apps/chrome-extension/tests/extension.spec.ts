@@ -2300,8 +2300,17 @@ test('sidepanel scrolls YouTube slides and shows text for each slide', async ({
       .toBe(12)
 
     for (let index = 0; index < 12; index += 1) {
+      await page.evaluate((idx) => {
+        const list = document.querySelector('.slideGallery__list')
+        if (!list) return
+        const items = list.querySelectorAll('.slideGallery__item')
+        const target = items[idx]
+        if (target) {
+          target.scrollIntoView({ behavior: 'instant', block: 'center' })
+        }
+      }, index)
+
       const item = slideItems.nth(index)
-      await item.scrollIntoViewIfNeeded()
       await expect(item).toBeVisible()
 
       const img = item.locator('img.slideInline__thumbImage')
