@@ -1687,6 +1687,7 @@ const slidesTestHooks = (
       applyUiState?: (state: UiState) => void
       forceRenderSlides?: () => void
       flushSlidesRender?: () => void
+      awaitRenderSettled?: () => Promise<void>
       showInlineError?: (message: string) => void
       isInlineErrorVisible?: () => boolean
       getInlineErrorMessage?: () => string
@@ -1756,6 +1757,10 @@ if (slidesTestHooks) {
       renderSlideStrip(renderSlidesHostEl)
     }
   }
+  slidesTestHooks.awaitRenderSettled = () =>
+    new Promise((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(resolve))
+    })
   slidesTestHooks.showInlineError = (message) => {
     errorController.showInlineError(message)
   }

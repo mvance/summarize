@@ -1977,6 +1977,14 @@ test('sidepanel switches between page, video, and slides modes', async ({
     await expect(summarizeButton).toHaveAttribute('aria-label', /120 words/)
 
     await setSummarizeMode('page', false)
+    await page.evaluate(() => {
+      const hooks = (
+        window as typeof globalThis & {
+          __summarizeTestHooks?: { awaitRenderSettled?: () => Promise<void> }
+        }
+      ).__summarizeTestHooks
+      return hooks?.awaitRenderSettled?.()
+    })
     await expect
       .poll(async () => await getSummarizeMode())
       .toEqual({ mode: 'page', slides: false, mediaAvailable: true })
@@ -2002,6 +2010,14 @@ test('sidepanel switches between page, video, and slides modes', async ({
 
     await ensureMediaAvailable(false)
     await setSummarizeMode('video', false)
+    await page.evaluate(() => {
+      const hooks = (
+        window as typeof globalThis & {
+          __summarizeTestHooks?: { awaitRenderSettled?: () => Promise<void> }
+        }
+      ).__summarizeTestHooks
+      return hooks?.awaitRenderSettled?.()
+    })
     await expect
       .poll(async () => await getSummarizeMode())
       .toEqual({ mode: 'video', slides: false, mediaAvailable: true })
@@ -2027,6 +2043,14 @@ test('sidepanel switches between page, video, and slides modes', async ({
 
     await ensureMediaAvailable(true)
     await setSummarizeMode('video', true)
+    await page.evaluate(() => {
+      const hooks = (
+        window as typeof globalThis & {
+          __summarizeTestHooks?: { awaitRenderSettled?: () => Promise<void> }
+        }
+      ).__summarizeTestHooks
+      return hooks?.awaitRenderSettled?.()
+    })
     await expect
       .poll(async () => await getSummarizeMode())
       .toEqual({ mode: 'video', slides: true, mediaAvailable: true })
@@ -2111,6 +2135,7 @@ test('sidepanel switches between page, video, and slides modes', async ({
           __summarizeTestHooks?: {
             forceRenderSlides?: () => number
             flushSlidesRender?: () => void
+            awaitRenderSettled?: () => Promise<void>
           }
         }
       ).__summarizeTestHooks
@@ -2119,6 +2144,15 @@ test('sidepanel switches between page, video, and slides modes', async ({
       return count
     })
     expect(renderedCount).toBeGreaterThan(0)
+
+    await page.evaluate(() => {
+      const hooks = (
+        window as typeof globalThis & {
+          __summarizeTestHooks?: { awaitRenderSettled?: () => Promise<void> }
+        }
+      ).__summarizeTestHooks
+      return hooks?.awaitRenderSettled?.()
+    })
 
     const slideImages = page.locator('img.slideInline__thumbImage, img.slideStrip__thumbImage')
     // Re-verify count after debounce settles
@@ -2255,6 +2289,7 @@ test('sidepanel scrolls YouTube slides and shows text for each slide', async ({
           __summarizeTestHooks?: {
             forceRenderSlides?: () => number
             flushSlidesRender?: () => void
+            awaitRenderSettled?: () => Promise<void>
           }
         }
       ).__summarizeTestHooks
@@ -2263,6 +2298,15 @@ test('sidepanel scrolls YouTube slides and shows text for each slide', async ({
       return count
     })
     expect(renderedCount).toBeGreaterThan(0)
+
+    await page.evaluate(() => {
+      const hooks = (
+        window as typeof globalThis & {
+          __summarizeTestHooks?: { awaitRenderSettled?: () => Promise<void> }
+        }
+      ).__summarizeTestHooks
+      return hooks?.awaitRenderSettled?.()
+    })
 
     const slideItems = page.locator('.slideGallery__item')
     // Re-verify count after debounce settles - items may have been cleared and re-rendered
