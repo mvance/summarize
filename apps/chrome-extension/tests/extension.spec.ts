@@ -130,6 +130,34 @@ async function awaitRenderSettled(page: Page) {
   })
 }
 
+async function getSummarizeLabel(page: Page) {
+  return await page.evaluate(() => {
+    const hooks = (
+      window as typeof globalThis & {
+        __summarizeTestHooks?: { getSummarizeLabel?: () => string }
+      }
+    ).__summarizeTestHooks
+    return hooks?.getSummarizeLabel?.() ?? ''
+  })
+}
+
+async function getSlidesDomCount(page: Page) {
+  return await page.evaluate(() => {
+    const hooks = (
+      window as typeof globalThis & {
+        __summarizeTestHooks?: {
+          getSlidesDomCount?: () => {
+            galleryItems: number
+            stripItems: number
+            thumbImages: number
+          }
+        }
+      }
+    ).__summarizeTestHooks
+    return hooks?.getSlidesDomCount?.() ?? { galleryItems: 0, stripItems: 0, thumbImages: 0 }
+  })
+}
+
 function buildAssistant(text: string) {
   return {
     role: 'assistant',
@@ -1985,14 +2013,14 @@ test('sidepanel switches between page, video, and slides modes', async ({
     }
 
     await ensureMediaAvailable(false)
-    await expect(summarizeButton).toHaveAttribute('aria-label', /120 words/)
+    await expect.poll(async () => await getSummarizeLabel(page)).toMatch(/120 words/)
 
     await setSummarizeMode('page', false)
     await awaitRenderSettled(page)
     await expect
       .poll(async () => await getSummarizeMode())
       .toEqual({ mode: 'page', slides: false, mediaAvailable: true })
-    await expect(summarizeButton).toHaveAttribute('aria-label', /Page/)
+    await expect.poll(async () => await getSummarizeLabel(page)).toMatch(/Page/)
     await sendBgMessage(harness, {
       type: 'run:start',
       run: {
@@ -2007,9 +2035,9 @@ test('sidepanel switches between page, video, and slides modes', async ({
     await expect
       .poll(() => getPanelSummaryMarkdown(page), { timeout: 20_000 })
       .toContain('Page summary')
-    await expect(
-      page.locator('img.slideStrip__thumbImage, img.slideInline__thumbImage')
-    ).toHaveCount(0)
+    await expect
+      .poll(async () => (await getSlidesDomCount(page)).thumbImages, { timeout: 10_000 })
+      .toBe(0)
 
     await ensureMediaAvailable(false)
     await setSummarizeMode('video', false)
@@ -2017,7 +2045,7 @@ test('sidepanel switches between page, video, and slides modes', async ({
     await expect
       .poll(async () => await getSummarizeMode())
       .toEqual({ mode: 'video', slides: false, mediaAvailable: true })
-    await expect(summarizeButton).toHaveAttribute('aria-label', /Video/)
+    await expect.poll(async () => await getSummarizeLabel(page)).toMatch(/Video/)
     await sendBgMessage(harness, {
       type: 'run:start',
       run: {
@@ -2032,9 +2060,9 @@ test('sidepanel switches between page, video, and slides modes', async ({
     await expect
       .poll(() => getPanelSummaryMarkdown(page), { timeout: 20_000 })
       .toContain('Video summary')
-    await expect(
-      page.locator('img.slideStrip__thumbImage, img.slideInline__thumbImage')
-    ).toHaveCount(0)
+    await expect
+      .poll(async () => (await getSlidesDomCount(page)).thumbImages, { timeout: 10_000 })
+      .toBe(0)
 
     await ensureMediaAvailable(true)
     await setSummarizeMode('video', true)
@@ -2042,7 +2070,7 @@ test('sidepanel switches between page, video, and slides modes', async ({
     await expect
       .poll(async () => await getSummarizeMode())
       .toEqual({ mode: 'video', slides: true, mediaAvailable: true })
-    await expect(summarizeButton).toHaveAttribute('aria-label', /Video \+ Slides/)
+    await expect.poll(async () => await getSummarizeLabel(page)).toMatch(/Video \+ Slides/)
     await sendBgMessage(harness, {
       type: 'run:start',
       run: {
@@ -2126,8 +2154,10 @@ test('sidepanel switches between page, video, and slides modes', async ({
     await awaitRenderSettled(page)
     await awaitRenderSettled(page)
 
+    await expect
+      .poll(async () => (await getSlidesDomCount(page)).thumbImages, { timeout: 10_000 })
+      .toBe(2)
     const slideImages = page.locator('img.slideInline__thumbImage, img.slideStrip__thumbImage')
-    await expect(slideImages).toHaveCount(2)
     await slideImages.first().scrollIntoViewIfNeeded()
     await expect
       .poll(
@@ -2151,7 +2181,7 @@ test('sidepanel switches between page, video, and slides modes', async ({
     await expect
       .poll(async () => await getSummarizeMode())
       .toEqual({ mode: 'page', slides: false, mediaAvailable: true })
-    await expect(summarizeButton).toHaveAttribute('aria-label', /Page/)
+    await expect.poll(async () => await getSummarizeLabel(page)).toMatch(/Page/)
     await sendBgMessage(harness, {
       type: 'run:start',
       run: {
@@ -2163,9 +2193,9 @@ test('sidepanel switches between page, video, and slides modes', async ({
       },
     })
     await expect(page.locator('#render')).toContainText('Back summary')
-    await expect(
-      page.locator('img.slideStrip__thumbImage, img.slideInline__thumbImage')
-    ).toHaveCount(0)
+    await expect
+      .poll(async () => (await getSlidesDomCount(page)).thumbImages, { timeout: 10_000 })
+      .toBe(0)
     await expect(page.locator('.slideGallery__text, .slideStrip__text')).toHaveCount(0)
 
     assertNoErrors(harness)
@@ -2265,7 +2295,9 @@ test('sidepanel scrolls YouTube slides and shows text for each slide', async ({
     expect(renderedCount).toBeGreaterThan(0)
 
     const slideItems = page.locator('.slideGallery__item')
-    await expect(slideItems).toHaveCount(12)
+    await expect
+      .poll(async () => (await getSlidesDomCount(page)).galleryItems, { timeout: 10_000 })
+      .toBe(12)
 
     for (let index = 0; index < 12; index += 1) {
       const item = slideItems.nth(index)
