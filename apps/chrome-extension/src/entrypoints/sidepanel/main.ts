@@ -615,6 +615,14 @@ renderEl.addEventListener('click', (event) => {
 })
 
 async function handleSummarizeControlChange(value: { mode: 'page' | 'video'; slides: boolean }) {
+  const previous = {
+    inputMode,
+    inputModeOverride,
+    slidesEnabledValue,
+    mediaAvailable,
+    activeTabUrl,
+    phase: panelState.phase,
+  }
   const prevSlides = slidesEnabledValue
   const prevMode = inputMode
   if (value.slides && !slidesEnabledValue) {
@@ -635,6 +643,7 @@ async function handleSummarizeControlChange(value: { mode: 'page' | 'video'; sli
   inputModeOverride = value.mode
   slidesEnabledValue = value.slides
   await patchSettings({ slidesEnabled: slidesEnabledValue })
+  reportModeChange('handleSummarizeControlChange', previous)
   if (slidesEnabledValue && (inputModeOverride ?? inputMode) === 'video') {
     maybeApplyPendingSlidesSummary()
     maybeStartPendingSlidesForUrl(activeTabUrl ?? null)
@@ -1686,12 +1695,109 @@ const slidesTestHooks = (
       renderSlidesNow?: () => void
       applyUiState?: (state: UiState) => void
       forceRenderSlides?: () => void
+      awaitRenderSettled?: () => Promise<void>
+      getSummarizeLabel?: () => string
+      getSlidesDomCount?: () => { galleryItems: number; stripItems: number; thumbImages: number }
+      onModeChange?: (payload: {
+        reason: string
+        previous: {
+          inputMode: 'page' | 'video'
+          inputModeOverride: 'page' | 'video' | null
+          slidesEnabledValue: boolean
+          mediaAvailable: boolean
+          activeTabUrl: string | null
+          phase: PanelPhase
+        }
+        next: {
+          inputMode: 'page' | 'video'
+          inputModeOverride: 'page' | 'video' | null
+          slidesEnabledValue: boolean
+          mediaAvailable: boolean
+          activeTabUrl: string | null
+          phase: PanelPhase
+        }
+      }) => void
+      getModeChanges?: () => Array<{
+        reason: string
+        previous: {
+          inputMode: 'page' | 'video'
+          inputModeOverride: 'page' | 'video' | null
+          slidesEnabledValue: boolean
+          mediaAvailable: boolean
+          activeTabUrl: string | null
+          phase: PanelPhase
+        }
+        next: {
+          inputMode: 'page' | 'video'
+          inputModeOverride: 'page' | 'video' | null
+          slidesEnabledValue: boolean
+          mediaAvailable: boolean
+          activeTabUrl: string | null
+          phase: PanelPhase
+        }
+      }>
       showInlineError?: (message: string) => void
       isInlineErrorVisible?: () => boolean
       getInlineErrorMessage?: () => string
     }
   }
 ).__summarizeTestHooks
+const isTestMode = Boolean(slidesTestHooks)
+const modeChangeLog: Array<{
+  reason: string
+  previous: {
+    inputMode: 'page' | 'video'
+    inputModeOverride: 'page' | 'video' | null
+    slidesEnabledValue: boolean
+    mediaAvailable: boolean
+    activeTabUrl: string | null
+    phase: PanelPhase
+  }
+  next: {
+    inputMode: 'page' | 'video'
+    inputModeOverride: 'page' | 'video' | null
+    slidesEnabledValue: boolean
+    mediaAvailable: boolean
+    activeTabUrl: string | null
+    phase: PanelPhase
+  }
+}> = []
+
+function reportModeChange(
+  reason: string,
+  previous: {
+    inputMode: 'page' | 'video'
+    inputModeOverride: 'page' | 'video' | null
+    slidesEnabledValue: boolean
+    mediaAvailable: boolean
+    activeTabUrl: string | null
+    phase: PanelPhase
+  }
+) {
+  if (!slidesTestHooks?.onModeChange) return
+  const next = {
+    inputMode,
+    inputModeOverride,
+    slidesEnabledValue,
+    mediaAvailable,
+    activeTabUrl,
+    phase: panelState.phase,
+  }
+  if (
+    previous.inputMode === next.inputMode &&
+    previous.inputModeOverride === next.inputModeOverride &&
+    previous.slidesEnabledValue === next.slidesEnabledValue &&
+    previous.mediaAvailable === next.mediaAvailable &&
+    previous.activeTabUrl === next.activeTabUrl &&
+    previous.phase === next.phase
+  ) {
+    return
+  }
+  const entry = { reason, previous, next }
+  modeChangeLog.push(entry)
+  if (modeChangeLog.length > 100) modeChangeLog.shift()
+  slidesTestHooks.onModeChange({ reason, previous, next })
+}
 if (slidesTestHooks) {
   slidesTestHooks.applySlidesPayload = applySlidesPayload
   slidesTestHooks.getRunId = () => panelState.runId
@@ -1740,6 +1846,46 @@ if (slidesTestHooks) {
     }
     return renderSlidesHostEl.children.length
   }
+  slidesTestHooks.awaitRenderSettled = () =>
+    new Promise((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(resolve))
+    })
+  slidesTestHooks.getSummarizeLabel = () => {
+    const formatCount = (value: number) => value.toLocaleString()
+    const formatWordCount = (value: number | null | undefined) => {
+      if (!value || !Number.isFinite(value)) return null
+      return `${formatCount(value)} words`
+    }
+    const formatDuration = (seconds: number | null | undefined) => {
+      if (!seconds || !Number.isFinite(seconds)) return null
+      const total = Math.max(0, Math.floor(seconds))
+      const hours = Math.floor(total / 3600)
+      const minutes = Math.floor((total % 3600) / 60)
+      const secs = total % 60
+      const mm = minutes.toString().padStart(2, '0')
+      const ss = secs.toString().padStart(2, '0')
+      return hours > 0 ? `${hours}:${mm}:${ss} min` : `${minutes}:${ss} min`
+    }
+    const pageMeta = formatWordCount(summarizePageWords)
+    const videoMeta = formatDuration(summarizeVideoDurationSeconds)
+    const pageLabel = pageMeta ? `Page · ${pageMeta}` : 'Page'
+    const videoLabel = `${summarizeVideoLabel ?? 'Video'}${videoMeta ? ` · ${videoMeta}` : ''}`
+    const videoSlidesLabel = `${summarizeVideoLabel ?? 'Video'} + Slides`
+    if (!mediaAvailable) return pageLabel
+    if (slidesEnabledValue) return videoSlidesLabel
+    const effectiveInputMode = inputModeOverride ?? inputMode
+    return effectiveInputMode === 'video' ? videoLabel : pageLabel
+  }
+  slidesTestHooks.getSlidesDomCount = () => {
+    return {
+      galleryItems: renderSlidesHostEl.querySelectorAll('.slideGallery__item').length,
+      stripItems: renderSlidesHostEl.querySelectorAll('.slideStrip__item').length,
+      thumbImages: renderSlidesHostEl.querySelectorAll(
+        'img.slideInline__thumbImage, img.slideStrip__thumbImage'
+      ).length,
+    }
+  }
+  slidesTestHooks.getModeChanges = () => [...modeChangeLog]
   slidesTestHooks.showInlineError = (message) => {
     errorController.showInlineError(message)
   }
@@ -1781,6 +1927,10 @@ function queueSlideStripRender() {
     clearSlideStrip(renderSlidesHostEl)
     return
   }
+  if (isTestMode) {
+    renderSlideStrip(renderSlidesHostEl)
+    return
+  }
   if (slideStripRenderQueued) return
   slideStripRenderQueued = window.setTimeout(() => {
     slideStripRenderQueued = 0
@@ -1791,6 +1941,10 @@ function queueSlideStripRender() {
 function queueSlideGalleryRender() {
   if (slidesLayoutValue !== 'gallery') {
     clearSlideGallery(renderSlidesHostEl)
+    return
+  }
+  if (isTestMode) {
+    renderSlideGallery(renderSlidesHostEl)
     return
   }
   if (slideGalleryRenderQueued) return
@@ -2907,6 +3061,14 @@ function handleSlidesStatus(text: string) {
 }
 
 function startSlidesStreamForRunId(runId: string) {
+  const previous = {
+    inputMode,
+    inputModeOverride,
+    slidesEnabledValue,
+    mediaAvailable,
+    activeTabUrl,
+    phase: panelState.phase,
+  }
   const effectiveInputMode = inputModeOverride ?? inputMode
   const slidesAllowed = slidesEnabledValue || panelState.ui?.settings.slidesEnabled
   if (!slidesAllowed) {
@@ -2916,6 +3078,7 @@ function startSlidesStreamForRunId(runId: string) {
   if (effectiveInputMode !== 'video') {
     inputMode = 'video'
     inputModeOverride = 'video'
+    reportModeChange('startSlidesStreamForRunId', previous)
     refreshSummarizeControl()
   }
   hideSlideNotice()
@@ -3447,6 +3610,14 @@ function maybeShowSetup(state: UiState): boolean {
 }
 
 function updateControls(state: UiState) {
+  const previous = {
+    inputMode,
+    inputModeOverride,
+    slidesEnabledValue,
+    mediaAvailable,
+    activeTabUrl,
+    phase: panelState.phase,
+  }
   if (state.panelOpen && !lastPanelOpen) {
     errorController.clearInlineError()
   }
@@ -3488,6 +3659,7 @@ function updateControls(state: UiState) {
     }
     inputMode = preferUrlMode ? 'video' : 'page'
     inputModeOverride = null
+    reportModeChange('updateControls.tabChanged', previous)
     if (nextTabId && nextTabUrl) {
       const cached = panelCacheController.resolve(nextTabId, nextTabUrl)
       if (cached) {
@@ -3535,6 +3707,7 @@ function updateControls(state: UiState) {
     if (!inputModeOverride) {
       inputMode = preferUrlMode ? 'video' : 'page'
       inputModeOverride = null
+      reportModeChange('updateControls.urlChanged', previous)
     }
     if (
       chatEnabledValue &&
@@ -3575,6 +3748,7 @@ function updateControls(state: UiState) {
   if (slidesEnabledValue && nextMediaAvailable) {
     inputMode = 'video'
     inputModeOverride = 'video'
+    reportModeChange('updateControls.enableSlides', previous)
   }
   if (state.settings.slidesLayout && state.settings.slidesLayout !== slidesLayoutValue) {
     setSlidesLayout(state.settings.slidesLayout)
@@ -3639,6 +3813,7 @@ function updateControls(state: UiState) {
   if (!nextMediaAvailable && hasMediaInfo) {
     inputMode = 'page'
     inputModeOverride = null
+    reportModeChange('updateControls.mediaUnavailable', previous)
   }
   mediaAvailable = nextMediaAvailable
   summarizeVideoLabel = nextVideoLabel

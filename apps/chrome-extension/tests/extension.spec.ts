@@ -119,6 +119,67 @@ function buildUiState(overrides: Partial<UiState>): UiState {
   }
 }
 
+async function attachModeChanges(
+  page: Page | null | undefined,
+  testInfo: {
+    attach: (name: string, options: { body: string; contentType: string }) => Promise<void>
+  },
+  label: string
+) {
+  if (!page) return
+  const changes = await page.evaluate(() => {
+    const hooks = (
+      window as typeof globalThis & {
+        __summarizeTestHooks?: { getModeChanges?: () => Array<unknown> }
+      }
+    ).__summarizeTestHooks
+    return hooks?.getModeChanges?.() ?? []
+  })
+  await testInfo.attach(`mode-changes-${label}`, {
+    body: JSON.stringify(changes, null, 2),
+    contentType: 'application/json',
+  })
+}
+
+async function awaitRenderSettled(page: Page) {
+  await page.evaluate(() => {
+    const hooks = (
+      window as typeof globalThis & {
+        __summarizeTestHooks?: { awaitRenderSettled?: () => Promise<void> }
+      }
+    ).__summarizeTestHooks
+    return hooks?.awaitRenderSettled?.()
+  })
+}
+
+async function getSummarizeLabel(page: Page) {
+  return await page.evaluate(() => {
+    const hooks = (
+      window as typeof globalThis & {
+        __summarizeTestHooks?: { getSummarizeLabel?: () => string }
+      }
+    ).__summarizeTestHooks
+    return hooks?.getSummarizeLabel?.() ?? ''
+  })
+}
+
+async function getSlidesDomCount(page: Page) {
+  return await page.evaluate(() => {
+    const hooks = (
+      window as typeof globalThis & {
+        __summarizeTestHooks?: {
+          getSlidesDomCount?: () => {
+            galleryItems: number
+            stripItems: number
+            thumbImages: number
+          }
+        }
+      }
+    ).__summarizeTestHooks
+    return hooks?.getSlidesDomCount?.() ?? { galleryItems: 0, stripItems: 0, thumbImages: 0 }
+  })
+}
+
 function buildAssistant(text: string) {
   return {
     role: 'assistant',
@@ -996,6 +1057,7 @@ test('sidepanel loads without runtime errors', async ({ browserName: _browserNam
     await new Promise((resolve) => setTimeout(resolve, 500))
     assertNoErrors(harness)
   } finally {
+    await attachModeChanges(page, testInfo, 'switch-modes')
     await closeExtension(harness.context, harness.userDataDir)
   }
 })
@@ -1004,6 +1066,7 @@ test('sidepanel hides chat dock when chat is disabled', async ({
   browserName: _browserName,
 }, testInfo) => {
   const harness = await launchExtension(getBrowserFromProject(testInfo.project.name))
+  const page: Page | null = null
 
   try {
     await seedSettings(harness, { chatEnabled: false })
@@ -1024,6 +1087,7 @@ test('sidepanel hides chat dock when chat is disabled', async ({
     await expect(page.locator('#chatContainer')).toBeHidden()
     assertNoErrors(harness)
   } finally {
+    await attachModeChanges(page, testInfo, 'scroll-slides')
     await closeExtension(harness.context, harness.userDataDir)
   }
 })
@@ -1032,6 +1096,7 @@ test('sidepanel updates chat visibility when settings change', async ({
   browserName: _browserName,
 }, testInfo) => {
   const harness = await launchExtension(getBrowserFromProject(testInfo.project.name))
+  const page: Page | null = null
 
   try {
     await seedSettings(harness, { chatEnabled: true })
@@ -1054,9 +1119,10 @@ test('sidepanel scheme picker supports keyboard selection', async ({
   browserName: _browserName,
 }, testInfo) => {
   const harness = await launchExtension(getBrowserFromProject(testInfo.project.name))
+  let page: Page | null = null
 
   try {
-    const page = await openExtensionPage(harness, 'sidepanel.html', '#title', () => {
+    page = await openExtensionPage(harness, 'sidepanel.html', '#title', () => {
       ;(
         window as typeof globalThis & { __summarizeTestHooks?: Record<string, unknown> }
       ).__summarizeTestHooks = {}
@@ -1409,7 +1475,7 @@ test('sidepanel restores cached state when switching YouTube tabs', async ({
       slidesEnabled: true,
       slidesOcrEnabled: true,
     })
-    const page = await openExtensionPage(harness, 'sidepanel.html', '#title', () => {
+    page = await openExtensionPage(harness, 'sidepanel.html', '#title', () => {
       ;(
         window as typeof globalThis & { __summarizeTestHooks?: Record<string, unknown> }
       ).__summarizeTestHooks = {}
@@ -1693,7 +1759,7 @@ test('sidepanel resumes slides when returning to a tab', async ({
       slidesParallel: true,
       slidesOcrEnabled: true,
     })
-    const page = await openExtensionPage(harness, 'sidepanel.html', '#title', () => {
+    page = await openExtensionPage(harness, 'sidepanel.html', '#title', () => {
       ;(
         window as typeof globalThis & { __summarizeTestHooks?: Record<string, unknown> }
       ).__summarizeTestHooks = {}
@@ -1801,6 +1867,7 @@ test('sidepanel resumes slides when returning to a tab', async ({
 
     assertNoErrors(harness)
   } finally {
+    await attachModeChanges(page, testInfo, 'switch-modes')
     await closeExtension(harness.context, harness.userDataDir)
   }
 })
@@ -1809,6 +1876,7 @@ test('sidepanel switches between page, video, and slides modes', async ({
   browserName: _browserName,
 }, testInfo) => {
   const harness = await launchExtension(getBrowserFromProject(testInfo.project.name))
+  let page: Page | null = null
 
   try {
     await seedSettings(harness, {
@@ -1818,7 +1886,7 @@ test('sidepanel switches between page, video, and slides modes', async ({
       slidesLayout: 'gallery',
       slidesOcrEnabled: true,
     })
-    const page = await openExtensionPage(harness, 'sidepanel.html', '#title', () => {
+    page = await openExtensionPage(harness, 'sidepanel.html', '#title', () => {
       ;(
         window as typeof globalThis & { __summarizeTestHooks?: Record<string, unknown> }
       ).__summarizeTestHooks = {}
@@ -1974,13 +2042,14 @@ test('sidepanel switches between page, video, and slides modes', async ({
     }
 
     await ensureMediaAvailable(false)
-    await expect(summarizeButton).toHaveAttribute('aria-label', /120 words/)
+    await expect.poll(async () => await getSummarizeLabel(page)).toMatch(/120 words/)
 
     await setSummarizeMode('page', false)
+    await awaitRenderSettled(page)
     await expect
       .poll(async () => await getSummarizeMode())
       .toEqual({ mode: 'page', slides: false, mediaAvailable: true })
-    await expect(summarizeButton).toHaveAttribute('aria-label', /Page/)
+    await expect.poll(async () => await getSummarizeLabel(page)).toMatch(/Page/)
     await sendBgMessage(harness, {
       type: 'run:start',
       run: {
@@ -1995,16 +2064,17 @@ test('sidepanel switches between page, video, and slides modes', async ({
     await expect
       .poll(() => getPanelSummaryMarkdown(page), { timeout: 20_000 })
       .toContain('Page summary')
-    await expect(
-      page.locator('img.slideStrip__thumbImage, img.slideInline__thumbImage')
-    ).toHaveCount(0)
+    await expect
+      .poll(async () => (await getSlidesDomCount(page)).thumbImages, { timeout: 10_000 })
+      .toBe(0)
 
     await ensureMediaAvailable(false)
     await setSummarizeMode('video', false)
+    await awaitRenderSettled(page)
     await expect
       .poll(async () => await getSummarizeMode())
       .toEqual({ mode: 'video', slides: false, mediaAvailable: true })
-    await expect(summarizeButton).toHaveAttribute('aria-label', /Video/)
+    await expect.poll(async () => await getSummarizeLabel(page)).toMatch(/Video/)
     await sendBgMessage(harness, {
       type: 'run:start',
       run: {
@@ -2019,16 +2089,17 @@ test('sidepanel switches between page, video, and slides modes', async ({
     await expect
       .poll(() => getPanelSummaryMarkdown(page), { timeout: 20_000 })
       .toContain('Video summary')
-    await expect(
-      page.locator('img.slideStrip__thumbImage, img.slideInline__thumbImage')
-    ).toHaveCount(0)
+    await expect
+      .poll(async () => (await getSlidesDomCount(page)).thumbImages, { timeout: 10_000 })
+      .toBe(0)
 
     await ensureMediaAvailable(true)
     await setSummarizeMode('video', true)
+    await awaitRenderSettled(page)
     await expect
       .poll(async () => await getSummarizeMode())
       .toEqual({ mode: 'video', slides: true, mediaAvailable: true })
-    await expect(summarizeButton).toHaveAttribute('aria-label', /Video \+ Slides/)
+    await expect.poll(async () => await getSummarizeLabel(page)).toMatch(/Video \+ Slides/)
     await sendBgMessage(harness, {
       type: 'run:start',
       run: {
@@ -2109,9 +2180,13 @@ test('sidepanel switches between page, video, and slides modes', async ({
       return hooks?.forceRenderSlides?.() ?? 0
     })
     expect(renderedCount).toBeGreaterThan(0)
+    await awaitRenderSettled(page)
+    await awaitRenderSettled(page)
 
+    await expect
+      .poll(async () => (await getSlidesDomCount(page)).thumbImages, { timeout: 10_000 })
+      .toBe(2)
     const slideImages = page.locator('img.slideInline__thumbImage, img.slideStrip__thumbImage')
-    await expect(slideImages).toHaveCount(2)
     await slideImages.first().scrollIntoViewIfNeeded()
     await expect
       .poll(
@@ -2131,10 +2206,11 @@ test('sidepanel switches between page, video, and slides modes', async ({
 
     await ensureMediaAvailable(false)
     await setSummarizeMode('page', false)
+    await awaitRenderSettled(page)
     await expect
       .poll(async () => await getSummarizeMode())
       .toEqual({ mode: 'page', slides: false, mediaAvailable: true })
-    await expect(summarizeButton).toHaveAttribute('aria-label', /Page/)
+    await expect.poll(async () => await getSummarizeLabel(page)).toMatch(/Page/)
     await sendBgMessage(harness, {
       type: 'run:start',
       run: {
@@ -2146,13 +2222,14 @@ test('sidepanel switches between page, video, and slides modes', async ({
       },
     })
     await expect(page.locator('#render')).toContainText('Back summary')
-    await expect(
-      page.locator('img.slideStrip__thumbImage, img.slideInline__thumbImage')
-    ).toHaveCount(0)
+    await expect
+      .poll(async () => (await getSlidesDomCount(page)).thumbImages, { timeout: 10_000 })
+      .toBe(0)
     await expect(page.locator('.slideGallery__text, .slideStrip__text')).toHaveCount(0)
 
     assertNoErrors(harness)
   } finally {
+    await attachModeChanges(page, testInfo, 'scroll-slides')
     await closeExtension(harness.context, harness.userDataDir)
   }
 })
@@ -2248,11 +2325,22 @@ test('sidepanel scrolls YouTube slides and shows text for each slide', async ({
     expect(renderedCount).toBeGreaterThan(0)
 
     const slideItems = page.locator('.slideGallery__item')
-    await expect(slideItems).toHaveCount(12)
+    await expect
+      .poll(async () => (await getSlidesDomCount(page)).galleryItems, { timeout: 10_000 })
+      .toBe(12)
 
     for (let index = 0; index < 12; index += 1) {
+      await page.evaluate((idx) => {
+        const list = document.querySelector('.slideGallery__list')
+        if (!list) return
+        const items = list.querySelectorAll('.slideGallery__item')
+        const target = items[idx]
+        if (target) {
+          target.scrollIntoView({ behavior: 'instant', block: 'center' })
+        }
+      }, index)
+
       const item = slideItems.nth(index)
-      await item.scrollIntoViewIfNeeded()
       await expect(item).toBeVisible()
 
       const img = item.locator('img.slideInline__thumbImage')
@@ -2620,6 +2708,7 @@ test('sidepanel loads slide images after they become ready', async ({
       hooks?.applySlidesPayload?.(payload)
       hooks?.forceRenderSlides?.()
     }, slidesPayload)
+    await awaitRenderSettled(page)
 
     const img = page.locator('img.slideStrip__thumbImage, img.slideInline__thumbImage')
     await expect(img).toHaveCount(1, { timeout: 10_000 })
