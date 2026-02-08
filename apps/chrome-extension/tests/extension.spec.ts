@@ -1119,6 +1119,7 @@ test('sidepanel scheme picker supports keyboard selection', async ({
   browserName: _browserName,
 }, testInfo) => {
   const harness = await launchExtension(getBrowserFromProject(testInfo.project.name))
+  let page: Page | null = null
 
   try {
     page = await openExtensionPage(harness, 'sidepanel.html', '#title', () => {
@@ -1758,7 +1759,7 @@ test('sidepanel resumes slides when returning to a tab', async ({
       slidesParallel: true,
       slidesOcrEnabled: true,
     })
-    const page = await openExtensionPage(harness, 'sidepanel.html', '#title', () => {
+    page = await openExtensionPage(harness, 'sidepanel.html', '#title', () => {
       ;(
         window as typeof globalThis & { __summarizeTestHooks?: Record<string, unknown> }
       ).__summarizeTestHooks = {}
@@ -1866,6 +1867,7 @@ test('sidepanel resumes slides when returning to a tab', async ({
 
     assertNoErrors(harness)
   } finally {
+    await attachModeChanges(page, testInfo, 'switch-modes')
     await closeExtension(harness.context, harness.userDataDir)
   }
 })
@@ -1874,6 +1876,7 @@ test('sidepanel switches between page, video, and slides modes', async ({
   browserName: _browserName,
 }, testInfo) => {
   const harness = await launchExtension(getBrowserFromProject(testInfo.project.name))
+  let page: Page | null = null
 
   try {
     await seedSettings(harness, {
@@ -1883,7 +1886,7 @@ test('sidepanel switches between page, video, and slides modes', async ({
       slidesLayout: 'gallery',
       slidesOcrEnabled: true,
     })
-    const page = await openExtensionPage(harness, 'sidepanel.html', '#title', () => {
+    page = await openExtensionPage(harness, 'sidepanel.html', '#title', () => {
       ;(
         window as typeof globalThis & { __summarizeTestHooks?: Record<string, unknown> }
       ).__summarizeTestHooks = {}
@@ -2226,6 +2229,7 @@ test('sidepanel switches between page, video, and slides modes', async ({
 
     assertNoErrors(harness)
   } finally {
+    await attachModeChanges(page, testInfo, 'scroll-slides')
     await closeExtension(harness.context, harness.userDataDir)
   }
 })
