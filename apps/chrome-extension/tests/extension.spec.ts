@@ -1066,6 +1066,7 @@ test('sidepanel hides chat dock when chat is disabled', async ({
   browserName: _browserName,
 }, testInfo) => {
   const harness = await launchExtension(getBrowserFromProject(testInfo.project.name))
+  const page: Page | null = null
 
   try {
     await seedSettings(harness, { chatEnabled: false })
@@ -1095,6 +1096,7 @@ test('sidepanel updates chat visibility when settings change', async ({
   browserName: _browserName,
 }, testInfo) => {
   const harness = await launchExtension(getBrowserFromProject(testInfo.project.name))
+  const page: Page | null = null
 
   try {
     await seedSettings(harness, { chatEnabled: true })
@@ -1119,7 +1121,7 @@ test('sidepanel scheme picker supports keyboard selection', async ({
   const harness = await launchExtension(getBrowserFromProject(testInfo.project.name))
 
   try {
-    const page = await openExtensionPage(harness, 'sidepanel.html', '#title', () => {
+    page = await openExtensionPage(harness, 'sidepanel.html', '#title', () => {
       ;(
         window as typeof globalThis & { __summarizeTestHooks?: Record<string, unknown> }
       ).__summarizeTestHooks = {}
@@ -1472,7 +1474,7 @@ test('sidepanel restores cached state when switching YouTube tabs', async ({
       slidesEnabled: true,
       slidesOcrEnabled: true,
     })
-    const page = await openExtensionPage(harness, 'sidepanel.html', '#title', () => {
+    page = await openExtensionPage(harness, 'sidepanel.html', '#title', () => {
       ;(
         window as typeof globalThis & { __summarizeTestHooks?: Record<string, unknown> }
       ).__summarizeTestHooks = {}
