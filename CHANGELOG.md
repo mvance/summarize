@@ -8,6 +8,9 @@
 
 ### Fixes
 
+- Models: make daemon agent `artifacts` schemas Gemini-safe, improve Google empty-response handling with preview-to-stable fallback, and switch CLI/auto Gemini defaults away from brittle preview behavior (#82, #96).
+- Agents: expand model auto-resolution errors with checked models, missing env/CLI setup, and daemon restart guidance (#107).
+- Daemon: support multiple saved extension tokens, migrate legacy single-token configs, and accept any configured token for auth (#116).
 - Chrome extension: harden side-panel slides so SSE keepalives no longer false-time out, seeded placeholders no longer block pending/cached slide runs, retries can start a fresh summarize+slides run, and reruns replace stale slide state.
 - npm packaging: publish CLI with `pnpm publish` so `@steipete/summarize-core` is version-pinned in published metadata (no `workspace:*` in registry package).
 - Slides: detect WezTerm as an iTerm-compatible terminal for inline slide images in `--slides` mode. (#133) — thanks @doodaaatimmy-creator.
