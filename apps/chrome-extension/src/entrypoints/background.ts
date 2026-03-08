@@ -18,6 +18,14 @@ import {
 } from "./background/content-script-bridge";
 import { daemonHealth, daemonPing, friendlyFetchError } from "./background/daemon-client";
 import { createHoverController, type HoverToBg } from "./background/hover-controller";
+import { createPanelSessionStore, type PanelSession } from "./background/panel-session-store";
+import {
+  buildSlidesText,
+  getActiveTab,
+  openOptionsWindow,
+  type SlidesPayload,
+  urlsMatch,
+} from "./background/panel-utils";
 import {
   createRuntimeActionsHandler,
   type ArtifactsRequest,
@@ -135,126 +143,14 @@ type PanelCachePayload = {
   transcriptTimedText: string | null;
 };
 
-type PanelSession = {
-  windowId: number;
-  port: chrome.runtime.Port;
-  panelOpen: boolean;
-  panelLastPingAt: number;
-  lastSummarizedUrl: string | null;
-  inflightUrl: string | null;
-  runController: AbortController | null;
-  agentController: AbortController | null;
-  lastNavAt: number;
-  daemonRecovery: ReturnType<typeof createDaemonRecovery>;
-  daemonStatus: ReturnType<typeof createDaemonStatusTracker>;
-};
-
-const optionsWindowSize = { width: 940, height: 680 };
-const optionsWindowMin = { width: 820, height: 560 };
-const optionsWindowMargin = 20;
+type BackgroundPanelSession = PanelSession<
+  ReturnType<typeof createDaemonRecovery>,
+  ReturnType<typeof createDaemonStatusTracker>
+>;
 const MIN_CHAT_CHARS = 100;
 const CHAT_FULL_TRANSCRIPT_MAX_CHARS = Number.MAX_SAFE_INTEGER;
-const MAX_SLIDE_OCR_CHARS = 8000;
-const formatSlideTimestamp = (seconds: number): string => {
-  const safe = Math.max(0, Math.floor(seconds));
-  const h = Math.floor(safe / 3600);
-  const m = Math.floor((safe % 3600) / 60);
-  const s = safe % 60;
-  const mm = m.toString().padStart(2, "0");
-  const ss = s.toString().padStart(2, "0");
-  return h > 0 ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
-};
-
-const buildSlidesText = (
-  slides: SlidesPayload | null,
-  allowOcr: boolean,
-): { count: number; text: string } | null => {
-  if (!allowOcr) return null;
-  if (!slides || slides.slides.length === 0) return null;
-  let remaining = MAX_SLIDE_OCR_CHARS;
-  const lines: string[] = [];
-  for (const slide of slides.slides) {
-    const text = slide.ocrText?.trim();
-    if (!text) continue;
-    const timestamp = Number.isFinite(slide.timestamp)
-      ? formatSlideTimestamp(slide.timestamp)
-      : null;
-    const label = timestamp ? `@ ${timestamp}` : "";
-    const entry = `Slide ${slide.index} ${label}:\n${text}`.trim();
-    if (entry.length > remaining && lines.length > 0) break;
-    lines.push(entry);
-    remaining -= entry.length;
-    if (remaining <= 0) break;
-  }
-  return lines.length > 0 ? { count: slides.slides.length, text: lines.join("\n\n") } : null;
-};
-
-function resolveOptionsUrl(): string {
-  const page = chrome.runtime.getManifest().options_ui?.page ?? "options.html";
-  return chrome.runtime.getURL(page);
-}
-
-async function openOptionsWindow() {
-  const url = resolveOptionsUrl();
-  try {
-    if (chrome.windows?.create) {
-      const current = await chrome.windows.getCurrent();
-      const maxWidth = current.width
-        ? Math.max(optionsWindowMin.width, current.width - optionsWindowMargin)
-        : null;
-      const maxHeight = current.height
-        ? Math.max(optionsWindowMin.height, current.height - optionsWindowMargin)
-        : null;
-      const width = maxWidth
-        ? Math.min(optionsWindowSize.width, maxWidth)
-        : optionsWindowSize.width;
-      const height = maxHeight
-        ? Math.min(optionsWindowSize.height, maxHeight)
-        : optionsWindowSize.height;
-      await chrome.windows.create({ url, type: "popup", width, height });
-      return;
-    }
-  } catch {
-    // ignore and fall back
-  }
-  void chrome.runtime.openOptionsPage();
-}
-
-async function getActiveTab(windowId?: number): Promise<chrome.tabs.Tab | null> {
-  const [tab] = await chrome.tabs.query(
-    typeof windowId === "number"
-      ? { active: true, windowId }
-      : { active: true, currentWindow: true },
-  );
-  return tab ?? null;
-}
-
-function normalizeUrl(value: string) {
-  try {
-    const url = new URL(value);
-    url.hash = "";
-    return url.toString();
-  } catch {
-    return value;
-  }
-}
-
-function urlsMatch(a: string, b: string) {
-  const left = normalizeUrl(a);
-  const right = normalizeUrl(b);
-  if (left === right) return true;
-  const boundaryMatch = (longer: string, shorter: string) => {
-    if (!longer.startsWith(shorter)) return false;
-    if (longer.length === shorter.length) return true;
-    const next = longer[shorter.length];
-    return next === "/" || next === "?" || next === "&";
-  };
-  return boundaryMatch(left, right) || boundaryMatch(right, left);
-}
 
 export default defineBackground(() => {
-  const panelSessions = new Map<number, PanelSession>();
-  const lastMediaProbeByTab = new Map<number, string>();
   type CachedExtract = {
     url: string;
     title: string | null;
@@ -283,8 +179,15 @@ export default defineBackground(() => {
       } | null;
     } | null;
   };
-  const cachedExtracts = new Map<number, CachedExtract>();
-  const panelCacheByTabId = new Map<number, PanelCachePayload>();
+  const panelSessionStore = createPanelSessionStore<
+    CachedExtract,
+    PanelCachePayload,
+    ReturnType<typeof createDaemonRecovery>,
+    ReturnType<typeof createDaemonStatusTracker>
+  >({
+    createDaemonRecovery,
+    createDaemonStatus: createDaemonStatusTracker,
+  });
   const hoverControllersByTabId = new Map<
     number,
     { requestId: string; controller: AbortController }
@@ -309,85 +212,8 @@ export default defineBackground(() => {
     resolveLogLevel,
   });
 
-  const isPanelOpen = (session: PanelSession) => {
-    if (!session.panelOpen) return false;
-    if (session.panelLastPingAt === 0) return true;
-    return Date.now() - session.panelLastPingAt < 45_000;
-  };
-
-  const getPanelSession = (windowId: number) => panelSessions.get(windowId) ?? null;
-
-  const getPanelPortMap = () => {
-    const global = globalThis as typeof globalThis & {
-      __summarizePanelPorts?: Map<number, chrome.runtime.Port>;
-    };
-    if (!global.__summarizePanelPorts) {
-      global.__summarizePanelPorts = new Map();
-    }
-    return global.__summarizePanelPorts;
-  };
-
-  const registerPanelSession = (windowId: number, port: chrome.runtime.Port) => {
-    const existing = panelSessions.get(windowId);
-    if (existing && existing.port !== port) {
-      existing.runController?.abort();
-      existing.agentController?.abort();
-    }
-    const session: PanelSession = existing ?? {
-      windowId,
-      port,
-      panelOpen: false,
-      panelLastPingAt: 0,
-      lastSummarizedUrl: null,
-      inflightUrl: null,
-      runController: null,
-      agentController: null,
-      lastNavAt: 0,
-      daemonRecovery: createDaemonRecovery(),
-      daemonStatus: createDaemonStatusTracker(),
-    };
-    session.port = port;
-    panelSessions.set(windowId, session);
-    getPanelPortMap().set(windowId, port);
-    return session;
-  };
-
-  const clearCachedExtractsForWindow = async (windowId: number) => {
-    try {
-      const tabs = await chrome.tabs.query({ windowId });
-      for (const tab of tabs) {
-        if (!tab.id) continue;
-        cachedExtracts.delete(tab.id);
-        lastMediaProbeByTab.delete(tab.id);
-      }
-    } catch {
-      // ignore
-    }
-  };
-
-  const getCachedExtract = (tabId: number, url?: string | null) => {
-    const cached = cachedExtracts.get(tabId) ?? null;
-    if (!cached) return null;
-    if (url && cached.url !== url) {
-      cachedExtracts.delete(tabId);
-      return null;
-    }
-    return cached;
-  };
-
-  const storePanelCache = (payload: PanelCachePayload) => {
-    panelCacheByTabId.set(payload.tabId, payload);
-  };
-
-  const getPanelCache = (tabId: number, url?: string | null) => {
-    const cached = panelCacheByTabId.get(tabId) ?? null;
-    if (!cached) return null;
-    if (url && cached.url !== url) return null;
-    return cached;
-  };
-
   const ensureChatExtract = async (
-    session: PanelSession,
+    session: BackgroundPanelSession,
     tab: chrome.tabs.Tab,
     settings: Awaited<ReturnType<typeof loadSettings>>,
   ) => {
@@ -396,7 +222,7 @@ export default defineBackground(() => {
     }
 
     const preferUrl = shouldPreferUrlMode(tab.url);
-    const cached = getCachedExtract(tab.id, tab.url);
+    const cached = panelSessionStore.getCachedExtract(tab.id, tab.url);
     if (cached && (!preferUrl || cached.source === "url")) return cached;
 
     if (!preferUrl) {
@@ -425,7 +251,7 @@ export default defineBackground(() => {
             slides: null,
             diagnostics: null,
           };
-          cachedExtracts.set(tab.id, next);
+          panelSessionStore.setCachedExtract(tab.id, next);
           return next;
         }
       } else if (
@@ -538,23 +364,23 @@ export default defineBackground(() => {
         }
       }
     }
-    cachedExtracts.set(tab.id, next);
+    panelSessionStore.setCachedExtract(tab.id, next);
     return next;
   };
 
-  const send = (session: PanelSession, msg: BgToPanel) => {
-    if (!isPanelOpen(session)) return;
+  const send = (session: BackgroundPanelSession, msg: BgToPanel) => {
+    if (!panelSessionStore.isPanelOpen(session)) return;
     try {
       session.port.postMessage(msg);
     } catch {
       // ignore (panel closed / reloading)
     }
   };
-  const sendStatus = (session: PanelSession, status: string) =>
+  const sendStatus = (session: BackgroundPanelSession, status: string) =>
     void send(session, { type: "ui:status", status });
 
   const emitState = async (
-    session: PanelSession,
+    session: BackgroundPanelSession,
     status: string,
     opts?: { checkRecovery?: boolean },
   ) => {
@@ -569,7 +395,7 @@ export default defineBackground(() => {
     const pendingUrl = session.daemonRecovery.getPendingUrl();
     const currentUrlMatches = Boolean(pendingUrl && tab?.url && urlsMatch(tab.url, pendingUrl));
     const isIdle = !session.runController && !session.inflightUrl;
-    const cached = tab?.id ? getCachedExtract(tab.id, tab.url ?? null) : null;
+    const cached = tab?.id ? panelSessionStore.getCachedExtract(tab.id, tab.url ?? null) : null;
     let shouldRecover = false;
     if (opts?.checkRecovery) {
       shouldRecover = session.daemonRecovery.maybeRecover({
@@ -587,7 +413,7 @@ export default defineBackground(() => {
       },
     );
     const state: UiState = {
-      panelOpen: isPanelOpen(session),
+      panelOpen: panelSessionStore.isPanelOpen(session),
       daemon,
       tab: { id: tab?.id ?? null, url: tab?.url ?? null, title: tab?.title ?? null },
       media: cached?.media ?? null,
@@ -634,7 +460,7 @@ export default defineBackground(() => {
   };
 
   const primeMediaHint = async (
-    session: PanelSession,
+    session: BackgroundPanelSession,
     {
       tabId,
       url,
@@ -645,15 +471,15 @@ export default defineBackground(() => {
       title: string | null;
     },
   ) => {
-    const lastProbeUrl = lastMediaProbeByTab.get(tabId);
+    const lastProbeUrl = panelSessionStore.getLastMediaProbe(tabId);
     if (lastProbeUrl && urlsMatch(lastProbeUrl, url)) return;
-    const existing = getCachedExtract(tabId, url);
+    const existing = panelSessionStore.getCachedExtract(tabId, url);
     if (existing?.media) {
-      lastMediaProbeByTab.set(tabId, url);
+      panelSessionStore.rememberMediaProbe(tabId, url);
       return;
     }
 
-    lastMediaProbeByTab.set(tabId, url);
+    panelSessionStore.rememberMediaProbe(tabId, url);
     const attempt = await extractFromTab(tabId, 1200);
     if (!attempt.ok) return;
     const extracted = attempt.data;
@@ -661,7 +487,7 @@ export default defineBackground(() => {
 
     const wordCount =
       extracted.text.length > 0 ? extracted.text.split(/\s+/).filter(Boolean).length : 0;
-    cachedExtracts.set(tabId, {
+    panelSessionStore.setCachedExtract(tabId, {
       url: extracted.url,
       title: extracted.title ?? title,
       text: extracted.text,
@@ -685,11 +511,11 @@ export default defineBackground(() => {
   };
 
   const summarizeActiveTab = async (
-    session: PanelSession,
+    session: BackgroundPanelSession,
     reason: string,
     opts?: { refresh?: boolean; inputMode?: "page" | "video" },
   ) => {
-    if (!isPanelOpen(session)) return;
+    if (!panelSessionStore.isPanelOpen(session)) return;
 
     const settings = await loadSettings();
     const isManual = reason === "manual" || reason === "refresh" || reason === "length-change";
@@ -779,7 +605,7 @@ export default defineBackground(() => {
           media: { hasVideo: true, hasAudio: true, hasCaptions: true },
           mediaDurationSeconds: json.extracted.mediaDurationSeconds ?? null,
         };
-        cachedExtracts.set(tab.id, {
+        panelSessionStore.setCachedExtract(tab.id, {
           url: extractedUrl,
           title: extracted.title ?? null,
           text: "",
@@ -821,7 +647,7 @@ export default defineBackground(() => {
       sendStatus(session, `Extracting… (${reason})`);
       logPanel("extract:start", { reason, tabId: tab.id, maxChars: settings.maxChars });
       const statusFromExtractEvent = (event: string) => {
-        if (!isPanelOpen(session)) return;
+        if (!panelSessionStore.isPanelOpen(session)) return;
         if (event === "extract:attempt") {
           sendStatus(session, `Extracting page content… (${reason})`);
           return;
@@ -955,7 +781,7 @@ export default defineBackground(() => {
       wantsParallelSlides,
     });
 
-    cachedExtracts.set(tab.id, {
+    panelSessionStore.setCachedExtract(tab.id, {
       url: resolvedPayload.url,
       title: resolvedTitle,
       text: resolvedPayload.text,
@@ -1092,7 +918,7 @@ export default defineBackground(() => {
     }
   };
 
-  const handlePanelMessage = (session: PanelSession, raw: PanelToBg) => {
+  const handlePanelMessage = (session: BackgroundPanelSession, raw: PanelToBg) => {
     if (!raw || typeof raw !== "object" || typeof (raw as { type?: unknown }).type !== "string") {
       return;
     }
@@ -1126,7 +952,7 @@ export default defineBackground(() => {
         session.lastSummarizedUrl = null;
         session.inflightUrl = null;
         session.daemonRecovery.clearPending();
-        void clearCachedExtractsForWindow(session.windowId);
+        void panelSessionStore.clearCachedExtractsForWindow(session.windowId);
         break;
       case "panel:summarize":
         void summarizeActiveTab(
@@ -1141,7 +967,7 @@ export default defineBackground(() => {
       case "panel:cache": {
         const payload = (raw as { cache?: PanelCachePayload }).cache;
         if (!payload || typeof payload.tabId !== "number" || !payload.url) return;
-        storePanelCache(payload);
+        panelSessionStore.storePanelCache(payload);
         break;
       }
       case "panel:get-cache": {
@@ -1149,7 +975,7 @@ export default defineBackground(() => {
         if (!payload.requestId || !payload.tabId || !payload.url) {
           return;
         }
-        const cached = getPanelCache(payload.tabId, payload.url);
+        const cached = panelSessionStore.getPanelCache(payload.tabId, payload.url);
         void send(session, {
           type: "ui:cache",
           requestId: payload.requestId,
@@ -1501,7 +1327,9 @@ export default defineBackground(() => {
             return;
           }
           const canUseCache = Boolean(tab?.id && tabUrl && urlsMatch(tabUrl, targetUrl));
-          let cached = canUseCache ? getCachedExtract(tab.id, tabUrl ?? null) : null;
+          let cached = canUseCache
+            ? panelSessionStore.getCachedExtract(tab.id, tabUrl ?? null)
+            : null;
           let transcriptTimedText = cached?.transcriptTimedText ?? null;
           if (!transcriptTimedText && settings.token.trim()) {
             try {
@@ -1553,7 +1381,7 @@ export default defineBackground(() => {
                   cached = { ...cached, transcriptTimedText };
                 }
                 if (cached && tab?.id) {
-                  cachedExtracts.set(tab.id, cached);
+                  panelSessionStore.setCachedExtract(tab.id, cached);
                 }
               }
               logSlides("context:fetch-transcript", {
@@ -1605,7 +1433,7 @@ export default defineBackground(() => {
     const windowIdRaw = port.name.split(":")[1] ?? "";
     const windowId = Number.parseInt(windowIdRaw, 10);
     if (!Number.isFinite(windowId)) return;
-    const session = registerPanelSession(windowId, port);
+    const session = panelSessionStore.registerPanelSession(windowId, port);
     port.onMessage.addListener((msg) => handlePanelMessage(session, msg as PanelToBg));
     port.onDisconnect.addListener(() => {
       if (session.port !== port) return;
@@ -1616,9 +1444,8 @@ export default defineBackground(() => {
       session.lastSummarizedUrl = null;
       session.inflightUrl = null;
       session.daemonRecovery.clearPending();
-      panelSessions.delete(windowId);
-      getPanelPortMap().delete(windowId);
-      void clearCachedExtractsForWindow(windowId);
+      panelSessionStore.deletePanelSession(windowId);
+      void panelSessionStore.clearCachedExtractsForWindow(windowId);
     });
   });
 
@@ -1638,7 +1465,7 @@ export default defineBackground(() => {
   chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName !== "local") return;
     if (!changes.settings) return;
-    for (const session of panelSessions.values()) {
+    for (const session of panelSessionStore.getPanelSessions()) {
       void emitState(session, "");
     }
   });
@@ -1648,7 +1475,7 @@ export default defineBackground(() => {
       const tab = await chrome.tabs.get(details.tabId).catch(() => null);
       const windowId = tab?.windowId;
       if (typeof windowId !== "number") return;
-      const session = getPanelSession(windowId);
+      const session = panelSessionStore.getPanelSession(windowId);
       if (!session) return;
       const now = Date.now();
       if (now - session.lastNavAt < 700) return;
@@ -1659,7 +1486,7 @@ export default defineBackground(() => {
   });
 
   chrome.tabs.onActivated.addListener((info) => {
-    const session = getPanelSession(info.windowId);
+    const session = panelSessionStore.getPanelSession(info.windowId);
     if (!session) return;
     void emitState(session, "");
     void summarizeActiveTab(session, "tab-activated");
@@ -1668,7 +1495,7 @@ export default defineBackground(() => {
   chrome.tabs.onUpdated.addListener((_tabId, changeInfo, tab) => {
     const windowId = tab?.windowId;
     if (typeof windowId !== "number") return;
-    const session = getPanelSession(windowId);
+    const session = panelSessionStore.getPanelSession(windowId);
     if (!session) return;
     if (typeof changeInfo.title === "string" || typeof changeInfo.url === "string") {
       void emitState(session, "");
@@ -1683,10 +1510,8 @@ export default defineBackground(() => {
   });
 
   chrome.tabs.onRemoved.addListener((tabId) => {
-    cachedExtracts.delete(tabId);
-    lastMediaProbeByTab.delete(tabId);
+    panelSessionStore.clearTab(tabId);
     hoverController.abortHoverForTab(tabId);
-    panelCacheByTabId.delete(tabId);
     nativeInputArmedTabs.delete(tabId);
   });
 
