@@ -1,10 +1,10 @@
 import { buildUserScriptsGuidance, getUserScriptsStatus } from "../../automation/userscripts";
-import { readPresetOrCustomValue, resolvePresetOrCustom } from "../../lib/combo";
 import { defaultSettings, loadSettings, saveSettings } from "../../lib/settings";
 import { applyTheme, type ColorMode, type ColorScheme } from "../../lib/theme";
 import { bindOptionsInputs } from "./bindings";
 import { createDaemonStatusChecker } from "./daemon-status";
 import { getOptionsElements } from "./elements";
+import { applyLoadedOptionsSettings, buildSavedOptionsSettings } from "./form-state";
 import { createLogsViewer } from "./logs-viewer";
 import { createModelPresetsController } from "./model-presets";
 import { mountOptionsPickers } from "./pickers";
@@ -204,49 +204,46 @@ const saveNow = async () => {
   setStatus("Saving…");
   try {
     const current = await loadSettings();
-    await saveSettings({
-      token: tokenEl.value || defaultSettings.token,
-      model: modelPresets.readCurrentValue(),
-      length: current.length,
-      language: readPresetOrCustomValue({
-        presetValue: languagePresetEl.value,
-        customValue: languageCustomEl.value,
-        defaultValue: defaultSettings.language,
+    await saveSettings(
+      buildSavedOptionsSettings({
+        current,
+        defaults: defaultSettings,
+        elements: {
+          tokenEl,
+          languagePresetEl,
+          languageCustomEl,
+          promptOverrideEl,
+          hoverPromptEl,
+          autoCliOrderEl,
+          maxCharsEl,
+          requestModeEl,
+          firecrawlModeEl,
+          markdownModeEl,
+          preprocessModeEl,
+          youtubeModeEl,
+          transcriberEl,
+          timeoutEl,
+          retriesEl,
+          maxOutputTokensEl,
+          fontFamilyEl,
+          fontSizeEl,
+        },
+        modelPresets,
+        booleans: {
+          autoSummarize: autoValue,
+          hoverSummaries: hoverSummariesValue,
+          chatEnabled: chatEnabledValue,
+          automationEnabled: automationEnabledValue,
+          slidesParallel: slidesParallelValue,
+          slidesOcrEnabled: slidesOcrEnabledValue,
+          summaryTimestamps: summaryTimestampsValue,
+          extendedLogging: extendedLoggingValue,
+          autoCliFallback: autoCliFallbackValue,
+        },
+        currentScheme,
+        currentMode,
       }),
-      promptOverride: promptOverrideEl.value || defaultSettings.promptOverride,
-      hoverPrompt: hoverPromptEl.value || defaultSettings.hoverPrompt,
-      autoSummarize: autoValue,
-      hoverSummaries: hoverSummariesValue,
-      chatEnabled: chatEnabledValue,
-      automationEnabled: automationEnabledValue,
-      slidesEnabled: current.slidesEnabled,
-      slidesParallel: slidesParallelValue,
-      slidesOcrEnabled: slidesOcrEnabledValue,
-      slidesLayout: current.slidesLayout,
-      summaryTimestamps: summaryTimestampsValue,
-      extendedLogging: extendedLoggingValue,
-      autoCliFallback: autoCliFallbackValue,
-      autoCliOrder: autoCliOrderEl.value || defaultSettings.autoCliOrder,
-      maxChars: Number(maxCharsEl.value) || defaultSettings.maxChars,
-      requestMode: requestModeEl.value || defaultSettings.requestMode,
-      firecrawlMode: firecrawlModeEl.value || defaultSettings.firecrawlMode,
-      markdownMode: markdownModeEl.value || defaultSettings.markdownMode,
-      preprocessMode: preprocessModeEl.value || defaultSettings.preprocessMode,
-      youtubeMode: youtubeModeEl.value || defaultSettings.youtubeMode,
-      transcriber: transcriberEl.value || defaultSettings.transcriber,
-      timeout: timeoutEl.value || defaultSettings.timeout,
-      retries: (() => {
-        const raw = retriesEl.value.trim();
-        if (!raw) return defaultSettings.retries;
-        const parsed = Number(raw);
-        return Number.isFinite(parsed) ? parsed : defaultSettings.retries;
-      })(),
-      maxOutputTokens: maxOutputTokensEl.value || defaultSettings.maxOutputTokens,
-      colorScheme: currentScheme || defaultSettings.colorScheme,
-      colorMode: currentMode || defaultSettings.colorMode,
-      fontFamily: fontFamilyEl.value || defaultSettings.fontFamily,
-      fontSize: Number(fontSizeEl.value) || defaultSettings.fontSize,
-    });
+    );
     if (currentSeq === saveSequence) {
       flashStatus("Saved");
     }
@@ -486,27 +483,43 @@ const autoCliFallbackToggle = createBooleanToggleController({
 
 async function load() {
   const s = await loadSettings();
-  tokenEl.value = s.token;
   void checkDaemonStatus(s.token);
   await modelPresets.refreshPresets(s.token);
   modelPresets.setValue(s.model);
-  {
-    const resolved = resolvePresetOrCustom({ value: s.language, presets: languagePresets });
-    languagePresetEl.value = resolved.presetValue;
-    languageCustomEl.hidden = !resolved.isCustom;
-    languageCustomEl.value = resolved.customValue;
-  }
-  promptOverrideEl.value = s.promptOverride;
-  hoverPromptEl.value = s.hoverPrompt || defaultSettings.hoverPrompt;
-  autoValue = s.autoSummarize;
-  chatEnabledValue = s.chatEnabled;
-  automationEnabledValue = s.automationEnabled;
-  hoverSummariesValue = s.hoverSummaries;
-  summaryTimestampsValue = s.summaryTimestamps;
-  slidesParallelValue = s.slidesParallel;
-  slidesOcrEnabledValue = s.slidesOcrEnabled;
-  extendedLoggingValue = s.extendedLogging;
-  autoCliFallbackValue = s.autoCliFallback;
+  const loadedState = applyLoadedOptionsSettings({
+    settings: s,
+    defaults: defaultSettings,
+    languagePresets,
+    elements: {
+      tokenEl,
+      languagePresetEl,
+      languageCustomEl,
+      promptOverrideEl,
+      hoverPromptEl,
+      autoCliOrderEl,
+      maxCharsEl,
+      requestModeEl,
+      firecrawlModeEl,
+      markdownModeEl,
+      preprocessModeEl,
+      youtubeModeEl,
+      transcriberEl,
+      timeoutEl,
+      retriesEl,
+      maxOutputTokensEl,
+      fontFamilyEl,
+      fontSizeEl,
+    },
+  });
+  autoValue = loadedState.booleans.autoSummarize;
+  chatEnabledValue = loadedState.booleans.chatEnabled;
+  automationEnabledValue = loadedState.booleans.automationEnabled;
+  hoverSummariesValue = loadedState.booleans.hoverSummaries;
+  summaryTimestampsValue = loadedState.booleans.summaryTimestamps;
+  slidesParallelValue = loadedState.booleans.slidesParallel;
+  slidesOcrEnabledValue = loadedState.booleans.slidesOcrEnabled;
+  extendedLoggingValue = loadedState.booleans.extendedLogging;
+  autoCliFallbackValue = loadedState.booleans.autoCliFallback;
   autoToggle.render();
   chatToggle.render();
   automationToggle.render();
@@ -516,21 +529,8 @@ async function load() {
   slidesOcrToggle.render();
   extendedLoggingToggle.render();
   autoCliFallbackToggle.render();
-  autoCliOrderEl.value = s.autoCliOrder;
-  maxCharsEl.value = String(s.maxChars);
-  requestModeEl.value = s.requestMode;
-  firecrawlModeEl.value = s.firecrawlMode;
-  markdownModeEl.value = s.markdownMode;
-  preprocessModeEl.value = s.preprocessMode;
-  youtubeModeEl.value = s.youtubeMode;
-  transcriberEl.value = s.transcriber;
-  timeoutEl.value = s.timeout;
-  retriesEl.value = typeof s.retries === "number" ? String(s.retries) : "";
-  maxOutputTokensEl.value = s.maxOutputTokens;
-  fontFamilyEl.value = s.fontFamily;
-  fontSizeEl.value = String(s.fontSize);
-  currentScheme = s.colorScheme;
-  currentMode = s.colorMode;
+  currentScheme = loadedState.colorScheme;
+  currentMode = loadedState.colorMode;
   pickers.update({ scheme: currentScheme, mode: currentMode, ...pickerHandlers });
   applyTheme({ scheme: s.colorScheme, mode: s.colorMode });
   await skillsController.load();
