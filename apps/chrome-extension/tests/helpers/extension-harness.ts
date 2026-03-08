@@ -138,7 +138,7 @@ export async function maybeBringToFront(page: Page) {
   await page.bringToFront();
 }
 
-function getExtensionPath(browser: BrowserType): string {
+export function getExtensionPath(browser: BrowserType): string {
   const outputDir = browser === "firefox" ? "firefox-mv3" : "chrome-mv3";
   return path.resolve(__dirname, "..", "..", ".output", outputDir);
 }
