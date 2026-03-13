@@ -1,6 +1,7 @@
 import { isTwitterStatusUrl, isYouTubeUrl } from "@steipete/summarize-core/content/url";
 import { render as renderMarkdownAnsi } from "markdansi";
 import type { ExtractedLinkContent } from "../../../content/index.js";
+import type { RunMetricsReport } from "../../../costs.js";
 import { buildExtractFinishLabel, writeFinishLine } from "../../finish-line.js";
 import { writeVerbose } from "../../logging.js";
 import { prepareMarkdownForTerminal } from "../../markdown.js";
@@ -29,6 +30,97 @@ import type { UrlFlowContext } from "./types.js";
 type SlidesResult = Awaited<
   ReturnType<typeof import("../../../slides/index.js").extractSlidesForSource>
 >;
+
+async function writeUrlJsonOutput({
+  ctx,
+  url,
+  extracted,
+  effectiveMarkdownMode,
+  prompt,
+  slides,
+  summary,
+  llm,
+}: {
+  ctx: UrlFlowContext;
+  url: string;
+  extracted: ExtractedLinkContent;
+  effectiveMarkdownMode: "off" | "auto" | "llm" | "readability";
+  prompt: string;
+  slides?: SlidesResult | null;
+  summary: string | null;
+  llm: {
+    provider: string;
+    model: string;
+    maxCompletionTokens: number | null;
+    strategy: "single";
+  } | null;
+}): Promise<RunMetricsReport | null> {
+  const { io, flags, model, hooks } = ctx;
+  hooks.clearProgressForStdout();
+  const finishReport = flags.shouldComputeReport ? await hooks.buildReport() : null;
+  const payload = {
+    input: {
+      ...buildUrlJsonInput({
+        flags,
+        url,
+        effectiveMarkdownMode,
+        modelLabel: model.requestedModelLabel,
+      }),
+    },
+    env: buildUrlJsonEnv(model.apiStatus),
+    extracted,
+    slides,
+    prompt,
+    llm,
+    metrics: flags.metricsEnabled ? finishReport : null,
+    summary,
+  };
+  io.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
+  hooks.restoreProgressAfterStdout?.();
+  return finishReport;
+}
+
+async function writeUrlMetricsFinishLine({
+  ctx,
+  extracted,
+  report,
+  transcriptionCostLabel,
+  label,
+  elapsedLabel,
+  model,
+  clearProgress,
+}: {
+  ctx: UrlFlowContext;
+  extracted: ExtractedLinkContent;
+  report: RunMetricsReport | null;
+  transcriptionCostLabel: string | null;
+  label: string | null;
+  elapsedLabel?: string | null;
+  model: string | null;
+  clearProgress?: boolean;
+}) {
+  const { io, flags, hooks } = ctx;
+  if (!flags.metricsEnabled || !report) return;
+  if (clearProgress) hooks.clearProgressForStdout();
+  const costUsd = await hooks.estimateCostUsd();
+  writeFinishLine({
+    stderr: io.stderr,
+    env: io.envForRun,
+    elapsedMs: Date.now() - flags.runStartedAtMs,
+    elapsedLabel: elapsedLabel ?? null,
+    label,
+    model,
+    report,
+    costUsd,
+    detailed: flags.metricsDetailed,
+    extraParts: buildFinishExtras({
+      extracted,
+      metricsDetailed: flags.metricsDetailed,
+      transcriptionCostLabel,
+    }),
+    color: flags.verboseColor,
+  });
+}
 
 export function buildUrlPrompt({
   extracted,
@@ -90,45 +182,25 @@ async function outputSummaryFromExtractedContent({
   const finishModel = pickModelForFinishLine(model.llmCalls, null);
 
   if (flags.json) {
-    const finishReport = flags.shouldComputeReport ? await hooks.buildReport() : null;
-    const payload = {
-      input: {
-        ...buildUrlJsonInput({
-          flags,
-          url,
-          effectiveMarkdownMode,
-          modelLabel: model.requestedModelLabel,
-        }),
-      },
-      env: buildUrlJsonEnv(model.apiStatus),
+    const finishReport = await writeUrlJsonOutput({
+      ctx,
+      url,
       extracted,
-      slides,
+      effectiveMarkdownMode,
       prompt,
-      llm: null,
-      metrics: flags.metricsEnabled ? finishReport : null,
+      slides,
       summary: extracted.content,
-    };
-    io.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
-    if (flags.metricsEnabled && finishReport) {
-      const costUsd = await hooks.estimateCostUsd();
-      hooks.clearProgressForStdout();
-      writeFinishLine({
-        stderr: io.stderr,
-        env: io.envForRun,
-        elapsedMs: Date.now() - flags.runStartedAtMs,
-        label: extractionUi.finishSourceLabel,
-        model: finishModel,
-        report: finishReport,
-        costUsd,
-        detailed: flags.metricsDetailed,
-        extraParts: buildFinishExtras({
-          extracted,
-          metricsDetailed: flags.metricsDetailed,
-          transcriptionCostLabel,
-        }),
-        color: flags.verboseColor,
-      });
-    }
+      llm: null,
+    });
+    await writeUrlMetricsFinishLine({
+      ctx,
+      extracted,
+      report: finishReport,
+      transcriptionCostLabel,
+      label: extractionUi.finishSourceLabel,
+      model: finishModel,
+      clearProgress: true,
+    });
     return;
   }
 
@@ -180,46 +252,24 @@ export async function outputExtractedUrl({
   const finishModel = pickModelForFinishLine(model.llmCalls, null);
 
   if (flags.json) {
-    const finishReport = flags.shouldComputeReport ? await hooks.buildReport() : null;
-    const payload = {
-      input: {
-        ...buildUrlJsonInput({
-          flags,
-          url,
-          effectiveMarkdownMode,
-          modelLabel: model.requestedModelLabel,
-        }),
-      },
-      env: buildUrlJsonEnv(model.apiStatus),
+    const finishReport = await writeUrlJsonOutput({
+      ctx,
+      url,
       extracted,
-      slides,
+      effectiveMarkdownMode,
       prompt,
-      llm: null,
-      metrics: flags.metricsEnabled ? finishReport : null,
+      slides,
       summary: null,
-    };
-    io.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
-    hooks.restoreProgressAfterStdout?.();
-    hooks.restoreProgressAfterStdout?.();
-    if (flags.metricsEnabled && finishReport) {
-      const costUsd = await hooks.estimateCostUsd();
-      writeFinishLine({
-        stderr: io.stderr,
-        env: io.envForRun,
-        elapsedMs: Date.now() - flags.runStartedAtMs,
-        label: finishLabel,
-        model: finishModel,
-        report: finishReport,
-        costUsd,
-        detailed: flags.metricsDetailed,
-        extraParts: buildFinishExtras({
-          extracted,
-          metricsDetailed: flags.metricsDetailed,
-          transcriptionCostLabel,
-        }),
-        color: flags.verboseColor,
-      });
-    }
+      llm: null,
+    });
+    await writeUrlMetricsFinishLine({
+      ctx,
+      extracted,
+      report: finishReport,
+      transcriptionCostLabel,
+      label: finishLabel,
+      model: finishModel,
+    });
     return;
   }
 
@@ -298,26 +348,15 @@ export async function outputExtractedUrl({
   const slideFooter = slides ? [`slides ${slides.slides.length}`] : [];
   hooks.writeViaFooter([...extractionUi.footerParts, ...slideFooter]);
   const report = flags.shouldComputeReport ? await hooks.buildReport() : null;
-  if (flags.metricsEnabled && report) {
-    const costUsd = await hooks.estimateCostUsd();
-    hooks.clearProgressForStdout();
-    writeFinishLine({
-      stderr: io.stderr,
-      env: io.envForRun,
-      elapsedMs: Date.now() - flags.runStartedAtMs,
-      label: finishLabel,
-      model: finishModel,
-      report,
-      costUsd,
-      detailed: flags.metricsDetailed,
-      extraParts: buildFinishExtras({
-        extracted,
-        metricsDetailed: flags.metricsDetailed,
-        transcriptionCostLabel,
-      }),
-      color: flags.verboseColor,
-    });
-  }
+  await writeUrlMetricsFinishLine({
+    ctx,
+    extracted,
+    report,
+    transcriptionCostLabel,
+    label: finishLabel,
+    model: finishModel,
+    clearProgress: true,
+  });
 }
 
 export async function summarizeExtractedUrl({
@@ -381,50 +420,30 @@ export async function summarizeExtractedUrl({
   } = resolution;
 
   if (flags.json) {
-    const finishReport = flags.shouldComputeReport ? await hooks.buildReport() : null;
-    const payload = {
-      input: {
-        ...buildUrlJsonInput({
-          flags,
-          url,
-          effectiveMarkdownMode,
-          modelLabel: model.requestedModelLabel,
-        }),
-      },
-      env: buildUrlJsonEnv(model.apiStatus),
+    const finishReport = await writeUrlJsonOutput({
+      ctx,
+      url,
       extracted,
-      slides,
+      effectiveMarkdownMode,
       prompt,
+      slides,
+      summary: normalizedSummary,
       llm: {
         provider: modelMeta.provider,
         model: usedAttempt.userModelId,
         maxCompletionTokens: maxOutputTokensForCall,
-        strategy: "single" as const,
+        strategy: "single",
       },
-      metrics: flags.metricsEnabled ? finishReport : null,
-      summary: normalizedSummary,
-    };
-    io.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
-    if (flags.metricsEnabled && finishReport) {
-      const costUsd = await hooks.estimateCostUsd();
-      writeFinishLine({
-        stderr: io.stderr,
-        env: io.envForRun,
-        elapsedMs: Date.now() - flags.runStartedAtMs,
-        elapsedLabel: summaryFromCache ? "Cached" : null,
-        label: extractionUi.finishSourceLabel,
-        model: usedAttempt.userModelId,
-        report: finishReport,
-        costUsd,
-        detailed: flags.metricsDetailed,
-        extraParts: buildFinishExtras({
-          extracted,
-          metricsDetailed: flags.metricsDetailed,
-          transcriptionCostLabel,
-        }),
-        color: flags.verboseColor,
-      });
-    }
+    });
+    await writeUrlMetricsFinishLine({
+      ctx,
+      extracted,
+      report: finishReport,
+      transcriptionCostLabel,
+      label: extractionUi.finishSourceLabel,
+      elapsedLabel: summaryFromCache ? "Cached" : null,
+      model: usedAttempt.userModelId,
+    });
     return;
   }
 
@@ -469,24 +488,13 @@ export async function summarizeExtractedUrl({
   }
 
   const report = flags.shouldComputeReport ? await hooks.buildReport() : null;
-  if (flags.metricsEnabled && report) {
-    const costUsd = await hooks.estimateCostUsd();
-    writeFinishLine({
-      stderr: io.stderr,
-      env: io.envForRun,
-      elapsedMs: Date.now() - flags.runStartedAtMs,
-      elapsedLabel: summaryFromCache ? "Cached" : null,
-      label: extractionUi.finishSourceLabel,
-      model: modelMeta.canonical,
-      report,
-      costUsd,
-      detailed: flags.metricsDetailed,
-      extraParts: buildFinishExtras({
-        extracted,
-        metricsDetailed: flags.metricsDetailed,
-        transcriptionCostLabel,
-      }),
-      color: flags.verboseColor,
-    });
-  }
+  await writeUrlMetricsFinishLine({
+    ctx,
+    extracted,
+    report,
+    transcriptionCostLabel,
+    label: extractionUi.finishSourceLabel,
+    elapsedLabel: summaryFromCache ? "Cached" : null,
+    model: modelMeta.canonical,
+  });
 }
