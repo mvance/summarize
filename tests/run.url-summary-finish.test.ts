@@ -144,4 +144,17 @@ describe("summary finish helpers", () => {
       canonical: "openrouter/anthropic/claude-sonnet-4.5",
     });
   });
+
+  it("falls back to the parsed canonical model id for native attempts", () => {
+    expect(
+      buildModelMetaFromAttempt({
+        ...baseAttempt,
+        userModelId: "gpt-5.2",
+        llmModelId: null,
+      }),
+    ).toEqual({
+      provider: "openai",
+      canonical: "openai/gpt-5.2",
+    });
+  });
 });
