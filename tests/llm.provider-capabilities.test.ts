@@ -23,7 +23,7 @@ describe("llm provider capabilities", () => {
       "openclaw",
       "opencode",
     ]);
-    expect(DEFAULT_CLI_MODELS.gemini).toBe("gemini-3-flash");
+    expect(DEFAULT_CLI_MODELS.gemini).toBe("flash");
     expect(DEFAULT_CLI_MODELS.openclaw).toBe("main");
     expect(DEFAULT_CLI_MODELS.opencode).toBeNull();
     expect(parseCliProviderName(" GeMiNi ")).toBe("gemini");

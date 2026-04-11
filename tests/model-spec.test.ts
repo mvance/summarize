@@ -60,7 +60,7 @@ describe("model spec parsing", () => {
     expect(parsed.kind).toBe("fixed");
     expect(parsed.transport).toBe("cli");
     expect(parsed.cliProvider).toBe("gemini");
-    expect(parsed.cliModel).toBe("gemini-3-flash");
+    expect(parsed.cliModel).toBe("flash");
     expect(parsed.requiredEnv).toBe("CLI_GEMINI");
   });
 
