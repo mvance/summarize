@@ -43,8 +43,8 @@ installed, auto mode can use local CLI models via `cli.enabled` or implicit auto
   - Examples:
     - `cli/codex/gpt-5.2`
     - `cli/claude/sonnet`
-    - `cli/gemini/gemini-3-flash`
-    - `cli/agent/gpt-5.2`
+    - `cli/gemini/flash`
+    - `cli/agent/auto`
     - `cli/openclaw/main`
     - `cli/opencode/openai/gpt-5.4`
     - `openai/gpt-5.4`

@@ -33,7 +33,7 @@ describe("model spec parsing", () => {
     expect(parsed.kind).toBe("fixed");
     expect(parsed.transport).toBe("cli");
     expect(parsed.cliProvider).toBe("agent");
-    expect(parsed.cliModel).toBe("gpt-5.2");
+    expect(parsed.cliModel).toBe("auto");
     expect(parsed.requiredEnv).toBe("CLI_AGENT");
   });
 
@@ -60,7 +60,7 @@ describe("model spec parsing", () => {
     expect(parsed.kind).toBe("fixed");
     expect(parsed.transport).toBe("cli");
     expect(parsed.cliProvider).toBe("gemini");
-    expect(parsed.cliModel).toBe("gemini-3-flash");
+    expect(parsed.cliModel).toBe("flash");
     expect(parsed.requiredEnv).toBe("CLI_GEMINI");
   });
 
@@ -132,5 +132,17 @@ describe("model spec parsing", () => {
     expect(parsed.requiredEnv).toBe("GITHUB_TOKEN");
     expect(parsed.llmModelId).toBe("github-copilot/openai/gpt-4.1");
     expect(parsed.forceChatCompletions).toBe(true);
+  });
+
+  it("rejects empty zai model id", () => {
+    expect(() => parseRequestedModelId("zai/")).toThrow(/missing the model id/);
+  });
+
+  it("rejects empty nvidia model id", () => {
+    expect(() => parseRequestedModelId("nvidia/")).toThrow(/missing the model id/);
+  });
+
+  it("rejects empty github-copilot model id", () => {
+    expect(() => parseRequestedModelId("github-copilot/")).toThrow(/missing the model id/);
   });
 });
