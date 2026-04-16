@@ -512,6 +512,57 @@ describe("YouTube transcript provider module", () => {
     expect(result.attemptedProviders).toEqual(["captionTracks", "yt-dlp", "unavailable"]);
     expect(result.notes).toContain("yt-dlp: Media has no audio stream");
   });
+
+  it("includes yt-dlp error message in notes when transcription fails", async () => {
+    ytdlp.fetchTranscriptWithYtDlp.mockResolvedValue({
+      text: null,
+      provider: null,
+      error: new Error("Simulated failure"),
+      notes: [],
+    });
+
+    const result = await fetchTranscript(
+      {
+        url: "https://www.youtube.com/watch?v=abcdefghijk",
+        html: "<html></html>",
+        resourceKey: null,
+      },
+      {
+        ...baseOptions,
+        youtubeTranscriptMode: "auto",
+        ytDlpPath: "/usr/bin/yt-dlp",
+        openaiApiKey: "OPENAI",
+      },
+    );
+
+    expect(result.notes).toContain("yt-dlp transcription failed: Simulated failure");
+  });
+
+  it("throws yt-dlp error in yt-dlp mode", async () => {
+    ytdlp.fetchTranscriptWithYtDlp.mockResolvedValue({
+      text: null,
+      provider: null,
+      error: new Error("Critical yt-dlp failure"),
+      notes: [],
+    });
+
+    await expect(
+      fetchTranscript(
+        {
+          url: "https://www.youtube.com/watch?v=abcdefghijk",
+          html: "<html></html>",
+          resourceKey: null,
+        },
+        {
+          ...baseOptions,
+          youtubeTranscriptMode: "yt-dlp",
+          ytDlpPath: "/usr/bin/yt-dlp",
+          openaiApiKey: "OPENAI",
+        },
+      ),
+    ).rejects.toThrow("Critical yt-dlp failure");
+  });
+
   it("returns segments when timestamps are requested", async () => {
     captions.fetchTranscriptFromCaptionTracks.mockResolvedValue({
       text: "Creator caption",
