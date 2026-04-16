@@ -139,7 +139,7 @@ export async function createRunnerPlan(options: {
     openrouterConfigured,
     groqApiKey,
     assemblyaiApiKey,
-    openaiTranscriptionKey,
+    openaiApiKey,
     xaiApiKey,
     googleApiKey,
     anthropicApiKey,
@@ -199,7 +199,7 @@ export async function createRunnerPlan(options: {
   const cacheState = await createCacheStateFromConfig({
     envForRun,
     config,
-    noCacheFlag: false,
+    noCacheFlag,
     transcriptNamespace,
   });
   const mediaCache = await createMediaCacheFromConfig({
@@ -447,7 +447,7 @@ export async function createRunnerPlan(options: {
         falApiKey,
         groqApiKey,
         assemblyaiApiKey,
-        openaiTranscriptionKey,
+        openaiApiKey,
       },
       summaryEngine,
       getLiteLlmCatalog,
@@ -513,6 +513,7 @@ export async function createRunnerPlan(options: {
             firecrawlConfigured,
             googleConfigured,
             anthropicConfigured,
+            openaiApiKey,
           },
         },
         summarizeAsset,
