@@ -69,6 +69,10 @@ vi.mock("@mariozechner/pi-ai", () => ({
 }));
 
 describe("cli media API key mapping", () => {
+  beforeEach(() => {
+    capturedCtx = null;
+  });
+
   it("should correctly map OPENAI_API_KEY to openaiApiKey in UrlFlowModel", async () => {
     const root = mkdtempSync(join(tmpdir(), "summarize-media-key-url-integration-"));
     const summarizeDir = join(root, ".summarize");
