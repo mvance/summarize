@@ -211,6 +211,7 @@ export async function prepareAssetPrompt({
   };
 
   let preprocessedMarkdown: string | null = null;
+  let preprocessedOcrUsed = false;
   let usingPreprocessedMarkdown = false;
 
   const documentHandling =
@@ -276,7 +277,7 @@ export async function prepareAssetPrompt({
     }
 
     try {
-      ({ markdown: preprocessedMarkdown } = await convertToMarkdownWithMarkitdown({
+      ({ markdown: preprocessedMarkdown, usedOcr: preprocessedOcrUsed } = await convertToMarkdownWithMarkitdown({
         bytes: fileBytes,
         filenameHint: attachment.filename,
         mediaTypeHint: attachment.mediaType,
@@ -296,7 +297,7 @@ export async function prepareAssetPrompt({
       );
     }
     usingPreprocessedMarkdown = true;
-    assetFooterParts.push(`markitdown(${attachment.mediaType})`);
+    assetFooterParts.push(`markitdown${preprocessedOcrUsed ? "+ocr" : ""}(${attachment.mediaType})`);
   }
 
   if (attachment.kind === "image") {
