@@ -276,7 +276,7 @@ export async function prepareAssetPrompt({
     }
 
     try {
-      preprocessedMarkdown = await convertToMarkdownWithMarkitdown({
+      ({ markdown: preprocessedMarkdown } = await convertToMarkdownWithMarkitdown({
         bytes: fileBytes,
         filenameHint: attachment.filename,
         mediaTypeHint: attachment.mediaType,
@@ -284,7 +284,8 @@ export async function prepareAssetPrompt({
         timeoutMs: ctx.timeoutMs,
         env: ctx.env,
         execFileImpl: ctx.execFileImpl,
-      });
+        ocrFallback: true,
+      }));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       throw new Error(`Failed to preprocess ${attachment.mediaType} with markitdown: ${message}.`);
