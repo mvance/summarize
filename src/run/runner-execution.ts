@@ -1,5 +1,5 @@
 import { pathToFileURL } from "node:url";
-import type { InputTarget } from "../content/asset.js";
+import { loadLocalAsset, type InputTarget } from "../content/asset.js";
 import { isDirectVideoInput } from "../content/index.js";
 import type { RunMetricsReport } from "../costs.js";
 import type { ExecFileFn } from "../markitdown.js";
@@ -99,6 +99,27 @@ export async function executeRunnerInput(options: {
     } finally {
       await stdinTempFile.cleanup();
     }
+  }
+
+  // Handle --extract for local PDF files (markitdown path, no LLM needed)
+  if (
+    extractMode &&
+    inputTarget.kind === "file" &&
+    inputTarget.filePath.toLowerCase().endsWith(".pdf")
+  ) {
+    const loaded = await loadLocalAsset({ filePath: inputTarget.filePath });
+    const extracted = await extractAssetContent({
+      ctx: extractAssetContext,
+      attachment: loaded.attachment,
+    });
+    await outputExtractedAsset({
+      ...outputExtractedAssetContext,
+      url: inputTarget.filePath,
+      sourceLabel: loaded.sourceLabel,
+      attachment: loaded.attachment,
+      extracted,
+    });
+    return;
   }
 
   if (slidesDirectInputUrl && inputTarget.kind === "file") {

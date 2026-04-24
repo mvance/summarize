@@ -284,10 +284,11 @@ export async function createRunnerPlan(options: {
   if (
     extractMode &&
     inputTarget.kind === "file" &&
-    !isTranscribableExtension(inputTarget.filePath)
+    !isTranscribableExtension(inputTarget.filePath) &&
+    !inputTarget.filePath.toLowerCase().endsWith(".pdf")
   ) {
     throw new Error(
-      "--extract for local files is only supported for media files (MP3, MP4, WAV, etc.)",
+      "--extract for local files is only supported for media files (MP3, MP4, WAV, etc.) and PDF files",
     );
   }
   if (extractMode && inputTarget.kind === "stdin") {
