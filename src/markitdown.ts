@@ -5,6 +5,52 @@ import path from "node:path";
 
 export type ExecFileFn = typeof import("node:child_process").execFile;
 
+/**
+ * Derives the `uv` command from a `uvx` command path.
+ * e.g. "uvx" → "uv", "/usr/local/bin/uvx" → "/usr/local/bin/uv",
+ * "uvx.exe" → "uv.exe".
+ * Non-matching basenames (e.g. a custom wrapper) are passed through
+ * unchanged — the caller is responsible for ensuring the command
+ * accepts `uv run` arguments in that case.
+ */
+function deriveUvCommand(uvxCmd: string): string {
+  const dir = path.dirname(uvxCmd);
+  const base = path.basename(uvxCmd);
+  const uvBase = base.replace(/^uvx(\..*)?$/, "uv$1");
+  return dir === "." ? uvBase : path.join(dir, uvBase);
+}
+
+/**
+ * Python script that invokes markitdown via its Python API, wiring an OpenAI
+ * client so the markitdown-ocr plugin can call the vision API.
+ *
+ * Cost note: each OCR call uses the OpenAI vision API (gpt-4o-mini by default).
+ * Typical cost is ~$0.001–$0.01 per page depending on image resolution.
+ */
+const OCR_HELPER_SCRIPT = `\
+import sys, os
+import openai
+from markitdown import MarkItDown
+
+file_path = sys.argv[1]
+client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+model = os.environ.get("MARKITDOWN_OCR_MODEL", "gpt-4o-mini")
+md = MarkItDown(enable_plugins=True, llm_client=client, llm_model=model)
+result = md.convert(file_path)
+print(result.text_content)
+`;
+
+/**
+ * Returns true when every non-blank line is a bare page heading such as "## Page 3".
+ * markitdown emits these headers even for image-only PDFs, so this output is not
+ * meaningful text and should trigger OCR fallback rather than being returned as-is.
+ */
+function isPageHeadersOnly(markdown: string): boolean {
+  return markdown
+    .split(/\r?\n/)
+    .every((line) => line.trim() === "" || /^#{1,6}\s+Page\s+\d+\s*$/i.test(line.trim()));
+}
+
 function guessExtension({
   filenameHint,
   mediaType,
@@ -50,6 +96,7 @@ export async function convertToMarkdownWithMarkitdown({
   timeoutMs,
   env,
   execFileImpl,
+  ocrFallback = false,
 }: {
   bytes: Uint8Array;
   filenameHint: string | null;
@@ -58,32 +105,60 @@ export async function convertToMarkdownWithMarkitdown({
   timeoutMs: number;
   env: Record<string, string | undefined>;
   execFileImpl: ExecFileFn;
-}): Promise<string> {
+  ocrFallback?: boolean;
+}): Promise<{ markdown: string; usedOcr: boolean }> {
   const dir = await fs.mkdtemp(path.join(tmpdir(), "summarize-markitdown-"));
   const ext = guessExtension({ filenameHint, mediaType: mediaTypeHint });
   const base = (filenameHint ? path.basename(filenameHint, path.extname(filenameHint)) : "input")
     .replaceAll(/[^\w.-]+/g, "-")
     .slice(0, 64);
   const filePath = path.join(dir, `${base}${ext}`);
+  const uvx = uvxCommand && uvxCommand.trim().length > 0 ? uvxCommand.trim() : "uvx";
+  const from = "markitdown[all]";
+  const execOptions = {
+    timeout: timeoutMs,
+    env: { ...process.env, ...env },
+    maxBuffer: 50 * 1024 * 1024,
+  };
 
   try {
     await fs.writeFile(filePath, bytes);
-    const from = "markitdown[all]";
-    const { stdout } = await execFileText(
-      execFileImpl,
-      uvxCommand && uvxCommand.trim().length > 0 ? uvxCommand.trim() : "uvx",
-      ["--from", from, "markitdown", filePath],
-      {
-        timeout: timeoutMs,
-        env: { ...process.env, ...env },
-        maxBuffer: 50 * 1024 * 1024,
-      },
-    );
+
+    // First attempt: standard markitdown
+    const { stdout } = await execFileText(execFileImpl, uvx, ["--from", from, "markitdown", filePath], execOptions);
     const markdown = stdout.trim();
-    if (!markdown) {
-      throw new Error("markitdown returned empty output");
+    // Page-headers-only output (e.g. "## Page 1\n## Page 2\n...") is not meaningful content —
+    // treat it as empty when ocrFallback is on so we proceed to the OCR attempt.
+    if (markdown && (!ocrFallback || !isPageHeadersOnly(markdown))) return { markdown, usedOcr: false };
+
+    // Second attempt: OCR fallback via markitdown Python API with LLM vision wiring.
+    // Requires OPENAI_API_KEY; uses gpt-4o-mini by default (override with MARKITDOWN_OCR_MODEL).
+    if (ocrFallback && execOptions.env?.["OPENAI_API_KEY"]) {
+      const uv = deriveUvCommand(uvx);
+      const scriptPath = path.join(dir, "ocr_helper.py");
+      await fs.writeFile(scriptPath, OCR_HELPER_SCRIPT, "utf8");
+      const { stdout: ocrStdout } = await execFileText(
+        execFileImpl,
+        uv,
+        [
+          "run",
+          "--with",
+          from,
+          "--with",
+          "markitdown-ocr",
+          "--with",
+          "openai",
+          "--no-project",
+          scriptPath,
+          filePath,
+        ],
+        execOptions,
+      );
+      const ocrMarkdown = ocrStdout.trim();
+      if (ocrMarkdown) return { markdown: ocrMarkdown, usedOcr: true };
     }
-    return markdown;
+
+    throw new Error("markitdown returned empty output");
   } finally {
     await fs.rm(dir, { recursive: true, force: true });
   }
