@@ -5,6 +5,37 @@ import path from "node:path";
 
 export type ExecFileFn = typeof import("node:child_process").execFile;
 
+/**
+ * Derives the `uv` command from a `uvx` command path.
+ * e.g. "uvx" → "uv", "/usr/local/bin/uvx" → "/usr/local/bin/uv"
+ */
+function deriveUvCommand(uvxCmd: string): string {
+  const dir = path.dirname(uvxCmd);
+  const base = path.basename(uvxCmd);
+  const uvBase = base.replace(/^uvx(\..*)?$/, "uv$1");
+  return dir === "." ? uvBase : path.join(dir, uvBase);
+}
+
+/**
+ * Python script that invokes markitdown via its Python API, wiring an OpenAI
+ * client so the markitdown-ocr plugin can call the vision API.
+ *
+ * Cost note: each OCR call uses the OpenAI vision API (gpt-4o-mini by default).
+ * Typical cost is ~$0.001–$0.01 per page depending on image resolution.
+ */
+const OCR_HELPER_SCRIPT = `\
+import sys, os
+import openai
+from markitdown import MarkItDown
+
+file_path = sys.argv[1]
+client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+model = os.environ.get("MARKITDOWN_OCR_MODEL", "gpt-4o-mini")
+md = MarkItDown(llm_client=client, llm_model=model)
+result = md.convert(file_path)
+print(result.text_content)
+`;
+
 function guessExtension({
   filenameHint,
   mediaType,
@@ -83,12 +114,28 @@ export async function convertToMarkdownWithMarkitdown({
     const markdown = stdout.trim();
     if (markdown) return { markdown, usedOcr: false };
 
-    // Second attempt: OCR fallback via markitdown-ocr plugin
-    if (ocrFallback) {
+    // Second attempt: OCR fallback via markitdown Python API with LLM vision wiring.
+    // Requires OPENAI_API_KEY; uses gpt-4o-mini by default (override with MARKITDOWN_OCR_MODEL).
+    if (ocrFallback && execOptions.env?.["OPENAI_API_KEY"]) {
+      const uv = deriveUvCommand(uvx);
+      const scriptPath = path.join(dir, "ocr_helper.py");
+      await fs.writeFile(scriptPath, OCR_HELPER_SCRIPT, "utf8");
       const { stdout: ocrStdout } = await execFileText(
         execFileImpl,
-        uvx,
-        ["--from", from, "--with", "markitdown-ocr", "markitdown", "--use-plugins", filePath],
+        uv,
+        [
+          "run",
+          "--with",
+          from,
+          "--with",
+          "markitdown-ocr",
+          "--with",
+          "openai",
+          "--no-project",
+          "python3",
+          scriptPath,
+          filePath,
+        ],
         execOptions,
       );
       const ocrMarkdown = ocrStdout.trim();

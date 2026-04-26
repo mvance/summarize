@@ -47,23 +47,25 @@ describe("markitdown OCR fallback for image-based PDFs", () => {
       let callCount = 0;
 
       const execFileMock = vi.fn(((file, args, _options, callback) => {
-        void file;
         callCount++;
         if (callCount === 1) {
-          // First call: standard markitdown — returns empty (image-based PDF)
+          // First call: standard markitdown via uvx — returns empty (image-based PDF)
+          expect(file).toBe("uvx");
           callback(null, "", "");
         } else {
-          // Second call: markitdown-ocr — returns OCR content
+          // Second call: uv run python3 ocr_helper.py — returns OCR content
+          expect(file).toBe("uv");
+          expect(args).toContain("run");
           expect(args).toContain("--with");
           expect(args).toContain("markitdown-ocr");
-          expect(args).toContain("--use-plugins");
+          expect(args).toContain("python3");
           callback(null, "# OCR Heading\n\nOCR extracted text.\n", "");
         }
         return { pid: 123 } as unknown as ChildProcess;
       }) as ExecFileFn);
 
       await runCli(["--extract", "--plain", pdfPath], {
-        env: { HOME: root, UVX_PATH: "uvx" },
+        env: { HOME: root, UVX_PATH: "uvx", OPENAI_API_KEY: "test-key" },
         fetch: vi.fn(async () => {
           throw new Error("unexpected fetch");
         }) as unknown as typeof fetch,
@@ -93,7 +95,7 @@ describe("markitdown OCR fallback for image-based PDFs", () => {
 
       await expect(
         runCli(["--extract", "--plain", pdfPath], {
-          env: { HOME: root, UVX_PATH: "uvx" },
+          env: { HOME: root, UVX_PATH: "uvx", OPENAI_API_KEY: "test-key" },
           fetch: vi.fn(async () => {
             throw new Error("unexpected fetch");
           }) as unknown as typeof fetch,
@@ -104,6 +106,36 @@ describe("markitdown OCR fallback for image-based PDFs", () => {
       ).rejects.toThrow(/markitdown returned empty output/i);
 
       expect(execFileMock).toHaveBeenCalledTimes(2);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("--extract: does not retry OCR when OPENAI_API_KEY is absent", async () => {
+    const root = mkdtempSync(join(tmpdir(), "summarize-ocr-no-key-"));
+    try {
+      const pdfPath = join(root, "empty.pdf");
+      writeFileSync(pdfPath, FAKE_PDF);
+
+      const execFileMock = vi.fn(((_file, _args, _options, callback) => {
+        callback(null, "", "");
+        return { pid: 123 } as unknown as ChildProcess;
+      }) as ExecFileFn);
+
+      await expect(
+        runCli(["--extract", "--plain", pdfPath], {
+          env: { HOME: root, UVX_PATH: "uvx", OPENAI_API_KEY: undefined }, // explicitly absent
+          fetch: vi.fn(async () => {
+            throw new Error("unexpected fetch");
+          }) as unknown as typeof fetch,
+          execFile: execFileMock,
+          stdout: collectStream().stream,
+          stderr: collectStream().stream,
+        }),
+      ).rejects.toThrow(/markitdown returned empty output/i);
+
+      // OCR branch requires OPENAI_API_KEY — only one call made
+      expect(execFileMock).toHaveBeenCalledTimes(1);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -147,13 +179,17 @@ describe("markitdown OCR fallback for image-based PDFs", () => {
       let callCount = 0;
 
       const execFileMock = vi.fn(((file, args, _options, callback) => {
-        void file;
         callCount++;
         if (callCount === 1) {
-          // First call: standard markitdown — returns empty (image-based PDF)
+          // First call: standard markitdown via uvx — returns empty (image-based PDF)
+          expect(file).toBe("uvx");
           callback(null, "", "");
         } else {
-          // Second call: markitdown-ocr — returns OCR content
+          // Second call: uv run python3 ocr_helper.py — returns OCR content
+          expect(file).toBe("uv");
+          expect(args).toContain("run");
+          expect(args).toContain("markitdown-ocr");
+          expect(args).toContain("python3");
           callback(null, "# OCR Content\n\nScanned page text.\n", "");
         }
         return { pid: 123 } as unknown as ChildProcess;
