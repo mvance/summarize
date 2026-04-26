@@ -165,6 +165,52 @@ describe("markitdown", () => {
     ).rejects.toThrow(/^Command failed$/);
   });
 
+  it("triggers OCR fallback when markitdown returns page-headers-only output", async () => {
+    let callCount = 0;
+    const execFileMock = vi.fn(((file, _args, _opts, cb) => {
+      callCount++;
+      if (callCount === 1) {
+        cb(null, "## Page 1\n\n## Page 2\n\n## Page 3\n", ""); // page headers only
+      } else {
+        cb(null, "# OCR result\n\nExtracted text.\n", "");
+      }
+    }) as unknown as ExecFileFn);
+
+    await expect(
+      convertToMarkdownWithMarkitdown({
+        bytes: new Uint8Array([1, 2, 3]),
+        filenameHint: "scan.pdf",
+        mediaTypeHint: "application/pdf",
+        uvxCommand: null,
+        timeoutMs: 1000,
+        env: { OPENAI_API_KEY: "test" },
+        execFileImpl: execFileMock,
+        ocrFallback: true,
+      }),
+    ).resolves.toMatchObject({ markdown: expect.stringContaining("Extracted text."), usedOcr: true });
+    expect(callCount).toBe(2);
+  });
+
+  it("does NOT trigger OCR when first call returns real text alongside page headers", async () => {
+    const execFileMock = vi.fn(((_file, _args, _opts, cb) => {
+      cb(null, "## Page 1\n\nActual content here.\n## Page 2\n\nMore content.\n", "");
+    }) as unknown as ExecFileFn);
+
+    await expect(
+      convertToMarkdownWithMarkitdown({
+        bytes: new Uint8Array([1, 2, 3]),
+        filenameHint: "book.pdf",
+        mediaTypeHint: "application/pdf",
+        uvxCommand: null,
+        timeoutMs: 1000,
+        env: { OPENAI_API_KEY: "test" },
+        execFileImpl: execFileMock,
+        ocrFallback: true,
+      }),
+    ).resolves.toMatchObject({ markdown: expect.stringContaining("Actual content here."), usedOcr: false });
+    expect(execFileMock).toHaveBeenCalledTimes(1);
+  });
+
   it("deriveUvCommand: absolute path /usr/local/bin/uvx → /usr/local/bin/uv", async () => {
     let callCount = 0;
     const execFileMock = vi.fn(((file, _args, _opts, cb) => {

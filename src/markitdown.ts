@@ -40,6 +40,17 @@ result = md.convert(file_path)
 print(result.text_content)
 `;
 
+/**
+ * Returns true when every non-blank line is a bare page heading such as "## Page 3".
+ * markitdown emits these headers even for image-only PDFs, so this output is not
+ * meaningful text and should trigger OCR fallback rather than being returned as-is.
+ */
+function isPageHeadersOnly(markdown: string): boolean {
+  return markdown
+    .split(/\r?\n/)
+    .every((line) => line.trim() === "" || /^#{1,6}\s+Page\s+\d+\s*$/i.test(line.trim()));
+}
+
 function guessExtension({
   filenameHint,
   mediaType,
@@ -116,7 +127,9 @@ export async function convertToMarkdownWithMarkitdown({
     // First attempt: standard markitdown
     const { stdout } = await execFileText(execFileImpl, uvx, ["--from", from, "markitdown", filePath], execOptions);
     const markdown = stdout.trim();
-    if (markdown) return { markdown, usedOcr: false };
+    // Page-headers-only output (e.g. "## Page 1\n## Page 2\n...") is not meaningful content —
+    // treat it as empty when ocrFallback is on so we proceed to the OCR attempt.
+    if (markdown && (!ocrFallback || !isPageHeadersOnly(markdown))) return { markdown, usedOcr: false };
 
     // Second attempt: OCR fallback via markitdown Python API with LLM vision wiring.
     // Requires OPENAI_API_KEY; uses gpt-4o-mini by default (override with MARKITDOWN_OCR_MODEL).

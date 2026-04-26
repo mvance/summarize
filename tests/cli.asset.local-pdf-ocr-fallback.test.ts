@@ -50,9 +50,9 @@ describe("markitdown OCR fallback for image-based PDFs", () => {
       const execFileMock = vi.fn(((file, args, _options, callback) => {
         callCount++;
         if (callCount === 1) {
-          // First call: standard markitdown via uvx — returns empty (image-based PDF)
+          // First call: standard markitdown via uvx — returns page headers only (real image-based PDF behavior)
           expect(file).toBe("uvx");
-          callback(null, "", "");
+          callback(null, "## Page 1\n\n## Page 2\n", "");
         } else {
           // Second call: uv run ocr_helper.py — returns OCR content
           expect(file).toBe("uv");
@@ -142,6 +142,37 @@ describe("markitdown OCR fallback for image-based PDFs", () => {
 
       // OCR branch requires OPENAI_API_KEY — only one call made
       expect(execFileMock).toHaveBeenCalledTimes(1);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("--extract: does NOT retry OCR when first call returns real text content", async () => {
+    const root = mkdtempSync(join(tmpdir(), "summarize-ocr-real-content-"));
+    try {
+      const pdfPath = join(root, "text.pdf");
+      writeFileSync(pdfPath, FAKE_PDF);
+
+      const execFileMock = vi.fn(((_file, _args, _options, callback) => {
+        // Returns real content (page header + actual text) — OCR must NOT trigger
+        callback(null, "## Page 1\n\nActual book text here.\n", "");
+        return { pid: 123 } as unknown as ChildProcess;
+      }) as ExecFileFn);
+
+      const stdout = collectStream();
+      await runCli(["--extract", "--plain", pdfPath], {
+        env: { HOME: root, UVX_PATH: "uvx", OPENAI_API_KEY: "test-key" },
+        fetch: vi.fn(async () => {
+          throw new Error("unexpected fetch");
+        }) as unknown as typeof fetch,
+        execFile: execFileMock,
+        stdout: stdout.stream,
+        stderr: collectStream().stream,
+      });
+
+      // Real content returned on first call — no OCR retry
+      expect(execFileMock).toHaveBeenCalledTimes(1);
+      expect(stdout.getText()).toContain("Actual book text here.");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
