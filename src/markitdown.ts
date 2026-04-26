@@ -31,7 +31,7 @@ from markitdown import MarkItDown
 file_path = sys.argv[1]
 client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 model = os.environ.get("MARKITDOWN_OCR_MODEL", "gpt-4o-mini")
-md = MarkItDown(llm_client=client, llm_model=model)
+md = MarkItDown(enable_plugins=True, llm_client=client, llm_model=model)
 result = md.convert(file_path)
 print(result.text_content)
 `;
@@ -132,7 +132,6 @@ export async function convertToMarkdownWithMarkitdown({
           "--with",
           "openai",
           "--no-project",
-          "python3",
           scriptPath,
           filePath,
         ],

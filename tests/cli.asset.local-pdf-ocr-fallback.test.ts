@@ -1,5 +1,5 @@
 import type { ChildProcess } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Writable } from "node:stream";
@@ -46,6 +46,7 @@ describe("markitdown OCR fallback for image-based PDFs", () => {
       const stderr = collectStream();
       let callCount = 0;
 
+      let capturedScriptContent: string | undefined;
       const execFileMock = vi.fn(((file, args, _options, callback) => {
         callCount++;
         if (callCount === 1) {
@@ -53,12 +54,15 @@ describe("markitdown OCR fallback for image-based PDFs", () => {
           expect(file).toBe("uvx");
           callback(null, "", "");
         } else {
-          // Second call: uv run python3 ocr_helper.py — returns OCR content
+          // Second call: uv run ocr_helper.py — returns OCR content
           expect(file).toBe("uv");
           expect(args).toContain("run");
           expect(args).toContain("--with");
           expect(args).toContain("markitdown-ocr");
-          expect(args).toContain("python3");
+          expect(args).not.toContain("python3"); // uv runs the script directly
+          // Read the generated helper script before the temp dir is cleaned up
+          const scriptPath = (args as string[]).find((a) => a.endsWith(".py"));
+          if (scriptPath) capturedScriptContent = readFileSync(scriptPath, "utf8");
           callback(null, "# OCR Heading\n\nOCR extracted text.\n", "");
         }
         return { pid: 123 } as unknown as ChildProcess;
@@ -77,6 +81,8 @@ describe("markitdown OCR fallback for image-based PDFs", () => {
       expect(execFileMock).toHaveBeenCalledTimes(2);
       expect(stdout.getText()).toContain("OCR extracted text.");
       expect(mocks.streamSimple).not.toHaveBeenCalled();
+      // Verify the helper script enables plugins — guards against future regressions
+      expect(capturedScriptContent).toContain("enable_plugins=True");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -185,11 +191,11 @@ describe("markitdown OCR fallback for image-based PDFs", () => {
           expect(file).toBe("uvx");
           callback(null, "", "");
         } else {
-          // Second call: uv run python3 ocr_helper.py — returns OCR content
+          // Second call: uv run ocr_helper.py — returns OCR content
           expect(file).toBe("uv");
           expect(args).toContain("run");
           expect(args).toContain("markitdown-ocr");
-          expect(args).toContain("python3");
+          expect(args).not.toContain("python3"); // uv runs the script directly
           callback(null, "# OCR Content\n\nScanned page text.\n", "");
         }
         return { pid: 123 } as unknown as ChildProcess;
