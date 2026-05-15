@@ -11,9 +11,21 @@ describe("chrome extension media duration helpers", () => {
     expect(parseClockDuration("1:02:03")).toBe(3723);
   });
 
+  it("rejects malformed clock durations", () => {
+    expect(parseClockDuration("1:99")).toBeNull();
+    expect(parseClockDuration("1:60:00")).toBeNull();
+    expect(parseClockDuration("-1:02")).toBeNull();
+    expect(parseClockDuration("1:02junk")).toBeNull();
+    expect(parseClockDuration(`${"9".repeat(400)}:02`)).toBeNull();
+  });
+
   it("parses ISO 8601 durations", () => {
     expect(parseIsoDuration("PT36M10S")).toBe(2170);
     expect(parseIsoDuration("PT1H2M3S")).toBe(3723);
+    expect(parseIsoDuration("P1DT2H")).toBe(93_600);
+    expect(parseIsoDuration("PT0.5S")).toBe(1);
+    expect(parseIsoDuration("PT0.4S")).toBe(1);
+    expect(parseIsoDuration("PT")).toBeNull();
   });
 
   it("resolves duration with correct precedence", () => {
