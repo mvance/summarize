@@ -1,5 +1,5 @@
-import { streamSimple } from "@mariozechner/pi-ai";
-import type { Context } from "@mariozechner/pi-ai";
+import { streamSimple } from "@earendil-works/pi-ai";
+import type { Context } from "@earendil-works/pi-ai";
 import { createUnsupportedFunctionalityError } from "./errors.js";
 import { resolveEffectiveTemperature, streamUsageWithTimeout } from "./generate-text-shared.js";
 import type { LlmApiKeys } from "./generate-text.js";

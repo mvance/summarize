@@ -1,4 +1,4 @@
-import type { Context, Message } from "@mariozechner/pi-ai";
+import type { Context, Message } from "@earendil-works/pi-ai";
 import type { CliProvider, SummarizeConfig } from "../config.js";
 import { runCliModel } from "../llm/cli.js";
 import type { LlmApiKeys } from "../llm/generate-text.js";

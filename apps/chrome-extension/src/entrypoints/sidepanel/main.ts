@@ -1,4 +1,4 @@
-import type { Message, ToolCall, ToolResultMessage } from "@mariozechner/pi-ai";
+import type { Message, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
 import { extractYouTubeVideoId } from "@steipete/summarize-core/content/url";
 import MarkdownIt from "markdown-it";
 import { executeToolCall, getAutomationToolNames } from "../../automation/tools";

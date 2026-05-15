@@ -30,7 +30,7 @@ const mocks = vi.hoisted(() => ({
   }),
 }));
 
-vi.mock("@mariozechner/pi-ai", () => ({
+vi.mock("@earendil-works/pi-ai", () => ({
   streamSimple: mocks.streamSimple,
   getModel: mocks.getModel,
 }));

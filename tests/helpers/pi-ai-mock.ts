@@ -4,7 +4,7 @@ import type {
   AssistantMessageEvent,
   Provider,
   StopReason,
-} from "@mariozechner/pi-ai";
+} from "@earendil-works/pi-ai";
 
 type UsageOverrides = Partial<{
   input: number;

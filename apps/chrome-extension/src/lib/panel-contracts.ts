@@ -1,4 +1,4 @@
-import type { AssistantMessage, Message } from "@mariozechner/pi-ai";
+import type { AssistantMessage, Message } from "@earendil-works/pi-ai";
 import type { SseSlidesData } from "./runtime-contracts";
 
 export type UiState = {

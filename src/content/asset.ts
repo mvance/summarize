@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { Message } from "@mariozechner/pi-ai";
+import type { Message } from "@earendil-works/pi-ai";
 import { fileTypeFromBuffer } from "file-type";
 import mime from "mime";
 import { userTextAndImageMessage } from "../llm/prompt.js";

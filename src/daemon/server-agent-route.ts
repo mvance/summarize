@@ -1,5 +1,5 @@
 import type http from "node:http";
-import type { Message } from "@mariozechner/pi-ai";
+import type { Message } from "@earendil-works/pi-ai";
 import { runWithProcessContext } from "../processes.js";
 import { encodeSseEvent, type SseEvent } from "../shared/sse-events.js";
 import { completeAgentResponse, streamAgentResponse } from "./agent.js";

@@ -1,4 +1,4 @@
-import type { Message, Tool } from "@mariozechner/pi-ai";
+import type { Message, Tool } from "@earendil-works/pi-ai";
 
 const AGENT_PROMPT_AUTOMATION = `You are Summarize Automation, not Claude.
 

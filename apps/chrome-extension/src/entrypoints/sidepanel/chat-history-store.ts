@@ -1,4 +1,4 @@
-import type { Message } from "@mariozechner/pi-ai";
+import type { Message } from "@earendil-works/pi-ai";
 import { compactChatHistory, type ChatHistoryLimits } from "./chat-state";
 import { normalizePanelUrl } from "./session-policy";
 import type { ChatMessage } from "./types";

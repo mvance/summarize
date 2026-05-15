@@ -64,7 +64,7 @@ mocks.completeSimple.mockResolvedValue(
   }),
 );
 
-vi.mock("@mariozechner/pi-ai", () => ({
+vi.mock("@earendil-works/pi-ai", () => ({
   streamSimple: mocks.streamSimple,
   completeSimple: mocks.completeSimple,
   getModel: mocks.getModel,

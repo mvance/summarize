@@ -1,7 +1,7 @@
 import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AssistantMessage, Tool } from "@mariozechner/pi-ai";
+import type { AssistantMessage, Tool } from "@earendil-works/pi-ai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { completeAgentResponse } from "../src/daemon/agent.js";
 import { runCliModel } from "../src/llm/cli.js";
@@ -20,7 +20,7 @@ vi.mock("../src/llm/cli.js", async (importOriginal) => {
   };
 });
 
-vi.mock("@mariozechner/pi-ai", () => {
+vi.mock("@earendil-works/pi-ai", () => {
   return {
     completeSimple: mockCompleteSimple,
     getModel: mockGetModel,

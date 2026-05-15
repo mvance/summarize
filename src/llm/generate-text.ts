@@ -1,5 +1,5 @@
-import type { Context } from "@mariozechner/pi-ai";
-import { completeSimple } from "@mariozechner/pi-ai";
+import type { Context } from "@earendil-works/pi-ai";
+import { completeSimple } from "@earendil-works/pi-ai";
 import { maybeGenerateDocumentText } from "./generate-text-document.js";
 import {
   computeRetryDelayMs,

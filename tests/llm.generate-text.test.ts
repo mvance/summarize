@@ -1,4 +1,4 @@
-import type { Api } from "@mariozechner/pi-ai";
+import type { Api } from "@earendil-works/pi-ai";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { generateTextWithModelId, streamTextWithModelId } from "../src/llm/generate-text.js";
 import { buildDocumentPrompt } from "./helpers/document-prompt.js";
@@ -28,7 +28,7 @@ mocks.streamSimple.mockImplementation((_model: MockModel) =>
   makeTextDeltaStream(["o", "k"], makeAssistantMessage({ text: "ok" })),
 );
 
-vi.mock("@mariozechner/pi-ai", () => ({
+vi.mock("@earendil-works/pi-ai", () => ({
   completeSimple: mocks.completeSimple,
   streamSimple: mocks.streamSimple,
   getModel: mocks.getModel,

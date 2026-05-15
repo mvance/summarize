@@ -1,4 +1,4 @@
-import type { ToolCall, ToolResultMessage } from "@mariozechner/pi-ai";
+import type { ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
 import { parseSseEvent } from "../lib/runtime-contracts";
 import { loadSettings } from "../lib/settings";
 import { parseSseStream } from "../lib/sse";

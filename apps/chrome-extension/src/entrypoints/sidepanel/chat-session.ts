@@ -1,4 +1,4 @@
-import type { AssistantMessage, Message } from "@mariozechner/pi-ai";
+import type { AssistantMessage, Message } from "@earendil-works/pi-ai";
 
 export type AgentResponse = { ok: boolean; assistant?: AssistantMessage; error?: string };
 export type ChatHistoryResponse = { ok: boolean; messages?: Message[]; error?: string };

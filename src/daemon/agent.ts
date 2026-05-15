@@ -1,5 +1,5 @@
-import type { AssistantMessage, Tool } from "@mariozechner/pi-ai";
-import { completeSimple, streamSimple } from "@mariozechner/pi-ai";
+import type { AssistantMessage, Tool } from "@earendil-works/pi-ai";
+import { completeSimple, streamSimple } from "@earendil-works/pi-ai";
 import { buildPromptHash } from "../cache.js";
 import { resolveAgentModel, resolveApiKeyForModel } from "./agent-model.js";
 import {

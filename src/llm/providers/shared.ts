@@ -1,5 +1,5 @@
-import type { Api, AssistantMessage, Context, KnownProvider, Model } from "@mariozechner/pi-ai";
-import { getModel } from "@mariozechner/pi-ai";
+import type { Api, AssistantMessage, Context, KnownProvider, Model } from "@earendil-works/pi-ai";
+import { getModel } from "@earendil-works/pi-ai";
 
 export function resolveBaseUrlOverride(raw: string | null | undefined): string | null {
   const trimmed = typeof raw === "string" ? raw.trim() : "";

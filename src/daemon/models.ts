@@ -1,4 +1,4 @@
-import { getModels } from "@mariozechner/pi-ai";
+import { getModels } from "@earendil-works/pi-ai";
 import { isOpenRouterBaseUrl } from "@steipete/summarize-core";
 import type { SummarizeConfig } from "../config.js";
 import { resolveCliAvailability } from "../run/env.js";

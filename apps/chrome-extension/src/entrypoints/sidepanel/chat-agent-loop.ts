@@ -1,4 +1,4 @@
-import type { Message, ToolCall, ToolResultMessage } from "@mariozechner/pi-ai";
+import type { Message, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
 import type { ChatController } from "./chat-controller";
 import type { ChatMessage } from "./types";
 

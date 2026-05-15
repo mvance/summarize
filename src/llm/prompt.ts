@@ -1,4 +1,4 @@
-import type { ImageContent, TextContent, UserMessage } from "@mariozechner/pi-ai";
+import type { ImageContent, TextContent, UserMessage } from "@earendil-works/pi-ai";
 import type { Attachment } from "./attachments.js";
 
 export type Prompt = {
