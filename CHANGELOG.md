@@ -6,6 +6,7 @@
 
 - Release: align the release helper and docs with GitHub assets plus Homebrew/core verification instead of the retired tap flow.
 - Daemon: cap concurrent summarize requests with an env-tunable limit so runaway extension/API clients receive a clear 429 instead of piling up background work.
+- Chrome extension: allow max-size page extraction payloads to reach the daemon instead of failing JSON body parsing before summarization starts.
 
 ## 0.15.2 - 2026-05-17
 
