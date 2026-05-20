@@ -67,6 +67,27 @@ describe("slides ingest", () => {
     expect(result.warnings[0]).toContain("Failed to download video; falling back to stream URL");
   });
 
+  it("requires yt-dlp for uncached YouTube slides", async () => {
+    await expect(
+      prepareSlidesInput({
+        source: { kind: "youtube", url: "https://youtube.com/watch?v=abc", sourceId: "yt:abc" },
+        mediaCache: null,
+        timeoutMs: 1000,
+        ytDlpPath: null,
+        ytDlpCookiesFromBrowser: null,
+        resolveSlidesYtDlpExtractFormat: () => "best",
+        resolveSlidesStreamFallback: () => false,
+        buildSlidesMediaCacheKey: (url) => `${url}#slides`,
+        formatBytes: (bytes) => `${bytes}B`,
+        reportSlidesProgress: vi.fn(),
+        logSlidesTiming: vi.fn(),
+        downloadYoutubeVideo: vi.fn(),
+        downloadRemoteVideo: vi.fn(),
+        resolveYoutubeStreamUrl: vi.fn(),
+      }),
+    ).rejects.toThrow(/Slides for YouTube require yt-dlp/);
+  });
+
   it("downloads direct remote video and preserves cleanup", async () => {
     const cleanup = vi.fn(async () => {});
     const fetchImpl = vi.fn();

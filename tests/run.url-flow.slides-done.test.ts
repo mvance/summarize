@@ -61,7 +61,7 @@ afterEach(() => {
 });
 
 describe("runUrlFlow slides done hook", () => {
-  it("emits ok when slides finish", async () => {
+  it("keeps yt-dlp available for guarded YouTube slides", async () => {
     const root = mkdtempSync(join(tmpdir(), "summarize-slides-done-"));
     const binDir = join(root, "bin");
     mkdirSync(binDir);
@@ -72,7 +72,12 @@ describe("runUrlFlow slides done hook", () => {
     const content =
       "<!doctype html><html><head><title>Video</title></head><body>Test</body></html>";
 
-    extractSlidesForSource.mockResolvedValueOnce(makeSlides(url));
+    extractSlidesForSource.mockImplementationOnce(async (options) => {
+      if (!options.ytDlpPath) {
+        throw new Error("Slides for YouTube require yt-dlp (set YT_DLP_PATH or install yt-dlp).");
+      }
+      return makeSlides(url);
+    });
 
     const fetchImpl: typeof fetch = async (input) => {
       const requestUrl =
