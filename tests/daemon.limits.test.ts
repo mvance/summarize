@@ -27,6 +27,15 @@ const summarizeBody = () =>
     extractOnly: true,
   });
 
+const summaryBody = () =>
+  JSON.stringify({
+    url: "https://example.com/article",
+    mode: "url",
+    text: "",
+    title: "Article",
+    length: "medium",
+  });
+
 describe("daemon summarize limits", () => {
   it("rejects concurrent summarize requests over the active limit", async () => {
     const home = mkdtempSync(join(tmpdir(), "summarize-daemon-limits-"));
@@ -92,6 +101,77 @@ describe("daemon summarize limits", () => {
       const firstRes = await first;
       expect(firstRes.status).toBe(200);
       expect(fetchImpl).toHaveBeenCalledTimes(1);
+    } finally {
+      abortController.abort();
+      await serverPromise;
+    }
+  });
+
+  it("coalesces duplicate active summarize requests before enforcing the active limit", async () => {
+    const home = mkdtempSync(join(tmpdir(), "summarize-daemon-dedupe-"));
+    const port = await findFreePort();
+    const token = "test-token-dedupe-123";
+    const abortController = new AbortController();
+    let resolveReady: (() => void) | null = null;
+    const ready = new Promise<void>((resolve) => {
+      resolveReady = resolve;
+    });
+    let resolveFetchStarted: (() => void) | null = null;
+    const fetchStarted = new Promise<void>((resolve) => {
+      resolveFetchStarted = resolve;
+    });
+    let resolveFetch: ((response: Response) => void) | null = null;
+    const fetchImpl = vi.fn(async () => {
+      resolveFetchStarted?.();
+      return await new Promise<Response>((resolve) => {
+        resolveFetch = resolve;
+      });
+    });
+
+    const serverPromise = runDaemonServer({
+      env: { HOME: home, SUMMARIZE_DAEMON_MAX_ACTIVE_SUMMARIES: "1" },
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      config: { token, port, version: 1, installedAt: new Date().toISOString() },
+      port,
+      signal: abortController.signal,
+      onListening: () => resolveReady?.(),
+    });
+
+    await ready;
+
+    try {
+      const first = await fetch(`http://127.0.0.1:${port}/v1/summarize`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+        },
+        body: summaryBody(),
+      });
+      const firstJson = (await first.json()) as { id?: string };
+      expect(first.status).toBe(200);
+      expect(firstJson.id).toBeTruthy();
+      await fetchStarted;
+
+      const second = await fetch(`http://127.0.0.1:${port}/v1/summarize`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+        },
+        body: summaryBody(),
+      });
+      const secondJson = (await second.json()) as { id?: string; coalesced?: boolean };
+
+      expect(second.status).toBe(200);
+      expect(secondJson).toMatchObject({ id: firstJson.id, coalesced: true });
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+
+      resolveFetch?.(
+        new Response("<!doctype html><html><body><article>Hello</article></body></html>", {
+          headers: { "content-type": "text/html" },
+        }),
+      );
     } finally {
       abortController.abort();
       await serverPromise;

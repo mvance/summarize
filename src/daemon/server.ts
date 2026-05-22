@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import http from "node:http";
 import path from "node:path";
@@ -58,6 +58,47 @@ export { corsHeaders, isTrustedOrigin } from "./server-http.js";
 const DAEMON_SHUTDOWN_ACTIVE_SESSION_GRACE_MS = 5000;
 const DAEMON_MAX_ACTIVE_SUMMARIES_DEFAULT = 4;
 const DAEMON_MAX_ACTIVE_SUMMARIES_LIMIT = 32;
+
+function buildActiveSummarizeKey(request: {
+  pageUrl: string;
+  title: string | null;
+  textContent: string;
+  truncated: boolean;
+  modelOverride: string | null;
+  lengthRaw: string;
+  languageRaw: string;
+  promptOverride: string | null;
+  noCache: boolean;
+  mode: DaemonRequestedMode;
+  maxCharacters: number | null;
+  format: "text" | "markdown";
+  overrides: unknown;
+  slidesSettings: SlideSettings | null;
+}) {
+  const textHash = request.textContent
+    ? createHash("sha256").update(request.textContent).digest("hex")
+    : "";
+  return createHash("sha256")
+    .update(
+      JSON.stringify({
+        pageUrl: request.pageUrl,
+        title: request.title,
+        textHash,
+        truncated: request.truncated,
+        modelOverride: request.modelOverride,
+        lengthRaw: request.lengthRaw,
+        languageRaw: request.languageRaw,
+        promptOverride: request.promptOverride,
+        noCache: request.noCache,
+        mode: request.mode,
+        maxCharacters: request.maxCharacters,
+        format: request.format,
+        overrides: request.overrides,
+        slidesSettings: request.slidesSettings,
+      }),
+    )
+    .digest("hex");
+}
 
 export function resolveDaemonMaxActiveSummaries(env: Record<string, string | undefined>): number {
   const raw = env.SUMMARIZE_DAEMON_MAX_ACTIVE_SUMMARIES?.trim();
@@ -174,6 +215,7 @@ export async function runDaemonServer({
   const maxActiveSummaries = resolveDaemonMaxActiveSummaries(env);
   let activeSummarizeCount = 0;
   let activeRefreshSessionId: string | null = null;
+  const activeSummarizeRequests = new Map<string, string>();
   const authLimiter = new AuthRateLimiter();
 
   const reserveSummarizeSlot = (): (() => void) | null => {
@@ -353,6 +395,18 @@ export async function runDaemonServer({
           hasText,
         } = request;
         const includeContentLog = daemonLogger.enabled && diagnostics.includeContent;
+        const activeRequestKey = extractOnly ? null : buildActiveSummarizeKey(request);
+        if (activeRequestKey) {
+          const activeRequestId = activeSummarizeRequests.get(activeRequestKey);
+          const activeSession = activeRequestId ? sessions.get(activeRequestId) : null;
+          if (activeRequestId && activeSession && !activeSession.done) {
+            json(res, 200, { ok: true, id: activeRequestId, coalesced: true }, cors);
+            return;
+          }
+          if (activeRequestId && !activeSession) {
+            activeSummarizeRequests.delete(activeRequestKey);
+          }
+        }
         const releaseSummarizeSlot = reserveSummarizeSlot();
         if (!releaseSummarizeSlot) {
           json(
@@ -363,7 +417,17 @@ export async function runDaemonServer({
           );
           return;
         }
+        let session: Session | null = null;
         try {
+          if (!extractOnly) {
+            session = createSession(() => randomUUID());
+            session.slidesRequested = Boolean(slidesSettings);
+            sessions.set(session.id, session);
+            if (activeRequestKey) {
+              activeSummarizeRequests.set(activeRequestKey, session.id);
+            }
+          }
+
           await refreshCacheStoreIfMissing({ cacheState, transcriptNamespace: "yt:auto" });
           if (extractOnly) {
             const extractTask = (async () => {
@@ -413,11 +477,12 @@ export async function runDaemonServer({
             return;
           }
 
-          const session = createSession(() => randomUUID());
-          session.slidesRequested = Boolean(slidesSettings);
-          sessions.set(session.id, session);
+          if (!session) {
+            throw new Error("Failed to initialize summarize session.");
+          }
+          const activeSession = session;
           const requestLogger = daemonLogger.getSubLogger("daemon.summarize", {
-            requestId: session.id,
+            requestId: activeSession.id,
           });
           const logStartedAt = Date.now();
           let logSummaryFromCache = false;
@@ -459,10 +524,10 @@ export async function runDaemonServer({
             ...(includeContentLog ? { diagnostics } : {}),
           });
 
-          json(res, 200, { ok: true, id: session.id }, cors);
+          json(res, 200, { ok: true, id: activeSession.id }, cors);
 
           const summaryTask = executeSummarizeSession({
-            session,
+            session: activeSession,
             request,
             env,
             fetchImpl,
@@ -479,9 +544,27 @@ export async function runDaemonServer({
             sessions,
             refreshSessions,
           });
+          if (activeRequestKey) {
+            void summaryTask.finally(() => {
+              if (activeSummarizeRequests.get(activeRequestKey) === activeSession.id) {
+                activeSummarizeRequests.delete(activeRequestKey);
+              }
+            });
+          }
           trackSummarizeTask(summaryTask, releaseSummarizeSlot);
           return;
         } catch (error) {
+          if (activeRequestKey && session) {
+            if (activeSummarizeRequests.get(activeRequestKey) === session.id) {
+              activeSummarizeRequests.delete(activeRequestKey);
+            }
+            const message = error instanceof Error ? error.message : String(error);
+            pushToSession(session, { event: "error", data: { message } }, onSessionEvent);
+            if (session.slidesRequested) {
+              emitSlidesDone(session, { ok: false, error: message }, onSessionEvent);
+            }
+            scheduleSessionCleanup({ sessions, refreshSessions, session });
+          }
           releaseSummarizeSlot();
           throw error;
         }
