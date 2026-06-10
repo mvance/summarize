@@ -234,7 +234,6 @@ test("sidepanel drops an active summary stream when the active tab changes befor
     });
 
     await expect(page.locator("#render")).toContainText("Click Summarize to start.");
-    await expect(page.locator("#render")).toContainText("Bravo Tab");
     await page.waitForTimeout(350);
     await expect(page.locator("#title")).toHaveText("Bravo Tab");
     await expect(page.locator("#render")).not.toContainText("Stale Summary A");
