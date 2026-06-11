@@ -154,7 +154,8 @@ function normalizeAutoCliOrder(value: unknown): string {
       item !== "openclaw" &&
       item !== "opencode" &&
       item !== "copilot" &&
-      item !== "agy"
+      item !== "agy" &&
+      item !== "pi"
     ) {
       continue;
     }
