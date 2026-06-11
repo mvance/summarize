@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import { isDirectMediaUrl } from "@steipete/summarize-core/content/url";
 import { clearCacheFiles, DEFAULT_CACHE_MAX_MB, resolveCachePath } from "../cache.js";
 import { loadSummarizeConfig, mergeConfigEnv } from "../config.js";
 import { formatVersionLine } from "../version.js";
@@ -21,7 +22,9 @@ export function normalizeDiarizeArgv(argv: string[]): string[] {
   return argv.map((arg, index) => {
     if (arg !== "--diarize") return arg;
     const next = argv[index + 1];
-    return next && /^[a-z][a-z\d+.-]*:\/\//i.test(next) ? "--diarize=auto" : arg;
+    if (!next || next.startsWith("-")) return arg;
+    if (["auto", "elevenlabs", "openai"].includes(next.toLowerCase())) return arg;
+    return /^[a-z][a-z\d+.-]*:\/\//i.test(next) || isDirectMediaUrl(next) ? "--diarize=auto" : arg;
   });
 }
 

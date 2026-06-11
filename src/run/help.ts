@@ -29,7 +29,7 @@ export function buildProgram() {
     .addOption(
       new Option(
         "--diarize [provider]",
-        "Add speaker labels to a YouTube transcript: auto (ElevenLabs then OpenAI), elevenlabs, openai.",
+        "Add speaker labels to YouTube or direct audio/video: auto (ElevenLabs then OpenAI), elevenlabs, openai.",
       )
         .choices(["auto", "elevenlabs", "openai"])
         .preset("auto"),
@@ -294,6 +294,7 @@ ${heading("Examples")}
   ${cmd('summarize "https://www.youtube.com/watch?v=..." --extract --format md --markdown-mode llm')} ${dim("# transcript as formatted markdown")}
   ${cmd('summarize "https://www.youtube.com/watch?v=I845O57ZSy4&t=11s" --extract --youtube web')}
   ${cmd('summarize "https://www.youtube.com/watch?v=..." --extract --diarize')} ${dim("# speaker-labelled transcript")}
+  ${cmd('summarize "./interview.mp3" --extract --diarize')} ${dim("# diarize a local recording")}
   ${cmd('summarize "https://www.youtube.com/watch?v=..." --slides')} ${dim("# summary + inline slides")}
   ${cmd('summarize "https://www.youtube.com/watch?v=..." --slides --slides-ocr')} ${dim("# slides + OCR extraction")}
   ${cmd('summarize "https://www.youtube.com/watch?v=..." --slides --extract')} ${dim("# full transcript + inline slides")}

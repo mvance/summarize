@@ -52,6 +52,17 @@ describe("runner setup", () => {
     expect(envForRun.NO_COLOR).toBeUndefined();
   });
 
+  it.each(["episode.mp3", "/tmp/interview.mp4"])(
+    "normalizes bare diarize before local media input %s",
+    (input) => {
+      const { normalizedArgv } = prepareRunEnvironment(["--diarize", input], {
+        HOME: mkdtempSync(join(tmpdir(), "summarize-runner-setup-")),
+      });
+
+      expect(normalizedArgv).toEqual(["--diarize=auto", input]);
+    },
+  );
+
   it("writes a version line only when requested", () => {
     const quietOut = collectStream();
     expect(

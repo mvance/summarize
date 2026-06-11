@@ -57,7 +57,7 @@ summarize "https://www.youtube.com/watch?v=..." --extract --diarize openai --tim
 - `auto`: ElevenLabs Scribe v2 first, then OpenAI `gpt-4o-transcribe-diarize`.
 - `elevenlabs`: requires `ELEVENLABS_API_KEY`.
 - `openai`: requires `OPENAI_API_KEY`.
-- All modes require `yt-dlp`; OpenAI uses `ffmpeg` to compress uploads above its size limit when available.
+- YouTube diarization requires `yt-dlp`; OpenAI uses `ffmpeg` to compress uploads above its size limit when available. Local media diarization does not require `yt-dlp`.
 
 ## Speaker identification
 

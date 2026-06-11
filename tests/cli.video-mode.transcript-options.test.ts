@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Writable } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
 
@@ -132,5 +135,81 @@ describe("cli --video-mode transcript", () => {
       | Record<string, unknown>
       | undefined;
     expect(options?.transcriptDiarization).toBe("openai");
+  });
+
+  it.each(["mp3", "mp4"])("diarizes a local %s through the media asset flow", async (extension) => {
+    const root = mkdtempSync(join(tmpdir(), `summarize-cli-diarize-${extension}-`));
+    const mediaPath = join(root, `interview.${extension}`);
+    writeFileSync(mediaPath, Buffer.from([0xff, 0xfb, 0x10, 0x00]));
+    const stdout = collectStream({ isTTY: false });
+    const stderr = collectStream({ isTTY: true });
+
+    try {
+      await runCli(["--extract", "--metrics", "off", "--diarize", mediaPath], {
+        env: {
+          OPENAI_API_KEY: "test-openai",
+          YT_DLP_PATH: "/usr/bin/yt-dlp",
+        },
+        fetch: vi.fn() as unknown as typeof fetch,
+        stdout: stdout.stream,
+        stderr: stderr.stream,
+      });
+
+      const clientOptions = mocks.createLinkPreviewClient.mock.calls.at(-1)?.[0] as
+        | { transcription?: Record<string, unknown> }
+        | undefined;
+      const fetchOptions = mocks.fetchLinkContent.mock.calls.at(-1)?.[1] as
+        | Record<string, unknown>
+        | undefined;
+      expect(clientOptions?.transcription?.openaiApiKey).toBe("test-openai");
+      expect(fetchOptions).toMatchObject({
+        transcriptDiarization: "auto",
+        mediaTranscript: "prefer",
+      });
+      expect(stdout.getText()).toContain("Transcript: hello");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it.each(["mp3", "mp4"])(
+    "diarizes a direct %s URL through the media asset flow",
+    async (extension) => {
+      const stdout = collectStream({ isTTY: false });
+      const stderr = collectStream({ isTTY: true });
+      const url = `https://cdn.example.com/interview.${extension}`;
+
+      await runCli(["--extract", "--metrics", "off", "--diarize", "openai", url], {
+        env: {
+          OPENAI_API_KEY: "test-openai",
+          YT_DLP_PATH: "/usr/bin/yt-dlp",
+        },
+        fetch: vi.fn() as unknown as typeof fetch,
+        stdout: stdout.stream,
+        stderr: stderr.stream,
+      });
+
+      const fetchCall = mocks.fetchLinkContent.mock.calls.at(-1);
+      expect(fetchCall?.[0]).toBe(url);
+      expect(fetchCall?.[1]).toMatchObject({
+        transcriptDiarization: "openai",
+        mediaTranscript: "prefer",
+      });
+      expect(stdout.getText()).toContain("Transcript: hello");
+    },
+  );
+
+  it("rejects diarization for ordinary web pages", async () => {
+    const stdout = collectStream({ isTTY: false });
+    const stderr = collectStream({ isTTY: true });
+
+    await expect(
+      runCli(["--extract", "--metrics", "off", "--diarize", "https://example.com/article"], {
+        env: {},
+        fetch: vi.fn() as unknown as typeof fetch,
+        stdout: stdout.stream,
+        stderr: stderr.stream,
+      }),
+    ).rejects.toThrow("--diarize requires a YouTube URL or a direct audio/video file");
   });
 });

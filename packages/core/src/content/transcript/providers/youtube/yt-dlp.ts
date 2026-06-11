@@ -88,7 +88,8 @@ export const fetchTranscriptWithYtDlp = async ({
     falApiKey,
   });
 
-  if (!ytDlpPath) {
+  const localFileInput = resolveLocalDirectMediaSource(url, mediaKind);
+  if (!ytDlpPath && !localFileInput) {
     return {
       text: null,
       provider: null,
@@ -121,7 +122,6 @@ export const fetchTranscriptWithYtDlp = async ({
   const progress = typeof onProgress === "function" ? onProgress : null;
   const providerHint = startInfo.providerHint;
   const modelId = startInfo.modelId;
-  const localFileInput = resolveLocalDirectMediaSource(url, mediaKind);
   const cachedMedia = localFileInput ? null : mediaCache ? await mediaCache.get({ url }) : null;
 
   const outputFile = join(tmpdir(), `summarize-${randomUUID()}.mp3`);
@@ -155,6 +155,9 @@ export const fetchTranscriptWithYtDlp = async ({
       });
       notes.push("media cache hit");
     } else {
+      if (!ytDlpPath) {
+        throw new Error("yt-dlp is not configured (set YT_DLP_PATH or ensure yt-dlp is on PATH)");
+      }
       progress?.({
         kind: ProgressKind.TranscriptMediaDownloadStart,
         url,

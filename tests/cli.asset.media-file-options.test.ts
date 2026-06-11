@@ -21,9 +21,12 @@ function makeContext(overrides: Partial<AssetSummaryContext>): AssetSummaryConte
   });
   return {
     env: { OPENAI_API_KEY: "test-key" },
+    envForRun: { OPENAI_API_KEY: "test-key" },
     apiStatus: {
       xaiApiKey: null,
       apiKey: null,
+      nvidiaApiKey: null,
+      minimaxApiKey: null,
       openrouterApiKey: null,
       apifyToken: null,
       firecrawlConfigured: false,
@@ -32,12 +35,23 @@ function makeContext(overrides: Partial<AssetSummaryContext>): AssetSummaryConte
       providerBaseUrls: { openai: null, anthropic: null, google: null, xai: null },
       zaiApiKey: null,
       zaiBaseUrl: "",
+      nvidiaBaseUrl: "",
+      minimaxBaseUrl: "",
+      ollamaBaseUrl: "",
+      falApiKey: null,
+      groqApiKey: null,
+      assemblyaiApiKey: null,
+      elevenlabsApiKey: null,
+      googleApiKey: null,
+      openaiApiKey: "test-key",
     },
     trackedFetch: vi.fn(),
     cache: { mode: "default", store: null, ttlMs: 0, maxBytes: 0, path: null },
     summaryCacheBypass: false,
     mediaCache: null,
     timeoutMs: 1234,
+    transcriptTimestamps: false,
+    transcriptDiarization: null,
     forceSummary: false,
     stderr,
     verbose: false,
@@ -143,5 +157,59 @@ describe("summarizeMediaFile options", () => {
     expect(capturedClientOptions?.transcriptCache).toBe(transcriptCache);
     expect(capturedFetchOptions?.cacheMode).toBe("default");
     expect(capturedFetchOptions?.timeoutMs).toBe(5678);
+  });
+
+  it("passes diarization, timestamps, and ElevenLabs credentials to media extraction", async () => {
+    createLinkPreviewClient.mockReset();
+    const root = mkdtempSync(join(tmpdir(), "summarize-media-options-diarize-"));
+    const videoPath = join(root, "interview.mp4");
+    writeFileSync(videoPath, Buffer.from([0x00, 0x00, 0x00, 0x18]));
+
+    let capturedClientOptions: {
+      transcription?: {
+        elevenlabsApiKey?: string | null;
+        openaiApiKey?: string | null;
+      };
+    } | null = null;
+    let capturedFetchOptions: {
+      transcriptDiarization?: string | null;
+      transcriptTimestamps?: boolean;
+    } | null = null;
+
+    createLinkPreviewClient.mockImplementation((options: unknown) => {
+      capturedClientOptions = options;
+      return {
+        fetchLinkContent: async (_url: string, optionsArg: unknown) => {
+          capturedFetchOptions = optionsArg;
+          throw new Error("boom");
+        },
+      };
+    });
+
+    const ctx = makeContext({
+      env: { ELEVENLABS_API_KEY: "eleven-test" },
+      envForRun: { ELEVENLABS_API_KEY: "eleven-test" },
+      transcriptDiarization: "elevenlabs",
+      transcriptTimestamps: true,
+    });
+
+    await expect(
+      summarizeMediaFile(ctx, {
+        sourceKind: "file",
+        sourceLabel: videoPath,
+        attachment: {
+          kind: "file",
+          mediaType: "video/mp4",
+          filename: "interview.mp4",
+          bytes: new Uint8Array(),
+        },
+      }),
+    ).rejects.toThrow(/Transcription failed/);
+
+    expect(capturedClientOptions?.transcription?.elevenlabsApiKey).toBe("eleven-test");
+    expect(capturedFetchOptions).toMatchObject({
+      transcriptDiarization: "elevenlabs",
+      transcriptTimestamps: true,
+    });
   });
 });

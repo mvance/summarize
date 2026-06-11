@@ -4,6 +4,7 @@
 
 ### Features
 
+- CLI media: allow `--diarize` and speaker identification for local and direct audio/video inputs, including MP3 and MP4, instead of limiting speaker-labelled transcription to YouTube.
 - YouTube transcripts: fall back to Android VR direct audio resolution and configured transcription when `yt-dlp` is missing or fails, while preserving explicit `--youtube yt-dlp` and diarization requirements.
 - Chrome extension: transcribe captionless YouTube videos without the daemon using same-origin Android VR audio, captured SABR fallback, WebAudio with MediaBunny fallback, and browser-cached multilingual Whisper Tiny.
 

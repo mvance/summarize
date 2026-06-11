@@ -70,7 +70,7 @@ If `[input]` is omitted, summarize prints concise help and exits.
 : Include timestamps in transcripts when available.
 
 `--diarize [provider]`
-: Force speaker-labelled YouTube audio transcription. Provider: `auto`, `elevenlabs`, or `openai`.
+: Add speaker labels to YouTube, local audio/video, or direct media URLs. Provider: `auto`, `elevenlabs`, or `openai`.
 
 `--identify-speakers` / `--no-identify-speakers`
 : Resolve generic diarization labels to names, or disable configured resolution for one run. Uses authoritative anchors and OpenAI GPT-5.5 context inference.

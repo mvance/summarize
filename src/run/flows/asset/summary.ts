@@ -19,6 +19,7 @@ import type { ExecFileFn } from "../../../markitdown.js";
 import type { FixedModelSpec, RequestedModel } from "../../../model-spec.js";
 import { SUMMARY_LENGTH_TARGET_CHARACTERS, SUMMARY_SYSTEM_PROMPT } from "../../../prompts/index.js";
 import type { SummaryLength } from "../../../shared/contracts.js";
+import type { SpeakerIdentificationSettings } from "../../../speaker-identification/index.js";
 import { countTokens } from "../../../tokenizer.js";
 import { type AssetAttachment, isUnsupportedAttachmentError } from "../../attachments.js";
 import {
@@ -213,6 +214,10 @@ export type AssetSummaryContext = {
   forceSummary: boolean;
   outputLanguage: OutputLanguage;
   videoMode: "auto" | "transcript" | "understand";
+  transcriptTimestamps: boolean;
+  transcriptDiarization: "auto" | "elevenlabs" | "openai" | null;
+  speakerIdentification: SpeakerIdentificationSettings | null;
+  configPath: string | null;
   fixedModelSpec: FixedModelSpec | null;
   promptOverride?: string | null;
   lengthInstruction?: string | null;
@@ -275,7 +280,11 @@ export type AssetSummaryContext = {
     nvidiaBaseUrl: string;
     minimaxBaseUrl: string;
     ollamaBaseUrl: string;
+    falApiKey: string | null;
+    groqApiKey: string | null;
     assemblyaiApiKey: string | null;
+    elevenlabsApiKey: string | null;
+    googleApiKey: string | null;
     openaiApiKey: string | null;
   };
 };
@@ -295,6 +304,10 @@ export type AssetSummaryContextInput = {
     | "forceSummary"
     | "outputLanguage"
     | "videoMode"
+    | "transcriptTimestamps"
+    | "transcriptDiarization"
+    | "speakerIdentification"
+    | "configPath"
     | "promptOverride"
     | "lengthInstruction"
     | "languageInstruction"

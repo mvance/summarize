@@ -485,10 +485,14 @@ Environment variables for yt-dlp mode:
 
 Apify costs money but tends to be more reliable when captions exist.
 
-Speaker-labelled transcript (forces `yt-dlp` audio transcription instead of caption reuse):
+Speaker-labelled transcripts for YouTube, local audio/video, and direct media URLs:
 
 ```bash
 summarize "https://www.youtube.com/watch?v=..." --extract --diarize
+summarize "./interview.mp3" --extract --diarize
+summarize "https://cdn.example.com/interview.mp4" --extract --diarize openai
+summarize "./interview.mp4" --extract --diarize openai \
+  --identify-speakers --speaker-at "0:00=Host" --speaker-at "0:12=Guest"
 summarize "https://www.youtube.com/watch?v=..." --extract --diarize elevenlabs
 summarize "https://www.youtube.com/watch?v=..." --extract --diarize openai --timestamps
 summarize "https://www.youtube.com/watch?v=..." --extract --diarize elevenlabs \
@@ -498,9 +502,10 @@ summarize "https://www.youtube.com/watch?v=..." --extract --diarize elevenlabs \
 
 Bare `--diarize` prefers ElevenLabs Scribe v2 (`ELEVENLABS_API_KEY`) and falls back to OpenAI
 `gpt-4o-transcribe-diarize` (`OPENAI_API_KEY`). Speaker changes are emitted as `Speaker <label>: ...`;
-combine with `--timestamps` for `[mm:ss] Speaker <label>: ...`.
+combine with `--timestamps` for `[mm:ss] Speaker <label>: ...`. Local files are transcribed directly;
+YouTube and remote direct media use their normal download path.
 
-`--identify-speakers` replaces generic labels with names. Repeat `--speaker-at <timestamp=name>`
+`--identify-speakers` replaces generic labels with names for YouTube and direct media. Repeat `--speaker-at <timestamp=name>`
 for authoritative examples; unresolved labels are inferred with OpenAI GPT-5.5 and only accepted above
 the configured confidence threshold. `--remember-speakers` stores the profile, anchors, and a
 transcript-hash-guarded mapping in `~/.summarize/config.json` for later runs. See
@@ -543,6 +548,8 @@ summarize "https://www.youtube.com/watch?v=..." --extract --format md --markdown
 Local audio/video files are transcribed first, then summarized. `--video-mode transcript` forces
 direct media URLs (and embedded media) through Whisper first. Prefers local `whisper.cpp` when available; otherwise requires
 one of `GROQ_API_KEY`, `ASSEMBLYAI_API_KEY`, `GEMINI_API_KEY` (or Google aliases), `OPENAI_API_KEY`, or `FAL_KEY`.
+Use `--diarize [auto|elevenlabs|openai]` for speaker-labelled MP3/MP4 and other supported media;
+diarization requires `ELEVENLABS_API_KEY` or `OPENAI_API_KEY`.
 
 ### Local ONNX transcription (Parakeet/Canary)
 

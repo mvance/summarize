@@ -1,4 +1,5 @@
 import type { DirectMediaKind } from "../../direct-media.js";
+import { resolveLocalDirectMediaSource } from "../../local-file.js";
 import { normalizeTranscriptText } from "../normalize.js";
 import type { TranscriptionConfig } from "../transcription-config.js";
 import type { ProviderFetchOptions, ProviderResult } from "../types.js";
@@ -19,7 +20,9 @@ export async function fetchDirectMediaTranscript({
   attemptedProviders: ProviderResult["attemptedProviders"];
   kind: DirectMediaKind | null;
 }): Promise<ProviderResult | null> {
-  if (!options.ytDlpPath) {
+  const mediaKind = kind ?? options.mediaKindHint ?? null;
+  const localMedia = resolveLocalDirectMediaSource(url, mediaKind);
+  if (!options.ytDlpPath && !localMedia) {
     notes.push("yt-dlp is not configured (set YT_DLP_PATH or ensure yt-dlp is on PATH)");
     return null;
   }
@@ -27,6 +30,7 @@ export async function fetchDirectMediaTranscript({
   const transcriptionCapabilities = await resolveTranscriptProviderCapabilities({
     transcription,
     ytDlpPath: options.ytDlpPath,
+    diarization: options.transcriptDiarization ?? null,
   });
   if (!transcriptionCapabilities.canTranscribe) {
     notes.push(transcriptionCapabilities.missingProviderNote);
@@ -43,7 +47,8 @@ export async function fetchDirectMediaTranscript({
     url,
     onProgress: options.onProgress ?? null,
     service: "generic",
-    mediaKind: kind ?? options.mediaKindHint ?? null,
+    mediaKind,
+    diarization: options.transcriptDiarization ?? null,
   });
   if (ytdlpResult.notes.length > 0) notes.push(...ytdlpResult.notes);
 
@@ -52,10 +57,17 @@ export async function fetchDirectMediaTranscript({
       text: normalizeTranscriptText(ytdlpResult.text),
       source: "yt-dlp",
       attemptedProviders,
+      segments: ytdlpResult.segments ?? null,
       metadata: {
         provider: "generic",
         kind: kind ?? "media",
         transcriptionProvider: ytdlpResult.provider,
+        ...(options.transcriptDiarization
+          ? {
+              speakerLabels: true,
+              diarizationProvider: ytdlpResult.provider,
+            }
+          : {}),
       },
       notes: notes.length > 0 ? notes.join("; ") : null,
     };

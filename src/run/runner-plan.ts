@@ -121,8 +121,11 @@ export async function createRunnerPlan(options: {
   if (extractMode && lengthExplicitlySet && !json && isRichTty(stderr)) {
     stderr.write("Warning: --length is ignored with --extract (no summary is generated).\n");
   }
-  if (diarizationMode && !isYoutubeUrl) {
-    throw new Error("--diarize currently supports YouTube URLs");
+  const isDirectMediaInput =
+    (inputTarget.kind === "file" && isTranscribableExtension(inputTarget.filePath)) ||
+    (inputTarget.kind === "url" && isTranscribableExtension(inputTarget.url));
+  if (diarizationMode && !isYoutubeUrl && !isDirectMediaInput) {
+    throw new Error("--diarize requires a YouTube URL or a direct audio/video file");
   }
 
   const modelArg = typeof programOpts.model === "string" ? programOpts.model : null;
@@ -211,9 +214,15 @@ export async function createRunnerPlan(options: {
     inputTarget,
   });
   const transcriptTimestamps = Boolean(programOpts.timestamps) || Boolean(slidesSettings);
+  const speakerSource =
+    inputTarget.kind === "url"
+      ? inputTarget.url
+      : inputTarget.kind === "file"
+        ? inputTarget.filePath
+        : "";
   const speakerIdentification = resolveSpeakerIdentificationSettings({
     config: config?.speakers,
-    sourceUrl: url ?? "",
+    sourceUrl: speakerSource,
     diarization: diarizationMode,
     profileArg: speakerProfileArg,
     anchorArgs: speakerAnchorArgs,

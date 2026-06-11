@@ -110,6 +110,47 @@ describe("yt-dlp transcript helper", () => {
     }
   });
 
+  it("diarizes local MP3 files without a yt-dlp path", async () => {
+    const root = await mkdtemp(join(tmpdir(), "summarize-ytdlp-local-diarize-"));
+    const filePath = join(root, "interview.mp3");
+    await writeFile(filePath, new Uint8Array([1, 2, 3]));
+    (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          segments: [
+            { start: 0, end: 1, speaker: "A", text: "Hello." },
+            { start: 1, end: 2, speaker: "B", text: "Hi." },
+          ],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+
+    try {
+      const result = await fetchTranscriptWithYtDlp({
+        ytDlpPath: null,
+        openaiApiKey: "OPENAI",
+        diarization: "openai",
+        url: pathToFileURL(filePath).href,
+        mediaKind: "audio",
+      });
+
+      expect(result.text).toBe("Speaker A: Hello.\nSpeaker B: Hi.");
+      expect(result.provider).toBe("openai");
+      expect(result.segments).toEqual([
+        { startMs: 0, endMs: 1000, speaker: "Speaker A", text: "Hello." },
+        { startMs: 1000, endMs: 2000, speaker: "Speaker B", text: "Hi." },
+      ]);
+      expect(spawnMock).not.toHaveBeenCalledWith(
+        expect.stringContaining("yt-dlp"),
+        expect.anything(),
+        expect.anything(),
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("returns a helpful error when yt-dlp path is missing", async () => {
     const result = await fetchTranscriptWithYtDlp({
       ytDlpPath: null,

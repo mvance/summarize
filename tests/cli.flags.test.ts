@@ -36,6 +36,19 @@ describe("cli flag parsing", () => {
     expect(program.args).toEqual([url]);
   });
 
+  it.each(["recording.mp3", "/tmp/interview.mp4"])(
+    "treats %s after bare --diarize as the positional input",
+    (input) => {
+      const argv = normalizeDiarizeArgv(["--diarize", input]);
+      const program = buildProgram();
+      program.parse(argv, { from: "user" });
+
+      expect(argv).toEqual(["--diarize=auto", input]);
+      expect(program.opts().diarize).toBe("auto");
+      expect(program.args).toEqual([input]);
+    },
+  );
+
   it("keeps explicit diarization providers intact", () => {
     const url = "https://www.youtube.com/watch?v=abcdefghijk";
     expect(normalizeDiarizeArgv(["--diarize", "openai", url])).toEqual([

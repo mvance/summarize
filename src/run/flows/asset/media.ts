@@ -9,6 +9,11 @@ import { isAbsolute, resolve as resolvePath } from "node:path";
 import { pathToFileURL } from "node:url";
 import { createLinkPreviewClient, type ExtractedLinkContent } from "../../../content/index.js";
 import { createFirecrawlScraper } from "../../../firecrawl.js";
+import {
+  identifySpeakersInExtractedContent,
+  rememberSpeakerMappings,
+  SpeakerIdentificationError,
+} from "../../../speaker-identification/index.js";
 import type { AssetAttachment } from "../../attachments.js";
 import { readTweetWithPreferredClient } from "../../bird.js";
 import { resolveTwitterCookies } from "../../cookies/twitter.js";
@@ -54,12 +59,16 @@ export async function summarizeMediaFile(
   args: SummarizeAssetArgs,
 ): Promise<void> {
   // Check if basic transcription setup is available
-  const groqKey = ctx.env.GROQ_API_KEY;
+  const groqKey = ctx.env.GROQ_API_KEY ?? ctx.apiStatus.groqApiKey;
   const geminiKey =
-    ctx.env.GEMINI_API_KEY ?? ctx.env.GOOGLE_GENERATIVE_AI_API_KEY ?? ctx.env.GOOGLE_API_KEY;
-  const openaiKey = ctx.env.OPENAI_API_KEY;
-  const falKey = ctx.env.FAL_KEY;
-  const assemblyaiKey = ctx.env.ASSEMBLYAI_API_KEY;
+    ctx.env.GEMINI_API_KEY ??
+    ctx.env.GOOGLE_GENERATIVE_AI_API_KEY ??
+    ctx.env.GOOGLE_API_KEY ??
+    ctx.apiStatus.googleApiKey;
+  const openaiKey = ctx.env.OPENAI_API_KEY ?? ctx.apiStatus.openaiApiKey;
+  const falKey = ctx.env.FAL_KEY ?? ctx.apiStatus.falApiKey;
+  const assemblyaiKey = ctx.env.ASSEMBLYAI_API_KEY ?? ctx.apiStatus.assemblyaiApiKey;
+  const elevenlabsKey = ctx.env.ELEVENLABS_API_KEY ?? ctx.apiStatus.elevenlabsApiKey;
 
   // Helper to check if a binary is available on PATH
   const isBinaryAvailable = async (binary: string): Promise<boolean> => {
@@ -82,8 +91,24 @@ export async function summarizeMediaFile(
     ? true
     : await isBinaryAvailable("whisper-cli");
 
+  if (ctx.transcriptDiarization === "elevenlabs" && !elevenlabsKey) {
+    throw new Error("Speaker diarization with ElevenLabs requires ELEVENLABS_API_KEY");
+  }
+  if (ctx.transcriptDiarization === "openai" && !openaiKey) {
+    throw new Error("Speaker diarization with OpenAI requires OPENAI_API_KEY");
+  }
+  if (ctx.transcriptDiarization === "auto" && !elevenlabsKey && !openaiKey) {
+    throw new Error("Speaker diarization requires ELEVENLABS_API_KEY or OPENAI_API_KEY");
+  }
+
   const hasAnyTranscriptionProvider =
-    groqKey || assemblyaiKey || geminiKey || openaiKey || falKey || hasLocalWhisper;
+    groqKey ||
+    assemblyaiKey ||
+    geminiKey ||
+    openaiKey ||
+    falKey ||
+    hasLocalWhisper ||
+    Boolean(ctx.transcriptDiarization && elevenlabsKey);
 
   if (!hasAnyTranscriptionProvider) {
     throw new Error(`Media file transcription requires one of the following:
@@ -195,6 +220,8 @@ See: https://github.com/openai/whisper for setup details`);
       falApiKey: falKey,
       groqApiKey: groqKey,
       assemblyaiApiKey: assemblyaiKey ?? ctx.apiStatus.assemblyaiApiKey,
+      elevenlabsApiKey: elevenlabsKey,
+      geminiApiKey: geminiKey,
       openaiApiKey: openaiKey,
     },
     scrapeWithFirecrawl: firecrawlScraper,
@@ -224,14 +251,60 @@ See: https://github.com/openai/whisper for setup details`);
 
     // Fetch the link content (will trigger transcription for media)
     // Using file:// URL ensures the provider chain can handle local files properly
-    const extracted: ExtractedLinkContent = await client.fetchLinkContent(fileUrl, {
+    let extracted: ExtractedLinkContent = await client.fetchLinkContent(fileUrl, {
       timeoutMs: ctx.timeoutMs,
       cacheMode,
       youtubeTranscript: "auto", // Not used for local files, but set for completeness
       mediaTranscript: "prefer", // Prefer transcription for media files
-      transcriptTimestamps: false,
+      transcriptTimestamps: ctx.transcriptTimestamps,
+      transcriptDiarization: ctx.transcriptDiarization,
       fileMtime, // Include file modification time for cache invalidation
     });
+
+    if (ctx.speakerIdentification) {
+      const identified = await identifySpeakersInExtractedContent({
+        extracted,
+        sourceUrl: args.sourceLabel,
+        settings: ctx.speakerIdentification,
+        openaiApiKey: openaiKey,
+        openaiBaseUrl: ctx.apiStatus.providerBaseUrls.openai,
+        timeoutMs: ctx.timeoutMs,
+        maxContentCharacters: null,
+        fetchImpl: ctx.trackedFetch,
+      });
+      extracted = identified.extracted;
+      if (identified.usage) {
+        ctx.llmCalls.push({
+          provider: "openai",
+          model: ctx.speakerIdentification.model,
+          usage: identified.usage,
+          purpose: "speaker-identification",
+        });
+      }
+      if (identified.warning) {
+        writeVerbose(ctx.stderr, ctx.verbose, identified.warning, ctx.verboseColor, ctx.envForRun);
+        ctx.stderr.write(`Warning: ${identified.warning}\n`);
+      }
+      if (ctx.speakerIdentification.remember) {
+        if (!ctx.configPath || !identified.transcriptHash) {
+          throw new SpeakerIdentificationError(
+            "Unable to resolve the config path or transcript hash for --remember-speakers.",
+          );
+        }
+        try {
+          await rememberSpeakerMappings({
+            configPath: ctx.configPath,
+            settings: ctx.speakerIdentification,
+            mappings: identified.mappings,
+            transcriptHash: identified.transcriptHash,
+          });
+        } catch (error) {
+          throw new SpeakerIdentificationError(
+            `Failed to remember speaker mappings: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      }
+    }
 
     // Check if we got a transcript
     if (!extracted.content || extracted.content.trim().length === 0) {
@@ -278,6 +351,9 @@ See: https://github.com/openai/whisper for setup details`);
       onModelChosen: args.onModelChosen,
     });
   } catch (error) {
+    if (error instanceof SpeakerIdentificationError) {
+      throw error;
+    }
     // Re-throw with better context for transcription errors
     if (error instanceof Error && error.message.includes("transcribe")) {
       throw error;

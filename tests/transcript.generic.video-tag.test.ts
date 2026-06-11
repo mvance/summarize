@@ -1,3 +1,7 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { fetchTranscript } from "../packages/core/src/content/transcript/providers/generic.js";
 
@@ -6,6 +10,7 @@ const fetchTranscriptWithYtDlp = vi.fn(async () => ({
   provider: "openai",
   notes: [],
   error: null,
+  segments: [{ startMs: 0, endMs: 1000, speaker: "Speaker A", text: "Hello" }],
 }));
 
 vi.mock("../packages/core/src/content/transcript/providers/youtube/yt-dlp.js", () => ({
@@ -84,5 +89,62 @@ describe("generic transcript provider (video tag fallback)", () => {
         mediaKind: "video",
       }),
     );
+  });
+
+  it("passes diarization through and preserves speaker metadata and segments", async () => {
+    fetchTranscriptWithYtDlp.mockClear();
+
+    const result = await fetchTranscript(
+      { url: "https://cdn.example.com/interview.mp4", html: null, resourceKey: null },
+      buildOptions({
+        mediaTranscriptMode: "prefer",
+        transcriptDiarization: "openai",
+      }),
+    );
+
+    expect(fetchTranscriptWithYtDlp).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: "https://cdn.example.com/interview.mp4",
+        diarization: "openai",
+      }),
+    );
+    expect(result.segments).toEqual([
+      { startMs: 0, endMs: 1000, speaker: "Speaker A", text: "Hello" },
+    ]);
+    expect(result.metadata).toMatchObject({
+      speakerLabels: true,
+      diarizationProvider: "openai",
+      transcriptionProvider: "openai",
+    });
+  });
+
+  it("allows local direct media transcription without yt-dlp", async () => {
+    fetchTranscriptWithYtDlp.mockClear();
+    const root = mkdtempSync(join(tmpdir(), "summarize-generic-local-media-"));
+    const audioPath = join(root, "recording.mp3");
+    writeFileSync(audioPath, Buffer.from([0xff, 0xfb, 0x10, 0x00]));
+    const url = pathToFileURL(audioPath).href;
+
+    try {
+      const result = await fetchTranscript(
+        { url, html: null, resourceKey: null },
+        buildOptions({
+          ytDlpPath: null,
+          mediaTranscriptMode: "prefer",
+          transcriptDiarization: "openai",
+        }),
+      );
+
+      expect(fetchTranscriptWithYtDlp).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ytDlpPath: null,
+          url,
+          diarization: "openai",
+        }),
+      );
+      expect(result.text).toBe("yt-dlp transcript");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });
