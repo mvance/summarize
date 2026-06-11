@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.17.1 - Unreleased
+
+### Fixes
+
+- Dependencies: update Markdansi to 0.3.1 and refresh the dependency lockfile.
+- Release: allow exact-version smoke tests to bypass the minimum release age for freshly published packages.
+
 ## 0.17.0 - 2026-06-11
 
 ### Features
