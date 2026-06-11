@@ -139,7 +139,7 @@ export async function resolveDurationMetadata(args: {
       sourceMetrics = {
         platform: "youtube",
         videoId: effectiveVideoId,
-        viewCount: ytDlpMetadata.viewCount,
+        viewCount: ytDlpMetadata.viewCount ?? sourceMetrics?.viewCount ?? null,
         observedAt: new Date().toISOString(),
       };
     }

@@ -487,6 +487,46 @@ describe("YouTube transcript provider module", () => {
     );
   });
 
+  it("preserves player view count when yt-dlp only supplies duration", async () => {
+    captions.fetchTranscriptFromCaptionTracks.mockResolvedValue({
+      text: "Creator caption",
+      segments: null,
+    });
+    captions.extractYoutubePlayerMetadata.mockReturnValue({
+      durationSeconds: null,
+      viewCount: 19_335,
+    });
+    captions.extractYoutubeDurationSeconds.mockReturnValue(null);
+    captions.fetchYoutubePlayerMetadata.mockResolvedValue(null);
+    ytdlp.fetchMediaMetadataWithYtDlp.mockResolvedValue({
+      durationSeconds: 3300,
+      viewCount: null,
+    });
+
+    const result = await fetchTranscript(
+      {
+        url: "https://www.youtube.com/watch?v=abcdefghijk",
+        html: "<html></html>",
+        resourceKey: null,
+      },
+      {
+        ...baseOptions,
+        youtubeTranscriptMode: "no-auto",
+        ytDlpPath: "/usr/bin/yt-dlp",
+      },
+    );
+
+    expect(result.metadata).toEqual(
+      expect.objectContaining({
+        durationSeconds: 3300,
+        sourceMetrics: expect.objectContaining({
+          platform: "youtube",
+          viewCount: 19_335,
+        }),
+      }),
+    );
+  });
+
   it("falls back to yt-dlp in no-auto mode when no creator captions found", async () => {
     captions.fetchTranscriptFromCaptionTracks.mockResolvedValue(null);
     ytdlp.fetchTranscriptWithYtDlp.mockResolvedValue({
