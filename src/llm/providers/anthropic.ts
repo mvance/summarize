@@ -1,10 +1,58 @@
-import type { Context } from "@earendil-works/pi-ai";
+import type { Context, Model, ThinkingLevel } from "@earendil-works/pi-ai";
+import type { Api } from "@earendil-works/pi-ai";
 import { completeSimple } from "@earendil-works/pi-ai";
 import type { Attachment } from "../attachments.js";
+import type { OpenAiReasoningEffort } from "../model-options.js";
 import type { LlmTokenUsage } from "../types.js";
 import { normalizeAnthropicUsage, normalizeTokenUsage } from "../usage.js";
 import { resolveAnthropicModel } from "./models.js";
-import { bytesToBase64, extractText, resolveBaseUrlOverride } from "./shared.js";
+import { bytesToBase64, extractText, resolveBaseUrlOverride, tryGetModel } from "./shared.js";
+
+function effortToThinkingLevel(
+  effort: OpenAiReasoningEffort | undefined,
+): ThinkingLevel | undefined {
+  if (!effort || effort === "none") return undefined;
+  return effort;
+}
+
+/**
+ * Decide the model and `reasoning` option to pass into the pi-ai Anthropic
+ * adapter. Shared by non-streaming and streaming text dispatch.
+ *
+ * pi-ai 0.75.5 enables extended thinking whenever the caller passes a
+ * `reasoning` option, regardless of `model.reasoning`. So:
+ *
+ * - Registered models with `reasoning: true` (Claude 4+): forward `reasoning`.
+ * - Registered models with `reasoning: false` (Claude 3 / 3.5): drop
+ *   `reasoning` entirely; forwarding it would have pi-ai send a `thinking`
+ *   block to an API that rejects it.
+ * - Synthetic models (`tryGetModel` miss — typically custom
+ *   `ANTHROPIC_BASE_URL` proxies in front of newer Claude versions):
+ *   `createSyntheticModel` hard-codes `reasoning: false`, so we flip a copy
+ *   to `reasoning: true` and forward the effort level.
+ */
+export function prepareAnthropicReasoning({
+  modelId,
+  baseModel,
+  reasoningEffort,
+}: {
+  modelId: string;
+  baseModel: Model<Api>;
+  reasoningEffort?: OpenAiReasoningEffort;
+}): { model: Model<Api>; reasoning?: ThinkingLevel } {
+  const reasoning = effortToThinkingLevel(reasoningEffort);
+  if (!reasoning) return { model: baseModel };
+  const isSynthetic = !tryGetModel("anthropic", modelId);
+  if (!baseModel.reasoning) {
+    if (isSynthetic) {
+      return { model: { ...baseModel, reasoning: true }, reasoning };
+    }
+    // Registered but flagged unsupported (e.g. Claude 3/3.5): drop reasoning
+    // so pi-ai does not enable thinking on a model the API rejects it for.
+    return { model: baseModel };
+  }
+  return { model: baseModel, reasoning };
+}
 
 function parseAnthropicErrorPayload(
   responseBody: string,
@@ -57,6 +105,7 @@ export async function completeAnthropicText({
   context,
   temperature,
   maxOutputTokens,
+  reasoningEffort,
   signal,
   anthropicBaseUrlOverride,
 }: {
@@ -65,17 +114,20 @@ export async function completeAnthropicText({
   context: Context;
   temperature?: number;
   maxOutputTokens?: number;
+  reasoningEffort?: OpenAiReasoningEffort;
   signal: AbortSignal;
   anthropicBaseUrlOverride?: string | null;
 }): Promise<{ text: string; usage: LlmTokenUsage | null }> {
-  const model = resolveAnthropicModel({
+  const baseModel = resolveAnthropicModel({
     modelId,
     context,
     anthropicBaseUrlOverride,
   });
+  const { model, reasoning } = prepareAnthropicReasoning({ modelId, baseModel, reasoningEffort });
   const result = await completeSimple(model, context, {
     ...(typeof temperature === "number" ? { temperature } : {}),
     ...(typeof maxOutputTokens === "number" ? { maxTokens: maxOutputTokens } : {}),
+    ...(reasoning ? { reasoning } : {}),
     apiKey,
     signal,
   });

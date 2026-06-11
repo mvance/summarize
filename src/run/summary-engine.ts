@@ -5,8 +5,8 @@ import { isCliDisabled, runCliModel } from "../llm/cli.js";
 import { streamTextWithModelId } from "../llm/generate-text.js";
 import { resolveGitHubModelsApiKey } from "../llm/github-models.js";
 import { parseGatewayStyleModelId } from "../llm/model-id.js";
-import { mergeModelRequestOptions } from "../llm/model-options.js";
-import type { ModelRequestOptions } from "../llm/model-options.js";
+import { mergeRequestOptionsForProvider } from "../llm/model-options.js";
+import type { ModelRequestOptions, OpenAiReasoningEffort } from "../llm/model-options.js";
 import type { Prompt } from "../llm/prompt.js";
 import { formatCompactCount } from "../tty/format.js";
 import { createRetryLogger, writeVerbose } from "./logging.js";
@@ -39,6 +39,7 @@ export type SummaryEngineDeps = {
   openaiUseChatCompletions: boolean | undefined;
   openaiRequestOptions?: ModelRequestOptions;
   openaiRequestOptionsOverride?: ModelRequestOptions;
+  cliReasoningEffortOverride?: OpenAiReasoningEffort;
   cliConfigForRun: Parameters<typeof runCliModel>[0]["config"];
   cliAvailability: Partial<Record<CliProvider, boolean>>;
   trackedFetch: typeof fetch;
@@ -322,11 +323,13 @@ export function createSummaryEngine(deps: SummaryEngineDeps) {
       );
     }
     const parsedModelEffective = parseGatewayStyleModelId(modelResolution.modelId);
-    const requestOptions = mergeModelRequestOptions(
-      deps.openaiRequestOptions,
-      attempt.requestOptions,
-      deps.openaiRequestOptionsOverride,
-    );
+    const requestOptions = mergeRequestOptionsForProvider({
+      provider: parsedModelEffective.provider,
+      openaiGlobalDefault: deps.openaiRequestOptions,
+      attemptOptions: attempt.requestOptions,
+      openaiOverride: deps.openaiRequestOptionsOverride,
+      cliReasoningEffortOverride: deps.cliReasoningEffortOverride,
+    });
     const streamingEnabledForCall =
       allowStreaming &&
       deps.streamingEnabled &&
