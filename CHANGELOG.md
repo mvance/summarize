@@ -2,17 +2,24 @@
 
 ## 0.17.3 - Unreleased
 
+### Features
+
+- YouTube transcripts: include a timestamped public view count in structured extraction results and human transcript output, with a one-hour extraction cache window for mutable metrics.
+
 ### Fixes
 
 - Diarization: extract local video audio once before upload and reuse the compact mono MP3 across ElevenLabs/OpenAI fallbacks instead of sending the full video container.
-- YouTube diarization: download audio only unless slides are also requested; combined slide/diarization runs now fetch separate audio and video streams once and reuse the video for slide extraction.
+- YouTube diarization: download audio only unless slides are also requested; combined slide/diarization runs fetch separate audio and video streams once, reuse the video for slide extraction, and keep slide-only cache entries from replacing transcript audio.
+- ElevenLabs diarization: let the configured ten-minute transcription deadline govern long recordings instead of Undici’s hidden five-minute response-header timeout.
+- OpenAI diarization: split long recordings into bounded chunks with isolated speaker labels, timestamp offsets, rate-limit-aware retries, and automatic temporary-file cleanup.
+- Speaker identification: preserve fair bounded evidence for long or malformed diarization turns, use model-compatible OpenAI options, and keep usage-less paid calls from reporting a false `$0` estimate.
+- HTML extraction: normalize LinkeDOM HTML attribute names case-insensitively while preserving case-sensitive SVG and MathML attributes.
 
 ## 0.17.2 - 2026-06-11
 
 ### Features
 
 - CLI media: allow `--diarize` and speaker identification for local and direct audio/video inputs, including MP3 and MP4, instead of limiting speaker-labelled transcription to YouTube.
-- YouTube transcripts: include a timestamped public view count in structured extraction results and human transcript output, with a one-hour extraction cache window for mutable metrics.
 - YouTube transcripts: fall back to Android VR direct audio resolution and configured transcription when `yt-dlp` is missing or fails, while preserving explicit `--youtube yt-dlp` and diarization requirements.
 - Chrome extension: transcribe captionless YouTube videos without the daemon using active-player/watch-page or Android VR direct audio, captured SABR fallback, MediaBunny/WebCodecs, and browser-cached multilingual Whisper Tiny.
 - Chrome extension: transcribe fetchable direct and embedded media without the daemon using ranged MediaBunny/WebCodecs decoding, bounded audio chunks, and an idle-evictable browser Whisper runtime.
@@ -22,15 +29,11 @@
 - Chrome extension: cancel pending summary starts when switching tabs and recover from stalled WebGPU Whisper initialization with a bounded CPU fallback.
 - CLI: use the Codex runtime default model instead of pinning auto fallback to an obsolete model.
 - Daemon: defer cache shutdown until in-flight summary work drains, preventing late writes through finalized SQLite statements.
-- ElevenLabs diarization: let the configured ten-minute transcription deadline govern long recordings instead of Undici’s hidden five-minute response-header timeout.
-- OpenAI diarization: split long recordings into bounded chunks with isolated speaker labels, timestamp offsets, rate-limit-aware retries, and automatic temporary-file cleanup.
 - Dependencies: replace Ora, tslog, and the FAL SDK with focused local implementations while retaining spinner, daemon logging, retry, multipart upload, and FAL transcription behavior.
 - Chrome extension: replace the bundled browser FFmpeg WebAssembly runtime with MediaBunny and native WebCodecs, adding AV1 frame extraction while reducing the packaged extension size.
 - Chrome extension: avoid throttled offscreen canvas blob callbacks so MediaBunny slide JPEGs encode in milliseconds instead of roughly one second per frame.
 - YouTube media: prefer direct audio already exposed by the active player or watch page before requesting Android VR media, with resolver and browser decoder diagnostics in extension logs.
 - Extension tests: load the Firefox build through Mozilla `web-ext` in CI and run daily live YouTube resolver plus daemonless Chrome transcription checks.
-- Speaker identification: preserve fair bounded evidence for long or malformed diarization turns, use model-compatible OpenAI options, and keep usage-less paid calls from reporting a false `$0` estimate.
-- HTML extraction: normalize LinkeDOM HTML attribute names case-insensitively while preserving case-sensitive SVG and MathML attributes.
 
 ## 0.17.1 - 2026-06-11
 
