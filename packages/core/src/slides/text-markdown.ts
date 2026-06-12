@@ -340,9 +340,8 @@ export function extractSlideMarkers(markdown: string): number[] {
   let match = regex.exec(markdown);
   while (match) {
     const index = Number.parseInt(match[1] ?? "", 10);
-    if (!Number.isFinite(index) || index <= 0) continue;
-    indexes.push(index);
     match = regex.exec(markdown);
+    if (Number.isFinite(index) && index > 0) indexes.push(index);
   }
   return indexes;
 }

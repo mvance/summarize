@@ -5,6 +5,7 @@
 ### Fixes
 
 - Development CLI: build the core workspace before `pnpm summarize` and `pnpm s` so newly added core exports never depend on stale generated files.
+- Slides: ignore invalid zero-index slide markers without hanging while extracting slide references.
 - Summary length: use `long` as the built-in default across the CLI, daemon, and Chrome extension; explicit and configured lengths remain unchanged.
 
 ## 0.18.0 - 2026-06-12
