@@ -256,15 +256,6 @@ const slidesSession = createSlidesSessionStore({
   slidesLayout: defaultSettings.slidesLayout,
 });
 const slidesState = slidesSession.state;
-type PendingSummaryResult =
-  | { type: "run"; run: RunStart }
-  | { type: "snapshot"; run: RunStart; markdown: string };
-
-const pendingSummaryRunsByUrl = new Map<string, PendingSummaryResult>();
-const pendingSlidesRunsByUrl = new Map<
-  string,
-  { runId: string; url: string | null; local?: boolean }
->();
 let activeSlidesRunMeta: { runId: string; url: string | null; local: boolean } | null = null;
 let lastPlannedSlidesRun: RunStart | null = null;
 const slidesTextController = createSlidesTextController({
@@ -343,10 +334,10 @@ function resolveActiveSlidesRunId(): string | null {
 function maybeStartPendingSummaryRunForUrl(url: string | null) {
   if (!url) return false;
   const key = normalizePanelUrl(url);
-  const pending = pendingSummaryRunsByUrl.get(key);
+  const pending = panelState.pendingRuns.summaryByUrl[key];
   if (!pending) return false;
   if (streamController.isStreaming()) return false;
-  pendingSummaryRunsByUrl.delete(key);
+  panelStateStore.dispatch({ type: "pending-summary-run", urlKey: key, value: null });
   if (pending.type === "snapshot") {
     applySummarySnapshot({ run: pending.run, markdown: pending.markdown });
   } else {
@@ -358,13 +349,13 @@ function maybeStartPendingSummaryRunForUrl(url: string | null) {
 function maybeStartPendingSlidesForUrl(url: string | null) {
   if (!url) return;
   const key = normalizePanelUrl(url);
-  const pending = pendingSlidesRunsByUrl.get(key);
+  const pending = panelState.pendingRuns.slidesByUrl[key];
   if (!pending) return;
   if (!slidesState.slidesEnabled) return;
   const effectiveInputMode = slidesSession.resolveInputMode();
   if (effectiveInputMode !== "video") return;
   if (slidesHydrator.isStreaming()) return;
-  pendingSlidesRunsByUrl.delete(key);
+  panelStateStore.dispatch({ type: "pending-slides-run", urlKey: key, value: null });
   if (hasResolvedSlidesPayload(panelState.slides, slidesState.slidesSeededSourceId)) return;
   startSlidesStreamForRunId(pending.runId, { url: pending.url, local: Boolean(pending.local) });
   if (!pending.local) {
@@ -1497,7 +1488,11 @@ const bgMessageRuntime = createSidepanelBgMessageRuntime({
   getActiveTabUrl,
   rememberPendingSlidesRun: (value) => {
     if (!value.url) return;
-    pendingSlidesRunsByUrl.set(normalizePanelUrl(value.url), value);
+    panelStateStore.dispatch({
+      type: "pending-slides-run",
+      urlKey: normalizePanelUrl(value.url),
+      value,
+    });
   },
   startSlidesStreamForRunId,
   startSlidesSummaryStreamForRunId: (runId, url) => {
@@ -1530,13 +1525,21 @@ const bgMessageRuntime = createSidepanelBgMessageRuntime({
     applyPanelCache(cache as PanelCachePayload, opts);
   },
   rememberPendingSummaryRun: (run) => {
-    pendingSummaryRunsByUrl.set(normalizePanelUrl(run.url), { type: "run", run });
+    panelStateStore.dispatch({
+      type: "pending-summary-run",
+      urlKey: normalizePanelUrl(run.url),
+      value: { type: "run", run },
+    });
   },
   rememberPendingSummarySnapshot: (payload) => {
-    pendingSummaryRunsByUrl.set(normalizePanelUrl(payload.run.url), {
-      type: "snapshot",
-      run: payload.run,
-      markdown: payload.markdown,
+    panelStateStore.dispatch({
+      type: "pending-summary-run",
+      urlKey: normalizePanelUrl(payload.run.url),
+      value: {
+        type: "snapshot",
+        run: payload.run,
+        markdown: payload.markdown,
+      },
     });
   },
   attachSummaryRun,

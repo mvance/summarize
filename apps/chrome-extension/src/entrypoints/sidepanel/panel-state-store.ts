@@ -9,6 +9,16 @@ export type PanelStateAction =
       url: PanelState["navigation"]["activeTabUrl"];
     }
   | { type: "active-tab-url"; url: PanelState["navigation"]["activeTabUrl"] }
+  | {
+      type: "pending-summary-run";
+      urlKey: string;
+      value: PanelState["pendingRuns"]["summaryByUrl"][string] | null;
+    }
+  | {
+      type: "pending-slides-run";
+      urlKey: string;
+      value: PanelState["pendingRuns"]["slidesByUrl"][string] | null;
+    }
   | { type: "source"; source: PanelState["currentSource"] }
   | { type: "meta"; meta: PanelState["lastMeta"] }
   | { type: "summary"; markdown: string | null }
@@ -46,6 +56,10 @@ export function createInitialPanelState(): PanelState {
     },
     activeRun: {
       tabId: null,
+    },
+    pendingRuns: {
+      summaryByUrl: {},
+      slidesByUrl: {},
     },
     runId: null,
     slidesRunId: null,
@@ -85,6 +99,26 @@ export function reducePanelState(state: PanelState, action: PanelStateAction): P
         navigation: {
           ...state.navigation,
           activeTabUrl: action.url,
+        },
+      };
+    case "pending-summary-run":
+      return {
+        ...state,
+        pendingRuns: {
+          ...state.pendingRuns,
+          summaryByUrl: updateKeyedValue(
+            state.pendingRuns.summaryByUrl,
+            action.urlKey,
+            action.value,
+          ),
+        },
+      };
+    case "pending-slides-run":
+      return {
+        ...state,
+        pendingRuns: {
+          ...state.pendingRuns,
+          slidesByUrl: updateKeyedValue(state.pendingRuns.slidesByUrl, action.urlKey, action.value),
         },
       };
     case "source":
@@ -138,6 +172,18 @@ export function reducePanelState(state: PanelState, action: PanelStateAction): P
           : {}),
       };
   }
+}
+
+function updateKeyedValue<T>(
+  values: Record<string, T>,
+  key: string,
+  value: T | null,
+): Record<string, T> {
+  if (value !== null) return { ...values, [key]: value };
+  if (!Object.hasOwn(values, key)) return values;
+  const next = { ...values };
+  delete next[key];
+  return next;
 }
 
 export function applyPanelStateAction(state: PanelState, action: PanelStateAction): PanelState {

@@ -14,6 +14,10 @@ function createPanelState(): PanelState {
     activeRun: {
       tabId: null,
     },
+    pendingRuns: {
+      summaryByUrl: {},
+      slidesByUrl: {},
+    },
     runId: null,
     slidesRunId: null,
     currentSource: null,

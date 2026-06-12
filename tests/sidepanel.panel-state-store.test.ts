@@ -45,6 +45,40 @@ describe("sidepanel panel state store", () => {
     });
   });
 
+  it("queues and consumes deferred runs by normalized URL key", () => {
+    const store = createPanelStateStore();
+    const urlKey = "https://example.com/video";
+    const run = {
+      id: "run-1",
+      url: urlKey,
+      title: null,
+      model: "auto",
+      reason: "tab-activated",
+    } as const;
+
+    store.dispatch({
+      type: "pending-summary-run",
+      urlKey,
+      value: { type: "run", run },
+    });
+    store.dispatch({
+      type: "pending-slides-run",
+      urlKey,
+      value: { runId: "slides-1", url: urlKey, local: true },
+    });
+
+    expect(store.state.pendingRuns).toEqual({
+      summaryByUrl: { [urlKey]: { type: "run", run } },
+      slidesByUrl: {
+        [urlKey]: { runId: "slides-1", url: urlKey, local: true },
+      },
+    });
+
+    store.dispatch({ type: "pending-summary-run", urlKey, value: null });
+    store.dispatch({ type: "pending-slides-run", urlKey, value: null });
+    expect(store.state.pendingRuns).toEqual({ summaryByUrl: {}, slidesByUrl: {} });
+  });
+
   it("restores cached sessions without replacing omitted slides", () => {
     const store = createPanelStateStore();
     store.dispatch({

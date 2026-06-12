@@ -7,6 +7,16 @@ export type PanelPhase = "idle" | "setup" | "connecting" | "streaming" | "error"
 
 export type ChatMessage = Message & { id: string };
 
+export type PendingSummaryResult =
+  | { type: "run"; run: RunStart }
+  | { type: "snapshot"; run: RunStart; markdown: string };
+
+export type PendingSlidesRun = {
+  runId: string;
+  url: string | null;
+  local?: boolean;
+};
+
 export type PanelState = {
   ui: UiState | null;
   navigation: {
@@ -15,6 +25,10 @@ export type PanelState = {
   };
   activeRun: {
     tabId: number | null;
+  };
+  pendingRuns: {
+    summaryByUrl: Record<string, PendingSummaryResult>;
+    slidesByUrl: Record<string, PendingSlidesRun>;
   };
   runId: string | null;
   slidesRunId: string | null;
