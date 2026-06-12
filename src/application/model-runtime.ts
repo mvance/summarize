@@ -1,17 +1,43 @@
 import type { SummarizeConfig } from "../config.js";
+import type { SummaryStreamHandler } from "../engine/events.js";
 import { createModelExecutor, type ModelExecutorDeps } from "../engine/model-executor.js";
 import type { LengthArg } from "../flags.js";
 import { resolveProviderRuntimeBindings } from "../run/provider-runtime.js";
 import { resolveRunApiStatus } from "../run/run-api-status.js";
 import type { RunContextState } from "../run/run-context.js";
 import { createRunMetrics } from "../run/run-metrics.js";
-import { resolveModelSelection } from "../run/run-models.js";
+import { resolveModelSelection, type ModelSelection } from "../run/run-models.js";
 import { resolveDesiredOutputTokens } from "../run/run-output.js";
 
 type ModelExecutorRequestOptions = Pick<
   ModelExecutorDeps,
   "openaiRequestOptions" | "openaiRequestOptionsOverride" | "cliReasoningEffortOverride"
 >;
+
+export type RunModelSpec = ModelSelection & {
+  fixedModelSpec: Extract<ModelSelection["requestedModel"], { kind: "fixed" }> | null;
+  desiredOutputTokens: number | null;
+};
+
+export type RunModelRuntime = {
+  metrics: ReturnType<typeof createRunMetrics>;
+  apiStatus: ReturnType<typeof resolveRunApiStatus>;
+  summaryEngine: ReturnType<typeof createModelExecutor>;
+};
+
+export type ExecutableRunModel = RunModelSpec &
+  ModelExecutorRequestOptions & {
+    allowAutoCliFallback: boolean;
+    envForAuto: RunContextState["envForAuto"];
+    cliAvailability: RunContextState["cliAvailability"];
+    openaiUseChatCompletions: RunContextState["openaiUseChatCompletions"];
+    openaiWhisperUsdPerMinute: RunContextState["openaiWhisperUsdPerMinute"];
+    apiStatus: RunModelRuntime["apiStatus"];
+    summaryEngine: RunModelRuntime["summaryEngine"];
+    summaryStream: SummaryStreamHandler | null;
+    getLiteLlmCatalog: RunModelRuntime["metrics"]["getLiteLlmCatalog"];
+    llmCalls: RunModelRuntime["metrics"]["llmCalls"];
+  };
 
 export function resolveRunModelSpec({
   context,
@@ -27,7 +53,7 @@ export function resolveRunModelSpec({
   configForSelection: SummarizeConfig | null;
   lengthArg: LengthArg;
   maxOutputTokensArg: number | null;
-}) {
+}): RunModelSpec {
   const selection = resolveModelSelection({
     config: context.config,
     configForCli: configForSelection,
@@ -73,7 +99,7 @@ export function createRunModelRuntime({
   requestOptions?: ModelExecutorRequestOptions;
   log?: ModelExecutorDeps["log"];
   trace?: ModelExecutorDeps["trace"];
-}) {
+}): RunModelRuntime {
   const metrics = createRunMetrics({
     env: metricsEnv,
     fetchImpl,
@@ -109,5 +135,36 @@ export function createRunModelRuntime({
     metrics,
     apiStatus,
     summaryEngine,
+  };
+}
+
+export function createExecutableRunModel({
+  spec,
+  runtime,
+  context,
+  allowAutoCliFallback,
+  summaryStream,
+  requestOptions = {},
+}: {
+  spec: RunModelSpec;
+  runtime: RunModelRuntime;
+  context: RunContextState;
+  allowAutoCliFallback: boolean;
+  summaryStream: SummaryStreamHandler | null;
+  requestOptions?: ModelExecutorRequestOptions;
+}): ExecutableRunModel {
+  return {
+    ...spec,
+    allowAutoCliFallback,
+    envForAuto: context.envForAuto,
+    cliAvailability: context.cliAvailability,
+    openaiUseChatCompletions: context.openaiUseChatCompletions,
+    openaiWhisperUsdPerMinute: context.openaiWhisperUsdPerMinute,
+    ...requestOptions,
+    apiStatus: runtime.apiStatus,
+    summaryEngine: runtime.summaryEngine,
+    summaryStream,
+    getLiteLlmCatalog: runtime.metrics.getLiteLlmCatalog,
+    llmCalls: runtime.metrics.llmCalls,
   };
 }

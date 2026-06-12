@@ -1,5 +1,9 @@
 import { Writable } from "node:stream";
-import { createRunModelRuntime, resolveRunModelSpec } from "../application/model-runtime.js";
+import {
+  createExecutableRunModel,
+  createRunModelRuntime,
+  resolveRunModelSpec,
+} from "../application/model-runtime.js";
 import type { CacheState } from "../cache.js";
 import type { SummarizeConfig } from "../config.js";
 import type {
@@ -177,14 +181,10 @@ export function createDaemonUrlFlowContext(args: DaemonUrlFlowContextArgs): UrlF
     config,
     configPath,
     outputLanguage: outputLanguageFromConfig,
-    openaiWhisperUsdPerMinute,
     videoMode,
     embeddedVideoMode,
     configForCli,
-    openaiUseChatCompletions,
     configModelLabel,
-    cliAvailability,
-    envForAuto,
   } = runContext;
   const configForCliWithMagic = applyAutoCliFallbackOverrides(configForCli, resolvedOverrides);
   const allowAutoCliFallback = resolvedOverrides.autoCliFallbackEnabled === true;
@@ -198,19 +198,6 @@ export function createDaemonUrlFlowContext(args: DaemonUrlFlowContextArgs): UrlF
     lengthArg,
     maxOutputTokensArg,
   });
-  const {
-    requestedModel,
-    requestedModelInput,
-    requestedModelLabel,
-    isNamedModelSelection,
-    isImplicitAutoSelection,
-    wantsFreeNamedModel,
-    configForModelSelection,
-    isFallbackModel,
-    fixedModelSpec,
-    desiredOutputTokens,
-  } = modelSpec;
-
   const stdout = createWritableFromTextSink(stdoutSink);
   const stderr = process.stderr;
 
@@ -234,8 +221,15 @@ export function createDaemonUrlFlowContext(args: DaemonUrlFlowContextArgs): UrlF
     retries,
     streamingEnabled: true,
   });
-  const { apiStatus, summaryEngine, metrics } = modelRuntime;
+  const { metrics } = modelRuntime;
   const summaryStream = createDaemonSummaryStreamHandler(stdoutSink);
+  const model = createExecutableRunModel({
+    spec: modelSpec,
+    runtime: modelRuntime,
+    context: runContext,
+    allowAutoCliFallback,
+    summaryStream,
+  });
 
   const outputLanguage = resolveOutputLanguageSetting({
     raw: languageRaw,
@@ -300,28 +294,6 @@ export function createDaemonUrlFlowContext(args: DaemonUrlFlowContextArgs): UrlF
     slides: slides ?? null,
     slidesDebug: false,
     slidesOutput: false,
-  };
-  const model: UrlFlowContext["model"] = {
-    requestedModel,
-    requestedModelInput,
-    requestedModelLabel,
-    fixedModelSpec,
-    isFallbackModel,
-    isImplicitAutoSelection,
-    allowAutoCliFallback,
-    isNamedModelSelection,
-    wantsFreeNamedModel,
-    desiredOutputTokens,
-    configForModelSelection,
-    envForAuto,
-    cliAvailability,
-    openaiUseChatCompletions,
-    openaiWhisperUsdPerMinute,
-    apiStatus,
-    summaryEngine,
-    summaryStream,
-    getLiteLlmCatalog: metrics.getLiteLlmCatalog,
-    llmCalls: metrics.llmCalls,
   };
   const runtimeHooks = {
     setTranscriptionCost: metrics.setTranscriptionCost,

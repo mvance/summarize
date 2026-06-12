@@ -1,20 +1,15 @@
 import type { SummaryLength } from "@steipete/summarize-core";
+import type { ExecutableRunModel } from "../../../application/model-runtime.js";
 import type { CacheState } from "../../../cache.js";
-import type { CliProvider, SummarizeConfig } from "../../../config.js";
 import type {
   ExtractedLinkContent,
   LinkPreviewProgressEvent,
   MediaCache,
 } from "../../../content/index.js";
-import type { LlmCall, RunMetricsReport } from "../../../costs.js";
-import type { SummaryStreamHandler } from "../../../engine/events.js";
-import type { createModelExecutor } from "../../../engine/model-executor.js";
+import type { RunMetricsReport } from "../../../costs.js";
 import type { StreamMode } from "../../../flags.js";
 import type { OutputLanguage } from "../../../language.js";
-import type { ModelRequestOptions, OpenAiReasoningEffort } from "../../../llm/model-options.js";
 import type { ExecFileFn } from "../../../markitdown.js";
-import type { FixedModelSpec, RequestedModel } from "../../../model-spec.js";
-import type { RunApiStatus } from "../../../shared/run-api-status.js";
 import type {
   SlideExtractionResult,
   SlideImage,
@@ -77,33 +72,7 @@ export type UrlFlowFlags = {
   throwOnAssetLikeHtmlError?: boolean;
 };
 
-export type UrlFlowModel = {
-  requestedModel: RequestedModel;
-  requestedModelInput: string;
-  requestedModelLabel: string;
-  fixedModelSpec: FixedModelSpec | null;
-  isFallbackModel: boolean;
-  isImplicitAutoSelection: boolean;
-  allowAutoCliFallback: boolean;
-  isNamedModelSelection: boolean;
-  wantsFreeNamedModel: boolean;
-  desiredOutputTokens: number | null;
-  configForModelSelection: SummarizeConfig | null;
-  envForAuto: Record<string, string | undefined>;
-  cliAvailability: Partial<Record<CliProvider, boolean>>;
-  openaiUseChatCompletions: boolean | undefined;
-  openaiRequestOptions?: ModelRequestOptions;
-  openaiRequestOptionsOverride?: ModelRequestOptions;
-  cliReasoningEffortOverride?: OpenAiReasoningEffort;
-  openaiWhisperUsdPerMinute: number;
-  apiStatus: RunApiStatus;
-  summaryEngine: ReturnType<typeof createModelExecutor>;
-  summaryStream: SummaryStreamHandler | null;
-  getLiteLlmCatalog: () => Promise<
-    Awaited<ReturnType<typeof import("../../../pricing/litellm.js").loadLiteLlmCatalog>>["catalog"]
-  >;
-  llmCalls: LlmCall[];
-};
+export type UrlFlowModel = ExecutableRunModel;
 
 export type UrlFlowHooks = {
   onModelChosen?: ((modelId: string) => void) | null;

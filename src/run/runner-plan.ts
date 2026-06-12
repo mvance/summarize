@@ -1,5 +1,9 @@
 import type { Command } from "commander";
-import { createRunModelRuntime, resolveRunModelSpec } from "../application/model-runtime.js";
+import {
+  createExecutableRunModel,
+  createRunModelRuntime,
+  resolveRunModelSpec,
+} from "../application/model-runtime.js";
 import { type CacheState } from "../cache.js";
 import type { ExecFileFn } from "../markitdown.js";
 import { scopeTranscriptCacheForDiarization } from "../shared/transcript-diarization-cache-scope.js";
@@ -155,17 +159,13 @@ export async function createRunnerPlan(options: {
     config,
     configPath,
     outputLanguage,
-    openaiWhisperUsdPerMinute,
     videoMode,
     embeddedVideoMode,
     configForCli,
-    openaiUseChatCompletions,
     openaiRequestOptions,
     openaiRequestOptionsOverride,
     cliReasoningEffortOverride,
     configModelLabel,
-    cliAvailability,
-    envForAuto,
   } = runContext;
   perfTrace?.mark("plan:context");
 
@@ -255,19 +255,6 @@ export async function createRunnerPlan(options: {
     lengthArg,
     maxOutputTokensArg,
   });
-  const {
-    requestedModel,
-    requestedModelInput,
-    requestedModelLabel,
-    isNamedModelSelection,
-    isImplicitAutoSelection,
-    wantsFreeNamedModel,
-    configForModelSelection,
-    isFallbackModel,
-    fixedModelSpec,
-    desiredOutputTokens,
-  } = modelSpec;
-
   const verboseColor = supportsColor(stderr, envForRun);
   const themeForStderr = createThemeRenderer({
     themeName,
@@ -329,15 +316,8 @@ export async function createRunnerPlan(options: {
     log: (message) => writeVerbose(stderr, verbose, message, verboseColor, envForRun),
     trace: (name, detail) => perfTrace?.mark(name, detail),
   });
-  const { apiStatus, summaryEngine, metrics } = modelRuntime;
-  const {
-    llmCalls,
-    trackedFetch,
-    buildReport,
-    estimateCostUsd,
-    getLiteLlmCatalog,
-    setTranscriptionCost,
-  } = metrics;
+  const { apiStatus, metrics } = modelRuntime;
+  const { trackedFetch, buildReport, estimateCostUsd, setTranscriptionCost } = metrics;
   const summaryStream = streamingEnabled
     ? createTerminalSummaryStream({
         stdout,
@@ -348,6 +328,18 @@ export async function createRunnerPlan(options: {
         restoreProgressAfterStdout,
       })
     : null;
+  const model = createExecutableRunModel({
+    spec: modelSpec,
+    runtime: modelRuntime,
+    context: runContext,
+    allowAutoCliFallback: false,
+    summaryStream,
+    requestOptions: {
+      openaiRequestOptions,
+      openaiRequestOptionsOverride,
+      cliReasoningEffortOverride,
+    },
+  });
 
   const writeViaFooter = (parts: string[]) => {
     if (json || extractMode) return;
@@ -420,31 +412,7 @@ export async function createRunnerPlan(options: {
       slidesOutput: true,
       throwOnAssetLikeHtmlError: true,
     },
-    model: {
-      requestedModel,
-      requestedModelInput,
-      requestedModelLabel,
-      fixedModelSpec,
-      isFallbackModel,
-      isImplicitAutoSelection,
-      allowAutoCliFallback: false,
-      isNamedModelSelection,
-      wantsFreeNamedModel,
-      desiredOutputTokens,
-      configForModelSelection,
-      envForAuto,
-      cliAvailability,
-      openaiUseChatCompletions,
-      openaiRequestOptions,
-      openaiRequestOptionsOverride,
-      cliReasoningEffortOverride,
-      openaiWhisperUsdPerMinute,
-      apiStatus,
-      summaryEngine,
-      summaryStream,
-      getLiteLlmCatalog,
-      llmCalls,
-    },
+    model,
     runtimeHooks,
     perfTrace,
   });

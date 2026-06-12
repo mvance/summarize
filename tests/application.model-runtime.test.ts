@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { createRunModelRuntime, resolveRunModelSpec } from "../src/application/model-runtime.js";
+import {
+  createExecutableRunModel,
+  createRunModelRuntime,
+  resolveRunModelSpec,
+} from "../src/application/model-runtime.js";
 import { resolveRunContextState } from "../src/run/run-context.js";
 
 describe("application model runtime", () => {
@@ -46,5 +50,18 @@ describe("application model runtime", () => {
     expect(runtime.apiStatus.apiKey).toBe("openai-key");
     expect(runtime.summaryEngine.envHasKeyFor("OPENAI_API_KEY")).toBe(true);
     expect(runtime.metrics.llmCalls).toEqual([]);
+
+    const executable = createExecutableRunModel({
+      spec,
+      runtime,
+      context,
+      allowAutoCliFallback: true,
+      summaryStream: null,
+    });
+    expect(executable.requestedModel).toBe(spec.requestedModel);
+    expect(executable.allowAutoCliFallback).toBe(true);
+    expect(executable.apiStatus).toBe(runtime.apiStatus);
+    expect(executable.summaryEngine).toBe(runtime.summaryEngine);
+    expect(executable.llmCalls).toBe(runtime.metrics.llmCalls);
   });
 });
