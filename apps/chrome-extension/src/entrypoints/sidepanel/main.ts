@@ -1,6 +1,5 @@
-import type { Message, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
+import type { Message } from "@earendil-works/pi-ai";
 import MarkdownIt from "markdown-it";
-import { executeToolCall, getAutomationToolNames } from "../../automation/tools";
 import type { BgToPanel, PanelToBg } from "../../lib/panel-contracts";
 import type { SseSlidesData } from "../../lib/runtime-contracts";
 import {
@@ -12,17 +11,13 @@ import {
 import { splitSummaryFromSlides } from "../../lib/slides-text";
 import { generateToken } from "../../lib/token";
 import { createAppearanceControls } from "./appearance-controls";
+import { createAutomationRuntime } from "./automation-runtime";
 import { createSidepanelBgMessageRuntime } from "./bg-message-runtime";
 import { bindSidepanelUiEvents } from "./bindings";
 import { bootstrapSidepanel } from "./bootstrap-runtime";
-import { runChatAgentLoop } from "./chat-agent-loop";
 import { ChatController } from "./chat-controller";
 import { createChatHistoryRuntime } from "./chat-history-runtime";
-import {
-  buildEmptyUsage,
-  createChatHistoryStore,
-  normalizeStoredMessage,
-} from "./chat-history-store";
+import { createChatHistoryStore, normalizeStoredMessage } from "./chat-history-store";
 import { createChatQueueRuntime } from "./chat-queue-runtime";
 import { createChatSession } from "./chat-session";
 import { type ChatHistoryLimits } from "./chat-state";
@@ -241,14 +236,6 @@ const chatHistoryRuntime = createChatHistoryRuntime({
   getActiveUrl: getActiveTabUrl,
 });
 
-type AutomationNoticeAction = "extensions" | "options";
-
-function hideAutomationNotice(opts?: { force?: boolean }) {
-  if (getPanelSession().automationNoticeSticky && !opts?.force) return;
-  updatePanelSession({ automationNoticeSticky: false });
-  automationNoticeEl.classList.add("hidden");
-}
-
 function showSlideNotice(message: string, opts?: { allowRetry?: boolean }) {
   slideNoticeMessageEl.textContent = message;
   slideNoticeRetryBtn.hidden = !opts?.allowRetry;
@@ -271,92 +258,29 @@ function setSlidesTranscriptTimedText(value: string | null) {
   slidesTextController.setTranscriptTimedText(value);
 }
 
-function showAutomationNotice({
-  title,
-  message,
-  ctaLabel,
-  ctaAction,
-  sticky,
-}: {
-  title: string;
-  message: string;
-  ctaLabel?: string;
-  ctaAction?: AutomationNoticeAction;
-  sticky?: boolean;
-}) {
-  updatePanelSession({ automationNoticeSticky: Boolean(sticky) });
-  automationNoticeTitleEl.textContent = title;
-  automationNoticeMessageEl.textContent = message;
-  automationNoticeActionBtn.textContent = ctaLabel || "Open extension details";
-  automationNoticeActionBtn.onclick = () => {
-    if (ctaAction === "options") {
-      void chrome.runtime.openOptionsPage();
-      return;
-    }
-    void chrome.tabs.create({ url: `chrome://extensions/?id=${chrome.runtime.id}` });
-  };
-  automationNoticeEl.classList.remove("hidden");
-}
-
-window.addEventListener("summarize:automation-permissions", (event) => {
-  const detail = (
-    event as CustomEvent<{
-      title?: string;
-      message?: string;
-      ctaLabel?: string;
-      ctaAction?: AutomationNoticeAction;
-    }>
-  ).detail;
-  if (!detail?.message) return;
-  showAutomationNotice({
-    title: detail.title ?? "Automation permission required",
-    message: detail.message,
-    ctaLabel: detail.ctaLabel,
-    ctaAction: detail.ctaAction,
-    sticky: true,
-  });
-});
-
-async function hideReplOverlayForActiveTab() {
-  const activeTabId = getActiveTabId();
-  if (!activeTabId) return;
-  try {
-    await chrome.tabs.sendMessage(activeTabId, {
-      type: "automation:repl-overlay",
-      action: "hide",
-      message: null,
-    });
-  } catch {
-    // ignore
-  }
-}
-
-function requestAgentAbort(reason: string) {
-  chatSession.requestAbort(reason);
-}
-
 function wrapMessage(message: Message): ChatMessage {
   return { ...message, id: crypto.randomUUID() };
 }
 
-function buildStreamingAssistantMessage(): ChatMessage {
-  return {
-    id: crypto.randomUUID(),
-    role: "assistant",
-    content: [],
-    api: "openai-completions",
-    provider: "openai",
-    model: "streaming",
-    usage: buildEmptyUsage(),
-    stopReason: "stop",
-    timestamp: Date.now(),
-  };
-}
-
 const chatSession = createChatSession({
-  hideReplOverlay: hideReplOverlayForActiveTab,
+  hideReplOverlay: () => automationRuntime.hideReplOverlayForActiveTab(),
   send: async (message) => send(message),
   setStatus: (text) => headerController.setStatus(text),
+});
+
+const automationRuntime = createAutomationRuntime({
+  panelState,
+  dispatchPanelState: panelStateStore.dispatch,
+  automationNoticeActionBtn,
+  automationNoticeEl,
+  automationNoticeMessageEl,
+  automationNoticeTitleEl,
+  chatController,
+  getActiveTabId,
+  getChatSession: () => chatSession,
+  getNavigationRuntime: () => navigationRuntime,
+  scrollToBottom,
+  wrapMessage,
 });
 
 chatMessagesEl.addEventListener("click", (event) => {
@@ -489,16 +413,6 @@ const setPhase = (phase: PanelPhase, opts?: { error?: string | null }) => {
   }
 };
 
-chrome.runtime.onMessage.addListener((raw, _sender, sendResponse) => {
-  if (!raw || typeof raw !== "object") return;
-  const type = (raw as { type?: string }).type;
-  if (type === "automation:abort-agent") {
-    requestAgentAbort("Agent aborted");
-    sendResponse?.({ ok: true });
-    return true;
-  }
-});
-
 const navigationRuntime = createNavigationRuntime({
   getCurrentSource: () => panelState.currentSource,
   setCurrentSource: (source) => {
@@ -530,7 +444,7 @@ const syncWithActiveTab = () => navigationRuntime.syncWithActiveTab();
 async function clearCurrentView() {
   panelStateStore.dispatch({ type: "retained-slide-summary", value: null });
   if (panelState.chat.streaming) {
-    requestAgentAbort("Cleared");
+    automationRuntime.requestAbort("Cleared");
   }
   streamController.abort();
   stopSlidesStream();
@@ -1049,7 +963,7 @@ const uiStateRuntime = createUiStateRuntime({
   clearInlineError: () => {
     errorController.clearInlineError();
   },
-  requestAgentAbort,
+  requestAgentAbort: automationRuntime.requestAbort,
   clearChatHistoryForActiveTab,
   resetChatState,
   migrateChatHistory,
@@ -1064,7 +978,7 @@ const uiStateRuntime = createUiStateRuntime({
   abortSummaryStream: () => {
     streamController.abort();
   },
-  hideAutomationNotice,
+  hideAutomationNotice: automationRuntime.hideNotice,
   hideSlideNotice,
   maybeApplyPendingSlidesSummary,
   applyChatEnabled,
@@ -1265,40 +1179,6 @@ summarizeControlRuntime = createSummarizeControlRuntime({
   },
 });
 
-function describeAutomationToolCall(call: ToolCall): string {
-  const args = call.arguments ? JSON.stringify(call.arguments, null, 2) : "{}";
-  return `${call.name}\n\n${args}`;
-}
-
-async function confirmAutomationToolCall(call: ToolCall): Promise<boolean> {
-  return window.confirm(
-    [
-      "Summarize agent wants to run an automation tool.",
-      "Only approve this if you expected the current task to control the browser or extension automation.",
-      "",
-      describeAutomationToolCall(call),
-    ].join("\n"),
-  );
-}
-
-async function runAgentLoop() {
-  await runChatAgentLoop({
-    automationEnabled: getPanelSession().automationEnabled,
-    chatController,
-    chatSession,
-    confirmToolCall: confirmAutomationToolCall,
-    createStreamingAssistantMessage: buildStreamingAssistantMessage,
-    executeToolCall: async (call) => (await executeToolCall(call)) as ToolResultMessage,
-    getAutomationToolNames,
-    hasDebuggerPermission: () => chrome.permissions.contains({ permissions: ["debugger"] }),
-    markAgentNavigationIntent: navigationRuntime.markAgentNavigationIntent,
-    markAgentNavigationResult: navigationRuntime.markAgentNavigationResult,
-    scrollToBottom,
-    summaryMarkdown: panelState.summaryMarkdown,
-    wrapMessage,
-  });
-}
-
 const chatStreamRuntime = createChatStreamRuntime({
   chatEnabled: () => getPanelSession().chatEnabled,
   isChatStreaming: () => panelState.chat.streaming,
@@ -1335,7 +1215,7 @@ const chatStreamRuntime = createChatStreamRuntime({
   showInlineError: (message) => {
     errorController.showInlineError(message);
   },
-  executeAgentLoop: runAgentLoop,
+  executeAgentLoop: automationRuntime.runAgentLoop,
 });
 
 function retryLastAction() {
@@ -1391,9 +1271,7 @@ bootstrapSidepanel({
   setSlidesLayoutInputValue: (value) => {
     slidesLayoutEl.value = value;
   },
-  hideAutomationNotice: () => {
-    hideAutomationNotice();
-  },
+  hideAutomationNotice: automationRuntime.hideNotice,
   appearanceControls,
   applyChatEnabled,
   applySlidesLayout,
