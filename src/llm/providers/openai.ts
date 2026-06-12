@@ -2,7 +2,6 @@ import type { Context } from "@earendil-works/pi-ai";
 import { completeSimple } from "@earendil-works/pi-ai";
 import type { Attachment } from "../attachments.js";
 import { createUnsupportedFunctionalityError } from "../errors.js";
-import { toOpenAiServiceTierParam, type ModelRequestOptions } from "../model-options.js";
 export {
   resolveOpenAiClientConfig,
   type OpenAiClientConfigInput,
@@ -10,129 +9,31 @@ export {
 import type { LlmTokenUsage } from "../types.js";
 import { normalizeOpenAiUsage, normalizeTokenUsage } from "../usage.js";
 import { resolveOpenAiModel } from "./models.js";
+import {
+  buildOpenAiChatRequestOptions,
+  buildOpenAiResponsesRequestOptions,
+  isOpenAiResponsesTextModelId,
+} from "./openai/request-options.js";
+import { createDeferredUsage, parseOpenAiSseJsonStream } from "./openai/sse.js";
+import {
+  buildOpenAiRequestHeaders,
+  contextToChatCompletionMessages,
+  contextToResponsesInput,
+  createOpenAiHttpError,
+  isApiOpenAiBaseUrl,
+  isGitHubModelsBaseUrl,
+  resolveOpenAiChatCompletionsUrl,
+  resolveOpenAiResponsesUrl,
+} from "./openai/transport.js";
+import type {
+  OpenAiStructuredOutput,
+  OpenAiTextCompletionResult,
+  OpenAiTextStreamResult,
+} from "./openai/types.js";
 import { bytesToBase64 } from "./shared.js";
 import type { OpenAiClientConfig } from "./types.js";
 
-type OpenAiTextCompletionResult = {
-  text: string;
-  usage: LlmTokenUsage | null;
-  resolvedModelId?: string;
-};
-
-type OpenAiTextStreamResult = {
-  textStream: AsyncIterable<string>;
-  usage: Promise<LlmTokenUsage | null>;
-  resolvedModelId?: string;
-};
-
-export type OpenAiStructuredOutput = {
-  name: string;
-  schema: Record<string, unknown>;
-};
-
-function isGitHubModelsBaseUrl(baseUrl: string | undefined): boolean {
-  if (!baseUrl) return false;
-  try {
-    return new URL(baseUrl).host === "models.github.ai";
-  } catch {
-    return false;
-  }
-}
-
-function isApiOpenAiBaseUrl(baseUrl: string | undefined): boolean {
-  if (!baseUrl) return true;
-  try {
-    return new URL(baseUrl).host === "api.openai.com";
-  } catch {
-    return false;
-  }
-}
-
-function resolveOpenAiResponsesUrl(baseUrl: string): URL {
-  const url = new URL(baseUrl);
-  const path = url.pathname.replace(/\/$/, "");
-  if (/\/responses$/.test(path)) {
-    url.pathname = path;
-    return url;
-  }
-  if (/\/v1$/.test(path)) {
-    url.pathname = `${path}/responses`;
-    return url;
-  }
-  url.pathname = `${path}/v1/responses`;
-  return url;
-}
-
-function resolveOpenAiChatCompletionsUrl(baseUrl: string): URL {
-  const url = new URL(baseUrl);
-  const path = url.pathname.replace(/\/$/, "");
-  if (url.host === "models.github.ai") {
-    if (/\/chat\/completions$/.test(path)) {
-      url.pathname = path;
-      return url;
-    }
-    url.pathname = `${path}/chat/completions`;
-    return url;
-  }
-  if (/\/chat\/completions$/.test(path)) {
-    url.pathname = path;
-    return url;
-  }
-  if (/\/v1$/.test(path)) {
-    url.pathname = `${path}/chat/completions`;
-    return url;
-  }
-  url.pathname = `${path}/v1/chat/completions`;
-  return url;
-}
-
-function stripOpenAiProviderPrefix(modelId: string): string {
-  return modelId.trim().replace(/^openai\//i, "");
-}
-
-function isOpenAiResponsesTextModelId(modelId: string): boolean {
-  const normalized = stripOpenAiProviderPrefix(modelId).toLowerCase();
-  return normalized.startsWith("gpt-5") && normalized !== "gpt-5-chat";
-}
-
-function buildOpenAiResponsesRequestOptions(
-  requestOptions: ModelRequestOptions | undefined,
-  structuredOutput?: OpenAiStructuredOutput,
-): Record<string, unknown> {
-  const serviceTier = toOpenAiServiceTierParam(requestOptions?.serviceTier);
-  const text = {
-    ...(requestOptions?.textVerbosity ? { verbosity: requestOptions.textVerbosity } : {}),
-    ...(structuredOutput
-      ? {
-          format: {
-            type: "json_schema",
-            name: structuredOutput.name,
-            strict: true,
-            schema: structuredOutput.schema,
-          },
-        }
-      : {}),
-  };
-  return {
-    ...(serviceTier ? { service_tier: serviceTier } : {}),
-    ...(requestOptions?.reasoningEffort
-      ? { reasoning: { effort: requestOptions.reasoningEffort } }
-      : {}),
-    ...(Object.keys(text).length > 0 ? { text } : {}),
-  };
-}
-
-function buildOpenAiChatRequestOptions(
-  requestOptions: ModelRequestOptions | undefined,
-): Record<string, unknown> {
-  if (!requestOptions) return {};
-  const serviceTier = toOpenAiServiceTierParam(requestOptions.serviceTier);
-  return {
-    ...(serviceTier ? { service_tier: serviceTier } : {}),
-    ...(requestOptions.reasoningEffort ? { reasoning_effort: requestOptions.reasoningEffort } : {}),
-    ...(requestOptions.textVerbosity ? { verbosity: requestOptions.textVerbosity } : {}),
-  };
-}
+export type { OpenAiStructuredOutput } from "./openai/types.js";
 
 function resolveGitHubModelsCompatFallbackModelId(modelId: string): string | null {
   const normalized = modelId.trim().toLowerCase();
@@ -192,133 +93,6 @@ function extractOpenAiResponsesStreamUsage(payload: Record<string, unknown>): Ll
       ? (response as Record<string, unknown>).usage
       : payload.usage;
   return normalizeOpenAiUsage(usage);
-}
-
-async function* parseOpenAiSseJsonStream(
-  body: ReadableStream<Uint8Array>,
-): AsyncGenerator<Record<string, unknown>> {
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let currentData = "";
-
-  const flush = (): Record<string, unknown> | null => {
-    const data = currentData.trim();
-    currentData = "";
-    if (!data || data === "[DONE]") return null;
-    const parsed = JSON.parse(data);
-    return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : null;
-  };
-
-  const processLine = (line: string): Record<string, unknown> | null => {
-    if (line === "") return flush();
-    if (line.startsWith(":")) return null;
-    if (line.startsWith("data:")) {
-      currentData += `${line.slice("data:".length).trimStart()}\n`;
-    }
-    return null;
-  };
-
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-
-    while (true) {
-      const idx = buffer.indexOf("\n");
-      if (idx === -1) break;
-      const rawLine = buffer.slice(0, idx);
-      buffer = buffer.slice(idx + 1);
-      const event = processLine(rawLine.replace(/\r$/, ""));
-      if (event) yield event;
-    }
-  }
-
-  buffer += decoder.decode();
-  if (buffer) {
-    const event = processLine(buffer.replace(/\r$/, ""));
-    if (event) yield event;
-  }
-  const event = flush();
-  if (event) yield event;
-}
-
-function createDeferredUsage() {
-  let resolve: (value: LlmTokenUsage | null) => void = () => {};
-  const promise = new Promise<LlmTokenUsage | null>((nextResolve) => {
-    resolve = nextResolve;
-  });
-  return { promise, resolve };
-}
-
-function contextToChatCompletionMessages(
-  context: Context,
-): Array<{ role: string; content: string }> {
-  const messages: Array<{ role: string; content: string }> = [];
-  const systemPrompt = context.systemPrompt?.trim();
-  if (systemPrompt) {
-    messages.push({ role: "system", content: systemPrompt });
-  }
-  for (const message of context.messages) {
-    const content =
-      typeof message.content === "string"
-        ? message.content.trim()
-        : Array.isArray(message.content)
-          ? message.content
-              .map((part) => (part.type === "text" ? part.text : ""))
-              .join("")
-              .trim()
-          : "";
-    if (!content) continue;
-    messages.push({ role: message.role, content });
-  }
-  return messages;
-}
-
-function contextToResponsesInput(context: Context): Array<{
-  role: string;
-  content: Array<{ type: "input_text"; text: string }>;
-}> {
-  return contextToChatCompletionMessages({
-    systemPrompt: undefined,
-    messages: context.messages,
-  }).map((message) => ({
-    role: message.role,
-    content: [{ type: "input_text", text: message.content }],
-  }));
-}
-
-function buildOpenAiRequestHeaders(openaiConfig: OpenAiClientConfig): Record<string, string> {
-  return {
-    "content-type": "application/json",
-    authorization: `Bearer ${openaiConfig.apiKey}`,
-    ...(openaiConfig.isOpenRouter
-      ? {
-          "HTTP-Referer": "https://github.com/steipete/summarize",
-          "X-Title": "summarize",
-        }
-      : {}),
-    ...(openaiConfig.extraHeaders ?? {}),
-  };
-}
-
-function createOpenAiHttpError({
-  baseUrl,
-  status,
-  bodyText,
-}: {
-  baseUrl: string;
-  status: number;
-  bodyText: string;
-}): Error {
-  const message =
-    isGitHubModelsBaseUrl(baseUrl) && status === 429
-      ? "GitHub Models rate limit exceeded (429). Try again later or use another model/token."
-      : `OpenAI API error (${status}).`;
-  const error = new Error(message);
-  (error as { statusCode?: number }).statusCode = status;
-  (error as { responseBody?: string }).responseBody = bodyText;
-  return error;
 }
 
 async function completeOpenAiChatText({
