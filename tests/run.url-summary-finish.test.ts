@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { ExtractedLinkContent } from "../src/content/index.js";
+import type { ModelAttempt } from "../src/engine/types.js";
 import {
   buildFinishExtras,
   buildModelMetaFromAttempt,
   pickModelForFinishLine,
 } from "../src/run/flows/url/summary-finish.js";
-import type { ModelAttempt } from "../src/run/types.js";
 
 const baseExtracted: ExtractedLinkContent = {
   url: "https://example.com",

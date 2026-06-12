@@ -1,3 +1,4 @@
+import { buildUrlPrompt } from "../../../engine/web-prompt.js";
 import { type SlideExtractionResult } from "../../../slides/index.js";
 import {
   createThemeRenderer,
@@ -19,7 +20,7 @@ import { createUrlExtractionSession } from "./extraction-session.js";
 import { createUrlFlowProgress, writeSlidesBackgroundFailureWarning } from "./flow-progress.js";
 import { createMarkdownConverters } from "./markdown.js";
 import { createUrlSlidesSession } from "./slides-session.js";
-import { buildUrlPrompt, outputExtractedUrl, summarizeExtractedUrl } from "./summary.js";
+import { outputExtractedUrl, summarizeExtractedUrl } from "./summary.js";
 import type { UrlFlowContext } from "./types.js";
 import { handleVideoOnlyExtractedContent } from "./video-only.js";
 

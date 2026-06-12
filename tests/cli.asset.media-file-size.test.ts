@@ -71,6 +71,7 @@ function makeContext(): AssetSummaryContext {
     streamingEnabled: false,
     plain: false,
     summaryEngine: {} as AssetSummaryContext["summaryEngine"],
+    summaryStream: null,
     trackedFetch: vi.fn() as unknown as typeof fetch,
     writeViaFooter: vi.fn(),
     clearProgressForStdout: vi.fn(),

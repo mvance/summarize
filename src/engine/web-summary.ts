@@ -5,35 +5,89 @@ import {
   buildLengthKey,
   buildPromptContentHash,
   buildPromptHash,
-} from "../../../cache.js";
-import type { ExtractedLinkContent } from "../../../content/index.js";
-import { resolveGitHubModelsApiKey } from "../../../llm/github-models.js";
-import type { Prompt } from "../../../llm/prompt.js";
-import { buildAutoModelAttempts } from "../../../model-auto.js";
-import { SUMMARY_SYSTEM_PROMPT } from "../../../prompts/index.js";
-import { countTokens } from "../../../tokenizer.js";
-import {
-  readLastSuccessfulCliProvider,
-  writeLastSuccessfulCliProvider,
-} from "../../cli-fallback-state.js";
-import { parseCliUserModelId } from "../../env.js";
-import { writeVerbose } from "../../logging.js";
-import { executeSummaryAttempts } from "../../summary-execution.js";
-import type { ModelAttempt } from "../../types.js";
-import type { SlidesTerminalOutput } from "./slides-output.js";
-import { buildModelMetaFromAttempt } from "./summary-finish.js";
-import { shouldBypassShortContentSummary } from "./summary-prompt.js";
+  type CacheState,
+} from "../cache.js";
+import type { CliProvider, SummarizeConfig } from "../config.js";
+import type { ExtractedLinkContent } from "../content/index.js";
+import type { StreamMode } from "../flags.js";
+import type { OutputLanguage } from "../language.js";
+import { resolveGitHubModelsApiKey } from "../llm/github-models.js";
+import type { Prompt } from "../llm/prompt.js";
+import { buildAutoModelAttempts } from "../model-auto.js";
+import type { FixedModelSpec } from "../model-spec.js";
+import { SUMMARY_SYSTEM_PROMPT } from "../prompts/index.js";
+import type { SummaryLengthArg } from "../shared/summary-length.js";
+import { countTokens } from "../tokenizer.js";
+import { parseCliUserModelId } from "./cli-model-id.js";
+import type { SummaryStreamHandler } from "./events.js";
+import type { createModelExecutor } from "./model-executor.js";
+import { buildModelMetaFromAttempt } from "./model-meta.js";
+import { executeSummaryAttempts } from "./summary-execution.js";
 import {
   ensureSummaryKeyMoments,
   resolveSummaryTimestampUpperBound,
   sanitizeSummaryKeyMoments,
   shouldSanitizeSummaryKeyMoments,
 } from "./summary-timestamps.js";
-import type { UrlFlowContext } from "./types.js";
+import type { ModelAttempt } from "./types.js";
+import { shouldBypassShortContentSummary } from "./web-prompt.js";
 
-type SlidesResult = Awaited<
-  ReturnType<typeof import("../../../slides/index.js").extractSlidesForSource>
->;
+type SlidesResult = Awaited<ReturnType<typeof import("../slides/index.js").extractSlidesForSource>>;
+
+export type WebSummaryContext = {
+  io: {
+    envForRun: Record<string, string | undefined>;
+    fetch: typeof fetch;
+  };
+  flags: {
+    timeoutMs: number;
+    lengthArg: SummaryLengthArg;
+    outputLanguage: OutputLanguage;
+    summaryCacheBypass: boolean;
+    forceSummary: boolean;
+    maxOutputTokensArg: number | null;
+    json: boolean;
+    slides: unknown;
+    streamMode: StreamMode;
+    streamingEnabled: boolean;
+  };
+  model: {
+    requestedModelInput: string;
+    fixedModelSpec: FixedModelSpec | null;
+    isFallbackModel: boolean;
+    isImplicitAutoSelection: boolean;
+    allowAutoCliFallback: boolean;
+    isNamedModelSelection: boolean;
+    wantsFreeNamedModel: boolean;
+    desiredOutputTokens: number | null;
+    configForModelSelection: SummarizeConfig | null;
+    envForAuto: Record<string, string | undefined>;
+    cliAvailability: Partial<Record<CliProvider, boolean>>;
+    apiStatus: {
+      zaiApiKey: string | null;
+      zaiBaseUrl: string;
+      nvidiaApiKey: string | null;
+      nvidiaBaseUrl: string;
+      minimaxApiKey: string | null;
+      minimaxBaseUrl: string;
+      ollamaBaseUrl: string;
+    };
+    summaryEngine: ReturnType<typeof createModelExecutor>;
+    summaryStream: SummaryStreamHandler | null;
+    getLiteLlmCatalog: () => Promise<
+      Awaited<ReturnType<typeof import("../pricing/litellm.js").loadLiteLlmCatalog>>["catalog"]
+    >;
+  };
+  cache: CacheState;
+};
+
+export type WebSummaryRuntime = {
+  log?: ((message: string) => void) | null;
+  trace?: ((name: string, detail?: string | null) => void) | null;
+  onSummaryCached?: ((cached: boolean) => void) | null;
+  readLastSuccessfulCliProvider?: (() => Promise<CliProvider | null>) | null;
+  rememberCliProvider?: ((provider: CliProvider) => Promise<void>) | null;
+};
 
 type SummaryResolutionUseExtracted = {
   kind: "use-extracted";
@@ -44,7 +98,7 @@ type SummaryResolutionUseExtracted = {
 type SummaryResolutionSummary = {
   kind: "summary";
   normalizedSummary: string;
-  summaryAlreadyPrinted: boolean;
+  summaryEmitted: boolean;
   summaryFromCache: boolean;
   usedAttempt: ModelAttempt;
   modelMeta: ReturnType<typeof buildModelMetaFromAttempt>;
@@ -60,21 +114,24 @@ export async function resolveUrlSummaryExecution({
   prompt,
   onModelChosen,
   slides,
-  slidesOutput,
+  streamHandler,
+  runtime = {},
 }: {
-  ctx: UrlFlowContext;
+  ctx: WebSummaryContext;
   url: string;
   extracted: ExtractedLinkContent;
   prompt: string;
   onModelChosen?: ((modelId: string) => void) | null;
   slides?: SlidesResult | null;
-  slidesOutput?: SlidesTerminalOutput | null;
+  streamHandler?: SummaryStreamHandler | null;
+  runtime?: WebSummaryRuntime;
 }): Promise<UrlSummaryResolution> {
   const { io, flags, model, cache: cacheState } = ctx;
-  ctx.perfTrace?.mark("summary:resolve-start");
-  const lastSuccessfulCliProvider = model.isFallbackModel
-    ? await readLastSuccessfulCliProvider(io.envForRun)
-    : null;
+  runtime.trace?.("summary:resolve-start");
+  const lastSuccessfulCliProvider =
+    model.isFallbackModel && runtime.readLastSuccessfulCliProvider
+      ? await runtime.readLastSuccessfulCliProvider()
+      : null;
 
   const promptPayload: Prompt = { system: SUMMARY_SYSTEM_PROMPT, userText: prompt };
   const promptTokens = countTokens(promptPayload.userText);
@@ -103,16 +160,8 @@ export async function resolveUrlSummaryExecution({
         allowAutoCliFallback: model.allowAutoCliFallback,
         lastSuccessfulCliProvider,
       });
-      if (flags.verbose) {
-        for (const attempt of list.slice(0, 8)) {
-          writeVerbose(
-            io.stderr,
-            flags.verbose,
-            `auto candidate ${attempt.debug}`,
-            flags.verboseColor,
-            io.envForRun,
-          );
-        }
+      for (const attempt of list.slice(0, 8)) {
+        runtime.log?.(`auto candidate ${attempt.debug}`);
       }
       return list.map((attempt) => {
         if (attempt.transport !== "cli")
@@ -185,7 +234,7 @@ export async function resolveUrlSummaryExecution({
       },
     ];
   })();
-  ctx.perfTrace?.mark("summary:attempts", attempts[0]?.userModelId ?? null);
+  runtime.trace?.("summary:attempts", attempts[0]?.userModelId ?? null);
 
   const cacheStore =
     cacheState.mode === "default" && !flags.summaryCacheBypass ? cacheState.store : null;
@@ -206,7 +255,7 @@ export async function resolveUrlSummaryExecution({
     (extracted.transcriptSource != null && extracted.transcriptSource !== "unavailable") ||
     (typeof extracted.mediaDurationSeconds === "number" && extracted.mediaDurationSeconds > 0) ||
     extracted.isVideoOnly === true;
-  const autoBypass = ctx.model.isFallbackModel && !ctx.model.isNamedModelSelection;
+  const autoBypass = model.isFallbackModel && !model.isNamedModelSelection;
   const canBypassShortContent =
     (autoBypass || isTweet) &&
     !flags.slides &&
@@ -247,16 +296,15 @@ export async function resolveUrlSummaryExecution({
       languageKey,
       autoSelectionModel: autoSelectionCacheModel,
     },
-    verbose: (message) =>
-      writeVerbose(io.stderr, flags.verbose, message, flags.verboseColor, io.envForRun),
+    verbose: (message) => runtime.log?.(message),
     onModelChosen,
     onCacheResolved: (hit) => {
-      ctx.hooks.onSummaryCached?.(hit);
-      ctx.perfTrace?.mark(hit ? "summary:cache-hit" : "summary:cache-miss");
+      runtime.onSummaryCached?.(hit);
+      runtime.trace?.(hit ? "summary:cache-hit" : "summary:cache-miss");
     },
     buildCachedResult: (attempt, summary) => ({
       summary,
-      summaryAlreadyPrinted: false,
+      summaryEmitted: false,
       modelMeta: buildModelMetaFromAttempt(attempt),
       maxOutputTokensForCall: null,
     }),
@@ -266,7 +314,7 @@ export async function resolveUrlSummaryExecution({
         prompt: promptPayload,
         allowStreaming: flags.streamingEnabled && !sanitizeKeyMoments,
         onModelChosen: onModelChosen ?? null,
-        streamHandler: slidesOutput?.streamHandler ?? null,
+        streamHandler: streamHandler ?? model.summaryStream,
       }),
     normalizeResult: (result) => {
       const normalizedSummaryBase =
@@ -291,8 +339,7 @@ export async function resolveUrlSummaryExecution({
     },
     fetchImpl: io.fetch,
     timeoutMs: flags.timeoutMs,
-    rememberCliProvider: (provider) =>
-      writeLastSuccessfulCliProvider({ env: io.envForRun, provider }),
+    rememberCliProvider: runtime.rememberCliProvider ?? null,
   });
 
   if (!execution.result || !execution.usedAttempt) {
@@ -308,7 +355,7 @@ export async function resolveUrlSummaryExecution({
 
   const {
     summary: normalizedSummary,
-    summaryAlreadyPrinted,
+    summaryEmitted,
     modelMeta,
     maxOutputTokensForCall,
   } = execution.result;
@@ -318,7 +365,7 @@ export async function resolveUrlSummaryExecution({
   return {
     kind: "summary",
     normalizedSummary,
-    summaryAlreadyPrinted,
+    summaryEmitted,
     summaryFromCache,
     usedAttempt,
     modelMeta,

@@ -1,5 +1,6 @@
 import type { Command } from "commander";
 import { type CacheState } from "../cache.js";
+import { createModelExecutor } from "../engine/model-executor.js";
 import type { ExecFileFn } from "../markitdown.js";
 import type { FixedModelSpec } from "../model-spec.js";
 import { scopeTranscriptCacheForDiarization } from "../shared/transcript-diarization-cache-scope.js";
@@ -13,6 +14,7 @@ import { createCacheStateFromConfig } from "./cache-state.js";
 import { parseCliProviderArg } from "./env.js";
 import { isPdfExtension, isTranscribableExtension } from "./flows/asset/input.js";
 import { summarizeMediaFile as summarizeMediaFileImpl } from "./flows/asset/media.js";
+import { writeVerbose } from "./logging.js";
 import { createMediaCacheFromConfig } from "./media-cache-state.js";
 import type { PerfTrace } from "./perf-trace.js";
 import { createProgressGate } from "./progress.js";
@@ -27,7 +29,7 @@ import { createRunnerFlowContexts } from "./runner-contexts.js";
 import { executeRunnerInput } from "./runner-execution.js";
 import { resolveRunnerFlags } from "./runner-flags.js";
 import { resolveRunnerSlidesSettings } from "./runner-slides.js";
-import { createSummaryEngine } from "./summary-engine.js";
+import { createTerminalSummaryStream } from "./summary-stream.js";
 import { isRichTty, supportsColor } from "./terminal.js";
 
 export type RunnerPlan = {
@@ -354,18 +356,13 @@ export async function createRunnerPlan(options: {
     requestedModel.kind === "fixed" ? requestedModel : null;
   const desiredOutputTokens = resolveDesiredOutputTokens({ lengthArg, maxOutputTokensArg });
 
-  const summaryEngine = createSummaryEngine({
+  const summaryEngine = createModelExecutor({
     env,
     envForRun,
-    stdout,
-    stderr,
     execFileImpl,
     timeoutMs,
     retries,
     streamingEnabled,
-    plain,
-    verbose,
-    verboseColor,
     openaiUseChatCompletions,
     openaiRequestOptions,
     openaiRequestOptionsOverride,
@@ -376,8 +373,8 @@ export async function createRunnerPlan(options: {
     resolveMaxOutputTokensForCall,
     resolveMaxInputTokensForCall,
     llmCalls,
-    clearProgressForStdout,
-    restoreProgressAfterStdout,
+    log: (message) => writeVerbose(stderr, verbose, message, verboseColor, envForRun),
+    trace: (name, detail) => perfTrace?.mark(name, detail),
     apiKeys: {
       xaiApiKey,
       openaiApiKey: apiKey,
@@ -406,8 +403,17 @@ export async function createRunnerPlan(options: {
       baseUrl: ollamaBaseUrl,
     },
     providerBaseUrls,
-    perfTrace,
   });
+  const summaryStream = streamingEnabled
+    ? createTerminalSummaryStream({
+        stdout,
+        env,
+        envForRun,
+        plain,
+        clearProgressForStdout,
+        restoreProgressAfterStdout,
+      })
+    : null;
 
   const writeViaFooter = (parts: string[]) => {
     if (json || extractMode) return;
@@ -519,6 +525,7 @@ export async function createRunnerPlan(options: {
         openaiApiKey,
       },
       summaryEngine,
+      summaryStream,
       getLiteLlmCatalog,
       llmCalls,
     },
@@ -583,7 +590,6 @@ export async function createRunnerPlan(options: {
             firecrawlConfigured,
             googleConfigured,
             anthropicConfigured,
-            openaiApiKey,
           },
         },
         summarizeAsset,

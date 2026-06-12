@@ -1,10 +1,14 @@
 import type { CacheState } from "../cache.js";
 import { type ExtractedLinkContent, isYouTubeUrl, type MediaCache } from "../content/index.js";
 import type { RunMetricsReport } from "../costs.js";
+import { buildUrlPrompt } from "../engine/web-prompt.js";
+import { resolveUrlSummaryExecution } from "../engine/web-summary.js";
+import {
+  readLastSuccessfulCliProvider,
+  writeLastSuccessfulCliProvider,
+} from "../run/cli-fallback-state.js";
 import { buildFinishLineVariants, buildLengthPartsForFinishLine } from "../run/finish-line.js";
-import { deriveExtractionUi } from "../run/flows/url/extract.js";
 import { runUrlFlow } from "../run/flows/url/flow.js";
-import { buildUrlPrompt, summarizeExtractedUrl } from "../run/flows/url/summary.js";
 import type { RunOverrides } from "../run/run-settings.js";
 import type {
   SlideExtractionResult,
@@ -253,7 +257,6 @@ export async function streamSummaryForVisiblePage({
   });
   writeStatus?.("Summarizing…");
 
-  const extractionUi = deriveExtractionUi(extracted);
   const prompt = buildUrlPrompt({
     extracted,
     outputLanguage: ctx.flags.outputLanguage,
@@ -263,16 +266,25 @@ export async function streamSummaryForVisiblePage({
     languageInstruction: ctx.flags.languageInstruction ?? null,
   });
 
-  await summarizeExtractedUrl({
+  const resolution = await resolveUrlSummaryExecution({
     ctx,
     url: input.url,
     extracted,
-    extractionUi,
     prompt,
-    effectiveMarkdownMode: "off",
-    transcriptionCostLabel: null,
     onModelChosen: ctx.hooks.onModelChosen ?? null,
+    runtime: {
+      trace: (name, detail) => ctx.perfTrace?.mark(name, detail),
+      onSummaryCached: ctx.hooks.onSummaryCached ?? null,
+      readLastSuccessfulCliProvider: () => readLastSuccessfulCliProvider(ctx.io.envForRun),
+      rememberCliProvider: (provider) =>
+        writeLastSuccessfulCliProvider({ env: ctx.io.envForRun, provider }),
+    },
   });
+  if (resolution.kind === "use-extracted") {
+    sink.writeChunk(`${extracted.content}\n`);
+  } else if (!resolution.summaryEmitted) {
+    sink.writeChunk(`${resolution.normalizedSummary}\n`);
+  }
 
   const report = await ctx.hooks.buildReport();
   const costUsd = await ctx.hooks.estimateCostUsd();

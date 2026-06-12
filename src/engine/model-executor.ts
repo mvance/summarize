@@ -1,4 +1,3 @@
-import { createMarkdownStreamer, render as renderMarkdownAnsi } from "markdansi";
 import type { CliProvider } from "../config.js";
 import { isCliDisabled, runCliModel } from "../llm/cli.js";
 import { streamTextWithModelId } from "../llm/generate-text.js";
@@ -7,35 +6,26 @@ import { parseGatewayStyleModelId } from "../llm/model-id.js";
 import { mergeRequestOptionsForProvider } from "../llm/model-options.js";
 import type { ModelRequestOptions, OpenAiReasoningEffort } from "../llm/model-options.js";
 import type { Prompt } from "../llm/prompt.js";
+import { formatCompactCount } from "../shared/format-count.js";
 import { countTokens } from "../tokenizer.js";
-import { formatCompactCount } from "../tty/format.js";
-import { createRetryLogger, writeVerbose } from "./logging.js";
-import { prepareMarkdownForTerminalStreaming } from "./markdown.js";
-import type { PerfTrace } from "./perf-trace.js";
-import { createStreamOutputGate, type StreamOutputMode } from "./stream-output.js";
+import { EngineError } from "./errors.js";
+import type { SummaryStreamHandler } from "./events.js";
+import { resolveModelIdForLlmCall, summarizeWithModelId } from "./model-call.js";
 import {
   canStream,
   isGoogleStreamingUnsupportedError,
   isStreamingTimeoutError,
   mergeStreamingChunk,
 } from "./streaming.js";
-import { resolveModelIdForLlmCall, summarizeWithModelId } from "./summary-llm.js";
-import { isRichTty, markdownRenderWidth, supportsColor } from "./terminal.js";
-import type { ModelAttempt, ModelMeta } from "./types.js";
+import type { ModelAttempt, SummaryAttemptResult } from "./types.js";
 
-export type SummaryEngineDeps = {
+export type ModelExecutorDeps = {
   env: Record<string, string | undefined>;
   envForRun: Record<string, string | undefined>;
-  stdout: NodeJS.WritableStream;
-  stderr: NodeJS.WritableStream;
   execFileImpl: Parameters<typeof runCliModel>[0]["execFileImpl"];
   timeoutMs: number;
   retries: number;
   streamingEnabled: boolean;
-  streamingOutputMode?: StreamOutputMode;
-  plain: boolean;
-  verbose: boolean;
-  verboseColor: boolean;
   openaiUseChatCompletions: boolean | undefined;
   openaiRequestOptions?: ModelRequestOptions;
   openaiRequestOptionsOverride?: ModelRequestOptions;
@@ -62,8 +52,8 @@ export type SummaryEngineDeps = {
     costUsd?: number | null;
     purpose: "summary" | "markdown" | "speaker-identification";
   }>;
-  clearProgressForStdout: () => void;
-  restoreProgressAfterStdout?: (() => void) | null;
+  log?: ((message: string) => void) | null;
+  trace?: ((name: string, detail?: string | null) => void) | null;
   apiKeys: {
     xaiApiKey: string | null;
     openaiApiKey: string | null;
@@ -97,19 +87,30 @@ export type SummaryEngineDeps = {
     google: string | null;
     xai: string | null;
   };
-  perfTrace?: PerfTrace | null;
 };
 
-export type SummaryStreamHandler = {
-  onChunk: (args: {
-    streamed: string;
-    prevStreamed: string;
-    appended: string;
-  }) => void | Promise<void>;
-  onDone?: ((finalText: string) => void | Promise<void>) | null;
-};
+export function createModelExecutor(deps: ModelExecutorDeps) {
+  const createRetryLogger = (modelId: string) => {
+    return (notice: { attempt: number; maxRetries: number; delayMs: number; error?: unknown }) => {
+      const message =
+        typeof notice.error === "string"
+          ? notice.error
+          : notice.error instanceof Error
+            ? notice.error.message
+            : typeof (notice.error as { message?: unknown } | null)?.message === "string"
+              ? String((notice.error as { message?: unknown }).message)
+              : "";
+      const reason = /empty summary/i.test(message)
+        ? "empty output"
+        : /timed out/i.test(message)
+          ? "timeout"
+          : "error";
+      deps.log?.(
+        `LLM ${reason} for ${modelId}; retry ${notice.attempt}/${notice.maxRetries} in ${notice.delayMs}ms.`,
+      );
+    };
+  };
 
-export function createSummaryEngine(deps: SummaryEngineDeps) {
   const applyOpenAiGatewayOverrides = (attempt: ModelAttempt): ModelAttempt => {
     const modelIdLower = attempt.userModelId.toLowerCase();
     if (modelIdLower.startsWith("zai/")) {
@@ -263,14 +264,9 @@ export function createSummaryEngine(deps: SummaryEngineDeps) {
       extraArgsByProvider?: Partial<Record<CliProvider, string[]>>;
     } | null;
     streamHandler?: SummaryStreamHandler | null;
-  }): Promise<{
-    summary: string;
-    summaryAlreadyPrinted: boolean;
-    modelMeta: ModelMeta;
-    maxOutputTokensForCall: number | null;
-  }> => {
+  }): Promise<SummaryAttemptResult> => {
     onModelChosen?.(attempt.userModelId);
-    deps.perfTrace?.mark("summary:model-chosen", attempt.userModelId);
+    deps.trace?.("summary:model-chosen", attempt.userModelId);
 
     if (attempt.transport === "cli") {
       const hasAttachments = (prompt.attachments?.length ?? 0) > 0;
@@ -312,7 +308,7 @@ export function createSummaryEngine(deps: SummaryEngineDeps) {
       }
       return {
         summary,
-        summaryAlreadyPrinted: false,
+        summaryEmitted: false,
         modelMeta: { provider: "cli", canonical: attempt.userModelId },
         maxOutputTokensForCall: null,
       };
@@ -336,15 +332,7 @@ export function createSummaryEngine(deps: SummaryEngineDeps) {
       fetchImpl: deps.trackedFetch,
       timeoutMs: deps.timeoutMs,
     });
-    if (modelResolution.note && deps.verbose) {
-      writeVerbose(
-        deps.stderr,
-        deps.verbose,
-        modelResolution.note,
-        deps.verboseColor,
-        deps.envForRun,
-      );
-    }
+    if (modelResolution.note) deps.log?.(modelResolution.note);
     const parsedModelEffective = parseGatewayStyleModelId(modelResolution.modelId);
     const requestOptions = mergeRequestOptionsForProvider({
       provider: parsedModelEffective.provider,
@@ -374,11 +362,11 @@ export function createSummaryEngine(deps: SummaryEngineDeps) {
     const maxOutputTokensForCall = await deps.resolveMaxOutputTokensForCall(
       parsedModelEffective.canonical,
     );
-    deps.perfTrace?.mark("summary:max-output");
+    deps.trace?.("summary:max-output");
     const maxInputTokensForCall = await deps.resolveMaxInputTokensForCall(
       parsedModelEffective.canonical,
     );
-    deps.perfTrace?.mark("summary:max-input");
+    deps.trace?.("summary:max-input");
     if (
       typeof maxInputTokensForCall === "number" &&
       Number.isFinite(maxInputTokensForCall) &&
@@ -411,13 +399,7 @@ export function createSummaryEngine(deps: SummaryEngineDeps) {
         forceChatCompletions,
         requestOptions,
         retries: deps.retries,
-        onRetry: createRetryLogger({
-          stderr: deps.stderr,
-          verbose: deps.verbose,
-          color: deps.verboseColor,
-          modelId: parsedModelEffective.canonical,
-          env: deps.envForRun,
-        }),
+        onRetry: createRetryLogger(parsedModelEffective.canonical),
       });
       deps.llmCalls.push({
         provider: result.provider,
@@ -432,7 +414,7 @@ export function createSummaryEngine(deps: SummaryEngineDeps) {
         : parsedModelEffective.canonical;
       return {
         summary,
-        summaryAlreadyPrinted: false,
+        summaryEmitted: false,
         modelMeta: {
           provider: parsedModelEffective.provider,
           canonical: displayCanonical,
@@ -441,14 +423,7 @@ export function createSummaryEngine(deps: SummaryEngineDeps) {
       };
     }
 
-    const shouldRenderMarkdownToAnsi = !deps.plain && isRichTty(deps.stdout);
-    const hasStreamHandler = Boolean(streamHandler);
-    const shouldStreamSummaryToStdout =
-      streamingEnabledForCall && !shouldRenderMarkdownToAnsi && !hasStreamHandler;
-    const shouldStreamRenderedMarkdownToStdout =
-      streamingEnabledForCall && shouldRenderMarkdownToAnsi && !hasStreamHandler;
-
-    let summaryAlreadyPrinted = false;
+    let summaryEmitted = false;
     let summary = "";
     let getLastStreamError: (() => unknown) | null = null;
 
@@ -471,13 +446,7 @@ export function createSummaryEngine(deps: SummaryEngineDeps) {
         forceChatCompletions,
         requestOptions,
         retries: deps.retries,
-        onRetry: createRetryLogger({
-          stderr: deps.stderr,
-          verbose: deps.verbose,
-          color: deps.verboseColor,
-          modelId: parsedModelEffective.canonical,
-          env: deps.envForRun,
-        }),
+        onRetry: createRetryLogger(parsedModelEffective.canonical),
       });
       deps.llmCalls.push({
         provider: result.provider,
@@ -492,25 +461,23 @@ export function createSummaryEngine(deps: SummaryEngineDeps) {
       (parsedModelEffective.provider === "google" && isGoogleStreamingUnsupportedError(error));
     const writeStreamFallbackNotice = (error: unknown) => {
       if (isStreamingTimeoutError(error)) {
-        writeVerbose(
-          deps.stderr,
-          deps.verbose,
+        deps.log?.(
           `Streaming timed out for ${parsedModelEffective.canonical}; falling back to non-streaming.`,
-          deps.verboseColor,
-          deps.envForRun,
         );
         return;
       }
-      writeVerbose(
-        deps.stderr,
-        deps.verbose,
+      deps.log?.(
         `Google model ${parsedModelEffective.canonical} rejected streamGenerateContent; falling back to non-streaming.`,
-        deps.verboseColor,
-        deps.envForRun,
       );
     };
+    const createStreamInterruptedError = (error: unknown) =>
+      new EngineError(
+        "SUMMARY_STREAM_INTERRUPTED",
+        error instanceof Error ? error.message : "Summary stream failed after output",
+        { cause: error },
+      );
     try {
-      deps.perfTrace?.mark("summary:stream-open");
+      deps.trace?.("summary:stream-open");
       streamResult = await streamTextWithModelId({
         modelId: parsedModelEffective.canonical,
         apiKeys: apiKeysForLlm,
@@ -539,78 +506,33 @@ export function createSummaryEngine(deps: SummaryEngineDeps) {
     }
 
     if (streamResult) {
-      deps.clearProgressForStdout();
-      deps.restoreProgressAfterStdout?.();
       getLastStreamError = streamResult.lastError;
       let streamed = "";
       let streamedRaw = "";
       let streamCompleted = false;
-      const liveWidth = markdownRenderWidth(deps.stdout, deps.env);
-      let wroteLeadingBlankLine = false;
-
-      const streamer = shouldStreamRenderedMarkdownToStdout
-        ? createMarkdownStreamer({
-            render: (markdown) =>
-              renderMarkdownAnsi(prepareMarkdownForTerminalStreaming(markdown), {
-                width: liveWidth,
-                wrap: true,
-                color: supportsColor(deps.stdout, deps.envForRun),
-                hyperlinks: true,
-              }),
-            spacing: "single",
-          })
-        : null;
-
-      const stdoutIsRichTty = isRichTty(deps.stdout);
-      const streamOutputMode = deps.streamingOutputMode ?? (stdoutIsRichTty ? "delta" : "line");
-      const outputGate = shouldStreamSummaryToStdout
-        ? createStreamOutputGate({
-            stdout: deps.stdout,
-            clearProgressForStdout: deps.clearProgressForStdout,
-            restoreProgressAfterStdout:
-              streamOutputMode === "delta" ? null : (deps.restoreProgressAfterStdout ?? null),
-            outputMode: streamOutputMode,
-            richTty: stdoutIsRichTty && streamOutputMode === "line",
-            rewriteOnReplacement: stdoutIsRichTty && streamOutputMode === "delta",
-            restoreDuringStream: streamOutputMode !== "delta",
-          })
-        : null;
+      let streamHandlerStarted = false;
+      let streamOutputEmitted = false;
 
       try {
         let sawFirstDelta = false;
         for await (const delta of streamResult.textStream) {
           if (!sawFirstDelta) {
             sawFirstDelta = true;
-            deps.perfTrace?.mark("summary:first-delta");
+            deps.trace?.("summary:first-delta");
           }
           const prevStreamed = streamed;
           const merged = mergeStreamingChunk(streamed, delta);
           streamed = merged.next;
           if (streamHandler) {
-            await streamHandler.onChunk({
-              streamed: merged.next,
-              prevStreamed,
-              appended: merged.appended,
-            });
-            continue;
-          }
-          if (shouldStreamSummaryToStdout && outputGate) {
-            outputGate.handleChunk(streamed, prevStreamed);
-            continue;
-          }
-
-          if (shouldStreamRenderedMarkdownToStdout && streamer) {
-            const out = streamer.push(merged.appended);
-            if (out) {
-              deps.clearProgressForStdout();
-              if (!wroteLeadingBlankLine) {
-                deps.stdout.write(`\n${out.replace(/^\n+/, "")}`);
-                wroteLeadingBlankLine = true;
-              } else {
-                deps.stdout.write(out);
-              }
-              deps.restoreProgressAfterStdout?.();
-            }
+            if (!streamHandlerStarted && !streamed.trim()) continue;
+            const firstChunk = !streamHandlerStarted;
+            streamHandlerStarted = true;
+            streamOutputEmitted =
+              (await streamHandler.onChunk({
+                streamed: merged.next,
+                prevStreamed: firstChunk ? "" : prevStreamed,
+                appended: firstChunk ? merged.next : merged.appended,
+              })) || streamOutputEmitted;
           }
         }
 
@@ -619,31 +541,26 @@ export function createSummaryEngine(deps: SummaryEngineDeps) {
         streamed = trimmed;
         streamCompleted = true;
       } catch (error) {
-        const noVisibleStreamOutput = streamed.trim().length === 0;
-        if (canFallbackFromStreamError(error) && noVisibleStreamOutput) {
+        if (streamHandler && streamHandlerStarted && !streamOutputEmitted) {
+          await streamHandler.onReset();
+          streamHandlerStarted = false;
+        }
+        if (canFallbackFromStreamError(error) && !streamOutputEmitted) {
           writeStreamFallbackNotice(error);
           summary = await summarizeWithoutStreaming();
           streamResult = null;
         } else {
-          throw error;
+          throw streamOutputEmitted ? createStreamInterruptedError(error) : error;
         }
       } finally {
-        if (streamCompleted && streamHandler) {
-          await streamHandler.onDone?.(streamedRaw || streamed);
-          summaryAlreadyPrinted = true;
-        } else if (streamCompleted && shouldStreamRenderedMarkdownToStdout) {
-          const out = streamer?.finish();
-          if (out) {
-            deps.clearProgressForStdout();
-            if (!wroteLeadingBlankLine) {
-              deps.stdout.write(`\n${out.replace(/^\n+/, "")}`);
-              wroteLeadingBlankLine = true;
-            } else {
-              deps.stdout.write(out);
-            }
-            deps.restoreProgressAfterStdout?.();
+        if (streamCompleted && streamHandler && streamHandlerStarted) {
+          try {
+            const finalOutputEmitted =
+              (await streamHandler.onDone?.(streamedRaw || streamed)) ?? false;
+            summaryEmitted = streamOutputEmitted || finalOutputEmitted;
+          } catch (error) {
+            throw createStreamInterruptedError(error);
           }
-          summaryAlreadyPrinted = true;
         }
       }
       if (streamResult) {
@@ -655,12 +572,6 @@ export function createSummaryEngine(deps: SummaryEngineDeps) {
           purpose: "summary",
         });
         summary = streamed;
-        if (shouldStreamSummaryToStdout) {
-          const finalText = streamedRaw || streamed;
-          outputGate?.finalize(finalText);
-          if (streamOutputMode === "delta") deps.restoreProgressAfterStdout?.();
-          summaryAlreadyPrinted = true;
-        }
       }
     }
 
@@ -675,14 +586,18 @@ export function createSummaryEngine(deps: SummaryEngineDeps) {
 
     if (!streamResult && streamHandler) {
       const cleaned = summary.trim();
-      await streamHandler.onChunk({ streamed: cleaned, prevStreamed: "", appended: cleaned });
-      await streamHandler.onDone?.(cleaned);
-      summaryAlreadyPrinted = true;
+      const chunkEmitted = await streamHandler.onChunk({
+        streamed: cleaned,
+        prevStreamed: "",
+        appended: cleaned,
+      });
+      const finalOutputEmitted = (await streamHandler.onDone?.(cleaned)) ?? false;
+      summaryEmitted = chunkEmitted || finalOutputEmitted;
     }
 
     return {
       summary,
-      summaryAlreadyPrinted,
+      summaryEmitted,
       modelMeta: {
         provider: parsedModelEffective.provider,
         canonical: attempt.userModelId.toLowerCase().startsWith("openrouter/")

@@ -1,3 +1,4 @@
+import { hasEngineErrorCode } from "./errors.js";
 import type { ModelAttempt, ModelAttemptRequiredEnv } from "./types.js";
 
 export async function runModelAttempts<T>({
@@ -53,6 +54,9 @@ export async function runModelAttempts<T>({
       usedAttempt = attempt;
       break;
     } catch (error) {
+      if (hasEngineErrorCode(error, "SUMMARY_STREAM_INTERRUPTED")) {
+        throw error;
+      }
       lastError = error;
       if (
         isNamedModelSelection &&

@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { accessSync, constants as fsConstants } from "node:fs";
 import path from "node:path";
 import type { CliProvider, SummarizeConfig } from "../config.js";
+export { parseCliUserModelId } from "../engine/cli-model-id.js";
 import { isCliDisabled, resolveCliBinary } from "../llm/cli.js";
 
 type ConfigForCli = SummarizeConfig | null;
@@ -97,32 +98,6 @@ export function resolveCliAvailability({
     availability[provider] = resolveExecutableInPath(binary, env) !== null;
   }
   return availability;
-}
-
-export function parseCliUserModelId(modelId: string): {
-  provider: CliProvider;
-  model: string | null;
-} {
-  const parts = modelId
-    .trim()
-    .split("/")
-    .map((part) => part.trim());
-  const provider = parts[1]?.toLowerCase();
-  if (
-    provider !== "claude" &&
-    provider !== "codex" &&
-    provider !== "gemini" &&
-    provider !== "agent" &&
-    provider !== "openclaw" &&
-    provider !== "opencode" &&
-    provider !== "copilot" &&
-    provider !== "agy" &&
-    provider !== "pi"
-  ) {
-    throw new Error(`Invalid CLI model id "${modelId}". Expected cli/<provider>/<model>.`);
-  }
-  const model = parts.slice(2).join("/").trim();
-  return { provider, model: model.length > 0 ? model : null };
 }
 
 export function parseCliProviderArg(raw: string): CliProvider {

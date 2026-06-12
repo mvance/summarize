@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { isAssetLikeHtmlFetchError } from "../packages/core/src/content/index.js";
 import { createLinkPreviewClient } from "../src/content/index.js";
 
 describe("link preview binary payload guard", () => {
@@ -12,9 +13,14 @@ describe("link preview binary payload guard", () => {
         }),
     });
 
-    await expect(client.fetchLinkContent("https://example.com/download")).rejects.toThrow(
-      /binary payload/i,
-    );
+    const error = await client
+      .fetchLinkContent("https://example.com/download")
+      .catch((caught) => caught);
+    expect(isAssetLikeHtmlFetchError(error)).toBe(true);
+    expect(error).toMatchObject({
+      code: "ASSET_LIKE_HTML_FETCH",
+      reason: "binary-payload",
+    });
   });
 
   it("rejects binary signatures after leading bytes", async () => {

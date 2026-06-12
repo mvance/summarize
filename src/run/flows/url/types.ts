@@ -7,6 +7,8 @@ import type {
   MediaCache,
 } from "../../../content/index.js";
 import type { LlmCall, RunMetricsReport } from "../../../costs.js";
+import type { SummaryStreamHandler } from "../../../engine/events.js";
+import type { createModelExecutor } from "../../../engine/model-executor.js";
 import type { StreamMode } from "../../../flags.js";
 import type { OutputLanguage } from "../../../language.js";
 import type { ModelRequestOptions, OpenAiReasoningEffort } from "../../../llm/model-options.js";
@@ -20,7 +22,6 @@ import type {
 } from "../../../slides/index.js";
 import type { SpeakerIdentificationSettings } from "../../../speaker-identification/index.js";
 import type { PerfTrace } from "../../perf-trace.js";
-import type { createSummaryEngine } from "../../summary-engine.js";
 import type { SummarizeAssetArgs } from "../asset/summary.js";
 
 export type UrlFlowIo = {
@@ -128,7 +129,8 @@ export type UrlFlowModel = {
     elevenlabsApiKey: string | null;
     openaiApiKey: string | null;
   };
-  summaryEngine: ReturnType<typeof createSummaryEngine>;
+  summaryEngine: ReturnType<typeof createModelExecutor>;
+  summaryStream: SummaryStreamHandler | null;
   getLiteLlmCatalog: () => Promise<
     Awaited<ReturnType<typeof import("../../../pricing/litellm.js").loadLiteLlmCatalog>>["catalog"]
   >;

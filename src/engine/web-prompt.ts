@@ -1,14 +1,10 @@
-import type { ExtractedLinkContent } from "../../../content/index.js";
-import {
-  buildLinkSummaryPrompt,
-  SUMMARY_LENGTH_TARGET_CHARACTERS,
-} from "../../../prompts/index.js";
-import { resolveTargetCharacters } from "../../format.js";
-import type { UrlFlowContext } from "./types.js";
+import type { ExtractedLinkContent } from "../content/index.js";
+import type { OutputLanguage } from "../language.js";
+import { buildLinkSummaryPrompt, SUMMARY_LENGTH_TARGET_CHARACTERS } from "../prompts/index.js";
+import { resolveTargetCharacters, type SummaryLengthArg } from "../shared/summary-length.js";
+import { buildSummaryTimestampLimitInstruction } from "./summary-timestamps.js";
 
-type SlidesResult = Awaited<
-  ReturnType<typeof import("../../../slides/index.js").extractSlidesForSource>
->;
+type SlidesResult = Awaited<ReturnType<typeof import("../slides/index.js").extractSlidesForSource>>;
 
 type TranscriptSegment = { startSeconds: number; text: string };
 
@@ -144,7 +140,7 @@ export function shouldBypassShortContentSummary({
   countTokens,
 }: {
   extracted: ExtractedLinkContent;
-  lengthArg: UrlFlowContext["flags"]["lengthArg"];
+  lengthArg: SummaryLengthArg;
   forceSummary: boolean;
   maxOutputTokensArg: number | null;
   json: boolean;
@@ -169,16 +165,14 @@ export function buildUrlPrompt({
   lengthInstruction,
   languageInstruction,
   slides,
-  buildSummaryTimestampLimitInstruction,
 }: {
   extracted: ExtractedLinkContent;
-  outputLanguage: UrlFlowContext["flags"]["outputLanguage"];
-  lengthArg: UrlFlowContext["flags"]["lengthArg"];
+  outputLanguage: OutputLanguage;
+  lengthArg: SummaryLengthArg;
   promptOverride?: string | null;
   lengthInstruction?: string | null;
   languageInstruction?: string | null;
   slides?: SlidesResult | null;
-  buildSummaryTimestampLimitInstruction: (extracted: ExtractedLinkContent) => string | null;
 }): string {
   const preset = lengthArg.kind === "preset" ? lengthArg.preset : "medium";
   const slidesText = buildSlidesPromptText({

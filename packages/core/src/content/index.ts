@@ -21,6 +21,11 @@ export {
   type SourceMetrics,
 } from "./link-preview/content/types.js";
 export { applyContentBudget } from "./link-preview/content/cleaner.js";
+export {
+  AssetLikeHtmlFetchError,
+  isAssetLikeHtmlFetchError,
+  type AssetLikeHtmlFetchReason,
+} from "./link-preview/content/fetcher.js";
 export { fetchWithDnsPinnedAddresses } from "./dns-pinned-fetch.js";
 export { fetchYoutubeSourceMetrics } from "./link-preview/content/youtube-source-metrics.js";
 export {

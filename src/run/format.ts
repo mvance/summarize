@@ -1,4 +1,4 @@
-import type { SummaryLength } from "@steipete/summarize-core";
+export { resolveTargetCharacters } from "../shared/summary-length.js";
 
 export function formatOptionalString(value: string | null | undefined): string {
   if (typeof value === "string" && value.trim().length > 0) {
@@ -54,16 +54,4 @@ export function estimateWhisperTranscriptionCostUsd({
   const perSecond = openaiWhisperUsdPerMinute / 60;
   const cost = mediaDurationSeconds * perSecond;
   return Number.isFinite(cost) && cost > 0 ? cost : null;
-}
-
-export function resolveTargetCharacters(
-  lengthArg:
-    | {
-        kind: "preset";
-        preset: SummaryLength;
-      }
-    | { kind: "chars"; maxCharacters: number },
-  maxMap: Record<SummaryLength, number>,
-): number {
-  return lengthArg.kind === "chars" ? lengthArg.maxCharacters : maxMap[lengthArg.preset];
 }

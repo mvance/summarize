@@ -7,6 +7,11 @@ import {
 import { render as renderMarkdownAnsi } from "markdansi";
 import type { ExtractedLinkContent } from "../../../content/index.js";
 import type { RunMetricsReport } from "../../../costs.js";
+import { resolveUrlSummaryExecution } from "../../../engine/web-summary.js";
+import {
+  readLastSuccessfulCliProvider,
+  writeLastSuccessfulCliProvider,
+} from "../../cli-fallback-state.js";
 import { buildExtractFinishLabel, writeFinishLine } from "../../finish-line.js";
 import { writeVerbose } from "../../logging.js";
 import { prepareMarkdownForTerminal } from "../../markdown.js";
@@ -20,12 +25,6 @@ import {
   pickModelForFinishLine,
 } from "./summary-finish.js";
 import { buildUrlJsonEnv, buildUrlJsonInput } from "./summary-json.js";
-import {
-  buildUrlPrompt as buildSummaryPrompt,
-  shouldBypassShortContentSummary,
-} from "./summary-prompt.js";
-import { resolveUrlSummaryExecution } from "./summary-resolution.js";
-import { buildSummaryTimestampLimitInstruction } from "./summary-timestamps.js";
 import type { UrlFlowContext } from "./types.js";
 
 type SlidesResult = Awaited<
@@ -120,35 +119,6 @@ async function writeUrlMetricsFinishLine({
       transcriptionCostLabel,
     }),
     color: flags.verboseColor,
-  });
-}
-
-export function buildUrlPrompt({
-  extracted,
-  outputLanguage,
-  lengthArg,
-  promptOverride,
-  lengthInstruction,
-  languageInstruction,
-  slides,
-}: {
-  extracted: ExtractedLinkContent;
-  outputLanguage: UrlFlowContext["flags"]["outputLanguage"];
-  lengthArg: UrlFlowContext["flags"]["lengthArg"];
-  promptOverride?: string | null;
-  lengthInstruction?: string | null;
-  languageInstruction?: string | null;
-  slides?: SlidesResult | null;
-}): string {
-  return buildSummaryPrompt({
-    extracted,
-    outputLanguage,
-    lengthArg,
-    promptOverride,
-    lengthInstruction,
-    languageInstruction,
-    slides,
-    buildSummaryTimestampLimitInstruction,
   });
 }
 
@@ -393,7 +363,7 @@ export async function summarizeExtractedUrl({
   > | null;
   slidesOutput?: SlidesTerminalOutput | null;
 }) {
-  const { io, flags, model, cache: cacheState, hooks } = ctx;
+  const { io, flags, hooks } = ctx;
   const resolution = await resolveUrlSummaryExecution({
     ctx,
     url,
@@ -401,7 +371,16 @@ export async function summarizeExtractedUrl({
     prompt,
     onModelChosen,
     slides,
-    slidesOutput,
+    streamHandler: slidesOutput?.streamHandler ?? null,
+    runtime: {
+      log: (message) =>
+        writeVerbose(io.stderr, flags.verbose, message, flags.verboseColor, io.envForRun),
+      trace: (name, detail) => ctx.perfTrace?.mark(name, detail),
+      onSummaryCached: hooks.onSummaryCached ?? null,
+      readLastSuccessfulCliProvider: () => readLastSuccessfulCliProvider(io.envForRun),
+      rememberCliProvider: (provider) =>
+        writeLastSuccessfulCliProvider({ env: io.envForRun, provider }),
+    },
   });
 
   if (resolution.kind === "use-extracted") {
@@ -421,7 +400,7 @@ export async function summarizeExtractedUrl({
   }
   const {
     normalizedSummary,
-    summaryAlreadyPrinted,
+    summaryEmitted,
     summaryFromCache,
     usedAttempt,
     modelMeta,
@@ -457,7 +436,7 @@ export async function summarizeExtractedUrl({
   }
 
   if (slidesOutput) {
-    if (!summaryAlreadyPrinted) {
+    if (!summaryEmitted) {
       const summaryForSlides =
         slides && slides.slides.length > 0
           ? coerceSummaryWithSlides({
@@ -472,7 +451,7 @@ export async function summarizeExtractedUrl({
           : normalizedSummary;
       await slidesOutput.renderFromText(summaryForSlides);
     }
-  } else if (!summaryAlreadyPrinted) {
+  } else if (!summaryEmitted) {
     hooks.clearProgressForStdout();
     const rendered =
       !flags.plain && isRichTty(io.stdout)

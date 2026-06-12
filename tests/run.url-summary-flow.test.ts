@@ -2,8 +2,8 @@ import { Writable } from "node:stream";
 import { describe, expect, it } from "vitest";
 import type { CacheStore } from "../src/cache.js";
 import type { ExtractedLinkContent } from "../src/content/index.js";
+import { resolveUrlSummaryExecution } from "../src/engine/web-summary.js";
 import { parseRequestedModelId } from "../src/model-spec.js";
-import { resolveUrlSummaryExecution } from "../src/run/flows/url/summary-resolution.js";
 import { summarizeExtractedUrl } from "../src/run/flows/url/summary.js";
 import type { UrlFlowContext } from "../src/run/flows/url/types.js";
 
@@ -191,12 +191,13 @@ describe("summarizeExtractedUrl timestamp guard", () => {
                 "[12:54] Midpoint",
                 "[33:10] Impossible ending",
               ].join("\n"),
-              summaryAlreadyPrinted: false,
+              summaryEmitted: false,
               modelMeta: { provider: "openai", canonical: "openai/gpt-5.2" },
               maxOutputTokensForCall: null,
             };
           },
         } as UrlFlowContext["model"]["summaryEngine"],
+        summaryStream: null,
         getLiteLlmCatalog: async () => ({ catalog: [] }),
         llmCalls: [],
       },
@@ -297,12 +298,13 @@ describe("summarizeExtractedUrl timestamp guard", () => {
             capturedAttempt = attempt;
             return {
               summary: "Summary paragraph.",
-              summaryAlreadyPrinted: false,
+              summaryEmitted: false,
               modelMeta: { provider: "ollama", canonical: "ollama/qwen3:0.6b" },
               maxOutputTokensForCall: null,
             };
           },
         },
+        summaryStream: null,
         getLiteLlmCatalog: async () => ({ catalog: [] }),
       },
       cache: { mode: "bypass", store: null },

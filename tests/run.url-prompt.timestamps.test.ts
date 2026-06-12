@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ExtractedLinkContent } from "../src/content/index.js";
-import { buildUrlPrompt } from "../src/run/flows/url/summary.js";
+import { buildUrlPrompt } from "../src/engine/web-prompt.js";
 
 const baseExtracted: ExtractedLinkContent = {
   url: "https://example.com/video",

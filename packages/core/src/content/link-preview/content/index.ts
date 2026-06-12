@@ -5,7 +5,7 @@ import type { FirecrawlScrapeResult, LinkPreviewDeps } from "../deps.js";
 import type { CacheMode, FirecrawlDiagnostics, TranscriptResolution } from "../types.js";
 import { normalizeForPrompt } from "./cleaner.js";
 import { MIN_READABILITY_CONTENT_CHARACTERS } from "./constants.js";
-import { fetchHtmlDocument, fetchWithFirecrawl } from "./fetcher.js";
+import { fetchHtmlDocument, fetchWithFirecrawl, isAssetLikeHtmlFetchError } from "./fetcher.js";
 import { buildResultFromFirecrawl, shouldFallbackToFirecrawl } from "./firecrawl.js";
 import { buildResultFromHtmlDocument } from "./html.js";
 import { extractReadabilityFromHtml } from "./readability.js";
@@ -29,16 +29,6 @@ import {
 } from "./utils.js";
 
 const MAX_TWITTER_TEXT_FOR_TRANSCRIPT = 500;
-
-function isAssetLikeHtmlFetchError(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-  const message = error.message.toLowerCase();
-  return (
-    message.includes("unsupported binary payload for html document fetch") ||
-    message.includes("unsupported content-type for html document fetch") ||
-    message.includes("unsupported content-disposition for html document fetch")
-  );
-}
 
 const buildSkippedTwitterTranscript = (
   cacheMode: CacheMode,

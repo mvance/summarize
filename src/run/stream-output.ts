@@ -239,12 +239,13 @@ export function createStreamOutputGate({
     stdout.write(text);
     plainFlushedText += text;
     if (restoreDuringStream) restoreProgressAfterStdout?.();
+    return true;
   };
 
   const handleChunk = (streamed: string, prevStreamed: string) => {
     if (pendingFinalReprint !== null) {
       pendingFinalReprint = streamed;
-      return;
+      return false;
     }
 
     if (plainFlushedLen === 0) {
@@ -261,8 +262,9 @@ export function createStreamOutputGate({
         ensureCleared();
         flush(streamed.slice(plainFlushedLen, lastNl + 1));
         plainFlushedLen = lastNl + 1;
+        return true;
       }
-      return;
+      return false;
     }
 
     const isAppendOnly = streamed.startsWith(prevStreamed);
@@ -270,7 +272,7 @@ export function createStreamOutputGate({
       ensureCleared();
       flush(streamed.slice(plainFlushedLen));
       plainFlushedLen = streamed.length;
-      return;
+      return true;
     }
     if (!isAppendOnly) {
       ensureCleared();
@@ -280,19 +282,21 @@ export function createStreamOutputGate({
         if (printedLines > rows) {
           // Cursor-up cannot reach scrolled-off terminal history; avoid replaying over a partial viewport.
           pendingFinalReprint = streamed;
-          return;
+          return false;
         }
         if (restoreDuringStream) clearProgressForStdout();
         stdout.write(`${rewindPrintedLines(printedLines)}${replacement}`);
         if (restoreDuringStream) restoreProgressAfterStdout?.();
         plainFlushedLen = streamed.length;
         plainFlushedText = replacement;
-        return;
+        return true;
       }
       plainFlushedText = "";
       flush(streamed);
       plainFlushedLen = streamed.length;
+      return true;
     }
+    return false;
   };
 
   const finalize = (finalText: string) => {
@@ -307,15 +311,17 @@ export function createStreamOutputGate({
       plainFlushedLen = finalText.length;
       plainFlushedText += reprint;
       pendingFinalReprint = null;
-      return;
+      return true;
     }
 
+    let emitted = false;
     const remaining = plainFlushedLen < finalText.length ? finalText.slice(plainFlushedLen) : "";
     if (remaining) {
       clearBeforeWrite();
       stdout.write(remaining);
       plainFlushedText += remaining;
       restoreProgressAfterStdout?.();
+      emitted = true;
     }
     const endedWithNewline = remaining
       ? remaining.endsWith("\n")
@@ -325,8 +331,18 @@ export function createStreamOutputGate({
       stdout.write("\n");
       plainFlushedText += "\n";
       restoreProgressAfterStdout?.();
+      emitted = true;
     }
+    return emitted;
   };
 
-  return { handleChunk, finalize, getFlushedLen: () => plainFlushedLen };
+  const reset = () => {
+    cleared = false;
+    plainFlushedLen = 0;
+    plainLeadingSkipLen = 0;
+    plainFlushedText = "";
+    pendingFinalReprint = null;
+  };
+
+  return { handleChunk, finalize, reset, getFlushedLen: () => plainFlushedLen };
 }

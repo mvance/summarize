@@ -43,6 +43,13 @@ export type ModelMeta = {
   canonical: string;
 };
 
+export type SummaryAttemptResult = {
+  summary: string;
+  summaryEmitted: boolean;
+  modelMeta: ModelMeta;
+  maxOutputTokensForCall: number | null;
+};
+
 export type MarkdownModel = {
   llmModelId: string;
   forceOpenRouter: boolean;

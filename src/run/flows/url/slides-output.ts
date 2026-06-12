@@ -1,5 +1,6 @@
 import type { SummaryLength } from "@steipete/summarize-core";
 import type { ExtractedLinkContent } from "../../../content/index.js";
+import type { SummaryStreamHandler } from "../../../engine/events.js";
 import type { SlideExtractionResult, SlideImage, SlideSourceKind } from "../../../slides/index.js";
 import {
   createThemeRenderer,
@@ -8,7 +9,6 @@ import {
 } from "../../../tty/theme.js";
 import { createSlidesInlineRenderer } from "../../slides-render.js";
 import type { StreamOutputMode } from "../../stream-output.js";
-import type { SummaryStreamHandler } from "../../summary-engine.js";
 import { isRichTty, supportsColor } from "../../terminal.js";
 import {
   createInlineSlidesUnsupportedNotifier,

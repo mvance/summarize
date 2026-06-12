@@ -1,100 +1,60 @@
 import { pathToFileURL } from "node:url";
 import { loadLocalAsset, type InputTarget } from "../content/asset.js";
 import { isDirectVideoInput } from "../content/index.js";
-import type { RunMetricsReport } from "../costs.js";
+import { hasEngineErrorCode } from "../engine/errors.js";
 import type { ExecFileFn } from "../markitdown.js";
 import { startSpinner } from "../tty/spinner.js";
 import type { AssetAttachment } from "./attachments.js";
 import { MAX_PDF_EXTRACT_BYTES } from "./constants.js";
 import { extractAssetContent } from "./flows/asset/extract.js";
 import type { AssetExtractContext } from "./flows/asset/extract.js";
-import { handleFileInput, isPdfExtension, withUrlAsset } from "./flows/asset/input.js";
+import {
+  handleFileInput,
+  type AssetInputContext,
+  isPdfExtension,
+  withUrlAsset,
+} from "./flows/asset/input.js";
 import { outputExtractedAsset } from "./flows/asset/output.js";
 import type { SummarizeAssetArgs } from "./flows/asset/summary.js";
 import { runUrlFlow } from "./flows/url/flow.js";
+import type { UrlFlowContext } from "./flows/url/types.js";
 import { createTempFileFromStdin } from "./stdin-temp-file.js";
 
-function shouldRetryUrlAsUnknownAsset(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-  const message = error.message.toLowerCase();
-  return (
-    message.includes("unsupported binary payload for html document fetch") ||
-    message.includes("unsupported content-type for html document fetch") ||
-    message.includes("unsupported content-disposition for html document fetch")
-  );
+function canRetryUrlFlowAfterAssetMiss(ctx: UrlFlowContext): boolean {
+  return ctx.flags.firecrawlMode !== "off" && ctx.model.apiStatus.firecrawlConfigured;
 }
 
-function canRetryUrlFlowAfterAssetMiss(ctx: unknown): boolean {
-  if (!ctx || typeof ctx !== "object") return false;
-  const { flags, model } = ctx as {
-    flags?: { firecrawlMode?: unknown };
-    model?: { apiStatus?: { firecrawlConfigured?: unknown } };
-  };
-  return flags?.firecrawlMode !== "off" && model?.apiStatus?.firecrawlConfigured === true;
-}
-
-function allowUrlFlowFirecrawlFallback(ctx: unknown): unknown {
-  if (!ctx || typeof ctx !== "object") return ctx;
-  const flags = (ctx as { flags?: unknown }).flags;
-  if (!flags || typeof flags !== "object") return ctx;
+function allowUrlFlowFirecrawlFallback(ctx: UrlFlowContext): UrlFlowContext {
   return {
-    ...(ctx as object),
-    flags: { ...(flags as object), throwOnAssetLikeHtmlError: false },
+    ...ctx,
+    flags: { ...ctx.flags, throwOnAssetLikeHtmlError: false },
   };
 }
 
-export async function executeRunnerInput(options: {
+type OutputExtractedAssetContext = Omit<
+  Parameters<typeof outputExtractedAsset>[0],
+  "url" | "sourceLabel" | "attachment" | "extracted"
+>;
+
+export type RunnerExecutionOptions = {
   inputTarget: InputTarget;
   stdin: NodeJS.ReadableStream;
-  handleFileInputContext: unknown;
+  handleFileInputContext: AssetInputContext;
   url: string | null;
   isYoutubeUrl: boolean;
-  withUrlAssetContext: unknown;
+  withUrlAssetContext: AssetInputContext;
   slidesEnabled: boolean;
   extractMode: boolean;
   progressEnabled: boolean;
   renderSpinnerStatus: (label: string, detail?: string) => string;
   renderSpinnerStatusWithModel: (label: string, modelId: string) => string;
   extractAssetContext: AssetExtractContext & { execFileImpl: ExecFileFn };
-  outputExtractedAssetContext: {
-    io: {
-      env: Record<string, string | undefined>;
-      envForRun: Record<string, string | undefined>;
-      stdout: NodeJS.WritableStream;
-      stderr: NodeJS.WritableStream;
-    };
-    flags: {
-      timeoutMs: number;
-      preprocessMode: "off" | "auto" | "always";
-      format: "text" | "markdown";
-      plain: boolean;
-      json: boolean;
-      metricsEnabled: boolean;
-      metricsDetailed: boolean;
-      shouldComputeReport: boolean;
-      runStartedAtMs: number;
-      verboseColor: boolean;
-    };
-    hooks: {
-      clearProgressForStdout: () => void;
-      restoreProgressAfterStdout?: (() => void) | null;
-      buildReport: () => Promise<RunMetricsReport>;
-      estimateCostUsd: () => Promise<number | null>;
-    };
-    apiStatus: {
-      xaiApiKey: string | null;
-      apiKey: string | null;
-      openrouterApiKey: string | null;
-      apifyToken: string | null;
-      firecrawlConfigured: boolean;
-      googleConfigured: boolean;
-      anthropicConfigured: boolean;
-      openaiApiKey: string | null;
-    };
-  };
+  outputExtractedAssetContext: OutputExtractedAssetContext;
   summarizeAsset: (args: SummarizeAssetArgs) => Promise<void>;
-  runUrlFlowContext: unknown;
-}) {
+  runUrlFlowContext: UrlFlowContext;
+};
+
+export async function executeRunnerInput(options: RunnerExecutionOptions) {
   const {
     inputTarget,
     stdin,
@@ -123,7 +83,7 @@ export async function executeRunnerInput(options: {
     const stdinTempFile = await createTempFileFromStdin({ stream: stdin });
     try {
       const stdinInputTarget = { kind: "file" as const, filePath: stdinTempFile.filePath };
-      if (await handleFileInput(handleFileInputContext as never, stdinInputTarget)) {
+      if (await handleFileInput(handleFileInputContext, stdinInputTarget)) {
         return;
       }
       throw new Error("Failed to process stdin input");
@@ -167,14 +127,14 @@ export async function executeRunnerInput(options: {
 
   if (slidesDirectInputUrl && inputTarget.kind === "file") {
     await runUrlFlow({
-      ctx: runUrlFlowContext as never,
+      ctx: runUrlFlowContext,
       url: slidesDirectInputUrl,
       isYoutubeUrl: false,
     });
     return;
   }
 
-  if (await handleFileInput(handleFileInputContext as never, inputTarget)) {
+  if (await handleFileInput(handleFileInputContext, inputTarget)) {
     return;
   }
 
@@ -184,7 +144,7 @@ export async function executeRunnerInput(options: {
   ): Promise<boolean> => {
     if (slidesDirectInputUrl || !url) return false;
     return await withUrlAsset(
-      withUrlAssetContext as never,
+      withUrlAssetContext,
       url,
       isYoutubeUrl,
       async ({
@@ -230,7 +190,7 @@ export async function executeRunnerInput(options: {
   }
 
   if (slidesDirectInputUrl && inputTarget.kind === "url") {
-    await runUrlFlow({ ctx: runUrlFlowContext as never, url: slidesDirectInputUrl, isYoutubeUrl });
+    await runUrlFlow({ ctx: runUrlFlowContext, url: slidesDirectInputUrl, isYoutubeUrl });
     return;
   }
 
@@ -239,13 +199,13 @@ export async function executeRunnerInput(options: {
   }
 
   try {
-    await runUrlFlow({ ctx: runUrlFlowContext as never, url, isYoutubeUrl });
+    await runUrlFlow({ ctx: runUrlFlowContext, url, isYoutubeUrl });
   } catch (error) {
-    if (shouldRetryUrlAsUnknownAsset(error)) {
+    if (hasEngineErrorCode(error, "ASSET_LIKE_HTML_FETCH")) {
       if (await tryUrlAsset(true, true)) return;
       if (canRetryUrlFlowAfterAssetMiss(runUrlFlowContext)) {
         await runUrlFlow({
-          ctx: allowUrlFlowFirecrawlFallback(runUrlFlowContext) as never,
+          ctx: allowUrlFlowFirecrawlFallback(runUrlFlowContext),
           url,
           isYoutubeUrl,
         });

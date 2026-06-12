@@ -92,6 +92,7 @@ describe("daemon summary cache", () => {
 
     const first = await runOnce();
     expect(mocks.streamSimple).toHaveBeenCalledTimes(1);
+    expect(first.out).toBe("### Overview\n- Cached summary.\n");
 
     const second = await runOnce();
     expect(mocks.streamSimple).toHaveBeenCalledTimes(1);

@@ -3,9 +3,9 @@ import {
   canStream,
   isGoogleStreamingUnsupportedError,
   isStreamingTimeoutError,
-} from "../src/run/streaming.js";
+} from "../src/engine/streaming.js";
 
-describe("run/streaming", () => {
+describe("engine/streaming", () => {
   it("detects google streaming unsupported errors from url or body", () => {
     expect(
       isGoogleStreamingUnsupportedError({

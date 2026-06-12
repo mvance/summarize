@@ -1,11 +1,11 @@
 import path from "node:path";
 import type { CliProvider } from "../../../config.js";
+import { parseCliUserModelId } from "../../../engine/cli-model-id.js";
+import type { ModelAttempt } from "../../../engine/types.js";
 import { resolveGitHubModelsApiKey } from "../../../llm/github-models.js";
 import { buildAutoModelAttempts } from "../../../model-auto.js";
 import { buildPathSummaryPrompt } from "../../../prompts/index.js";
 import { ensureCliAttachmentPath } from "../../attachments.js";
-import { parseCliUserModelId } from "../../env.js";
-import type { ModelAttempt } from "../../types.js";
 import type { AssetSummaryContext, SummarizeAssetArgs } from "./summary.js";
 
 export async function buildAssetModelAttempts({

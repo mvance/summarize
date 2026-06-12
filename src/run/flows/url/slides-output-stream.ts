@@ -1,8 +1,8 @@
 import { createSlidesPresentationStream } from "@steipete/summarize-core/slides";
 import { createMarkdownStreamer, render as renderMarkdownAnsi } from "markdansi";
+import type { SummaryStreamHandler } from "../../../engine/events.js";
 import { prepareMarkdownForTerminalStreaming } from "../../markdown.js";
 import { createStreamOutputGate, type StreamOutputMode } from "../../stream-output.js";
-import type { SummaryStreamHandler } from "../../summary-engine.js";
 import { isRichTty, markdownRenderWidth, supportsColor } from "../../terminal.js";
 
 export function createSlidesSummaryStreamHandler({
@@ -40,28 +40,31 @@ export function createSlidesSummaryStreamHandler({
         richTty: isRichTty(stdout),
       })
     : null;
-  const streamer = shouldRenderMarkdown
-    ? createMarkdownStreamer({
-        render: (markdown) =>
-          renderMarkdownAnsi(prepareMarkdownForTerminalStreaming(markdown), {
-            width: markdownRenderWidth(stdout, env),
-            wrap: true,
-            color: supportsColor(stdout, envForRun),
-            hyperlinks: true,
-          }),
-        spacing: "single",
-      })
-    : null;
+  const createStreamer = () =>
+    shouldRenderMarkdown
+      ? createMarkdownStreamer({
+          render: (markdown) =>
+            renderMarkdownAnsi(prepareMarkdownForTerminalStreaming(markdown), {
+              width: markdownRenderWidth(stdout, env),
+              wrap: true,
+              color: supportsColor(stdout, envForRun),
+              hyperlinks: true,
+            }),
+          spacing: "single",
+        })
+      : null;
+  let streamer = createStreamer();
 
   let wroteLeadingBlankLine = false;
   let visible = "";
+  let emittedInChunk = false;
 
   const handleMarkdownChunk = (nextVisible: string, prevVisible: string) => {
-    if (!streamer) return;
+    if (!streamer) return false;
     const appended = nextVisible.slice(prevVisible.length);
-    if (!appended) return;
+    if (!appended) return false;
     const out = streamer.push(appended);
-    if (!out) return;
+    if (!out) return false;
     clearProgressForStdout();
     if (!wroteLeadingBlankLine) {
       stdout.write(`\n${out.replace(/^\n+/, "")}`);
@@ -70,6 +73,7 @@ export function createSlidesSummaryStreamHandler({
       stdout.write(out);
     }
     restoreProgressAfterStdout?.();
+    return true;
   };
 
   const pushVisible = (segment: string) => {
@@ -77,10 +81,10 @@ export function createSlidesSummaryStreamHandler({
     const prevVisible = visible;
     visible += segment;
     if (outputGate) {
-      outputGate.handleChunk(visible, prevVisible);
+      emittedInChunk = outputGate.handleChunk(visible, prevVisible) || emittedInChunk;
       return;
     }
-    handleMarkdownChunk(visible, prevVisible);
+    emittedInChunk = handleMarkdownChunk(visible, prevVisible) || emittedInChunk;
   };
 
   const pushVisibleLines = (segment: string) => {
@@ -94,29 +98,37 @@ export function createSlidesSummaryStreamHandler({
     }
   };
 
-  const stream = createSlidesPresentationStream({
-    getSlideIndexOrder,
-    getSlideMeta,
-    debugWrite,
-    onSlide: renderSlide,
-    onText: (segment, kind) => {
-      if (kind === "slide-body") {
-        pushVisibleLines(segment);
-        return;
-      }
-      pushVisible(segment);
-    },
-  });
+  const createStream = () =>
+    createSlidesPresentationStream({
+      getSlideIndexOrder,
+      getSlideMeta,
+      debugWrite,
+      onSlide: async (index, title) => {
+        await renderSlide(index, title);
+        emittedInChunk = true;
+      },
+      onText: (segment, kind) => {
+        if (kind === "slide-body") {
+          pushVisibleLines(segment);
+          return;
+        }
+        pushVisible(segment);
+      },
+    });
+  let stream = createStream();
 
   return {
     onChunk: async ({ appended }) => {
+      emittedInChunk = false;
       await stream.push(appended);
+      return emittedInChunk;
     },
     onDone: async () => {
+      emittedInChunk = false;
       await stream.finish();
+      let emitted = emittedInChunk;
       if (outputGate) {
-        outputGate.finalize(visible);
-        return;
+        return outputGate.finalize(visible) || emitted;
       }
       const out = streamer?.finish();
       if (out) {
@@ -128,11 +140,22 @@ export function createSlidesSummaryStreamHandler({
           stdout.write(out);
         }
         restoreProgressAfterStdout?.();
+        emitted = true;
       } else if (visible && !wroteLeadingBlankLine) {
         clearProgressForStdout();
         stdout.write(`\n${visible.trim()}\n`);
         restoreProgressAfterStdout?.();
+        emitted = true;
       }
+      return emitted;
+    },
+    onReset: () => {
+      outputGate?.reset();
+      streamer = createStreamer();
+      wroteLeadingBlankLine = false;
+      visible = "";
+      emittedInChunk = false;
+      stream = createStream();
     },
   };
 }

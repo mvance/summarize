@@ -1,4 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { AssetLikeHtmlFetchError } from "../packages/core/src/content/index.js";
+import type { AssetInputContext } from "../src/run/flows/asset/input.js";
+import type { UrlFlowContext } from "../src/run/flows/url/types.js";
 
 const extractAssetContent = vi.hoisted(() => vi.fn());
 const handleFileInput = vi.hoisted(() => vi.fn());
@@ -24,16 +27,16 @@ vi.mock("../src/run/stdin-temp-file", () => ({
   createTempFileFromStdin,
 }));
 
-import { executeRunnerInput } from "../src/run/runner-execution";
+import { executeRunnerInput, type RunnerExecutionOptions } from "../src/run/runner-execution";
 
-function buildOptions(overrides?: Partial<Parameters<typeof executeRunnerInput>[0]>) {
+function buildOptions(overrides?: Partial<RunnerExecutionOptions>): RunnerExecutionOptions {
   return {
     inputTarget: { kind: "url", url: "https://example.com" } as never,
     stdin: process.stdin,
-    handleFileInputContext: {},
+    handleFileInputContext: {} as AssetInputContext,
     url: "https://example.com",
     isYoutubeUrl: false,
-    withUrlAssetContext: {},
+    withUrlAssetContext: {} as AssetInputContext,
     slidesEnabled: false,
     extractMode: false,
     progressEnabled: true,
@@ -79,7 +82,7 @@ function buildOptions(overrides?: Partial<Parameters<typeof executeRunnerInput>[
     summarizeAsset: vi.fn(async ({ onModelChosen }) => {
       onModelChosen("openai/gpt-5.4");
     }),
-    runUrlFlowContext: {},
+    runUrlFlowContext: {} as UrlFlowContext,
     ...overrides,
   };
 }
@@ -179,7 +182,9 @@ describe("runner execution", () => {
   it("falls back to slower unknown asset detection only after URL flow fails", async () => {
     handleFileInput.mockResolvedValue(false);
     runUrlFlow.mockRejectedValueOnce(
-      new Error("Unsupported binary payload for HTML document fetch"),
+      new Error("wrapped extraction failure", {
+        cause: new AssetLikeHtmlFetchError("binary-payload"),
+      }),
     );
     withUrlAsset.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
 
@@ -207,9 +212,7 @@ describe("runner execution", () => {
   it("allows Firecrawl fallback when unknown asset retry misses", async () => {
     handleFileInput.mockResolvedValue(false);
     runUrlFlow
-      .mockRejectedValueOnce(
-        new Error("Unsupported content-type for HTML document fetch: application/pdf"),
-      )
+      .mockRejectedValueOnce(new AssetLikeHtmlFetchError("content-type", "application/pdf"))
       .mockResolvedValueOnce(undefined);
     withUrlAsset.mockResolvedValue(false);
 
@@ -218,7 +221,7 @@ describe("runner execution", () => {
         runUrlFlowContext: {
           flags: { firecrawlMode: "auto", throwOnAssetLikeHtmlError: true },
           model: { apiStatus: { firecrawlConfigured: true } },
-        },
+        } as UrlFlowContext,
       }),
     );
 

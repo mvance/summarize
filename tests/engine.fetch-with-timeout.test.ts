@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { fetchWithTimeout } from "../src/run/fetch-with-timeout.js";
+import { fetchWithTimeout } from "../src/engine/fetch-with-timeout.js";
 
-describe("run/fetch-with-timeout", () => {
+describe("engine/fetch-with-timeout", () => {
   it("passes through when init.signal is set", async () => {
     const res = new Response("ok");
     const fetchImpl = vi.fn(async () => res);

@@ -11,6 +11,11 @@ import {
 import type { CliProvider, SummarizeConfig } from "../../../config.js";
 import type { MediaCache } from "../../../content/index.js";
 import type { LlmCall, RunMetricsReport } from "../../../costs.js";
+import type { SummaryStreamHandler } from "../../../engine/events.js";
+import type { createModelExecutor } from "../../../engine/model-executor.js";
+import { buildModelMetaFromAttempt } from "../../../engine/model-meta.js";
+import { executeSummaryAttempts } from "../../../engine/summary-execution.js";
+import type { ModelAttempt } from "../../../engine/types.js";
 import type { OutputLanguage } from "../../../language.js";
 import { formatOutputLanguageForJson } from "../../../language.js";
 import type { Prompt } from "../../../llm/prompt.js";
@@ -28,11 +33,7 @@ import { writeFinishLine } from "../../finish-line.js";
 import { resolveTargetCharacters } from "../../format.js";
 import { writeVerbose } from "../../logging.js";
 import { prepareMarkdownForTerminal } from "../../markdown.js";
-import { buildModelMetaFromAttempt } from "../../model-meta.js";
-import type { createSummaryEngine } from "../../summary-engine.js";
-import { executeSummaryAttempts } from "../../summary-execution.js";
 import { isRichTty, markdownRenderWidth, supportsColor } from "../../terminal.js";
-import type { ModelAttempt } from "../../types.js";
 import { prepareAssetPrompt } from "./preprocess.js";
 import { buildAssetCliContext, buildAssetModelAttempts } from "./summary-attempts.js";
 
@@ -231,7 +232,8 @@ export type AssetSummaryContext = {
   verboseColor: boolean;
   streamingEnabled: boolean;
   plain: boolean;
-  summaryEngine: ReturnType<typeof createSummaryEngine>;
+  summaryEngine: ReturnType<typeof createModelExecutor>;
+  summaryStream: SummaryStreamHandler | null;
   trackedFetch: typeof fetch;
   writeViaFooter: (parts: string[]) => void;
   clearProgressForStdout: () => void;
@@ -317,6 +319,7 @@ export type AssetSummaryContextInput = {
     | "wantsFreeNamedModel"
     | "isNamedModelSelection"
     | "summaryEngine"
+    | "summaryStream"
     | "getLiteLlmCatalog"
     | "llmCalls"
   >;
@@ -492,7 +495,7 @@ export async function summarizeAsset(ctx: AssetSummaryContext, args: SummarizeAs
     onModelChosen: args.onModelChosen,
     buildCachedResult: (attempt, summary) => ({
       summary,
-      summaryAlreadyPrinted: false,
+      summaryEmitted: false,
       modelMeta: buildModelMetaFromAttempt(attempt),
       maxOutputTokensForCall: null,
     }),
@@ -503,6 +506,7 @@ export async function summarizeAsset(ctx: AssetSummaryContext, args: SummarizeAs
         allowStreaming: ctx.streamingEnabled,
         onModelChosen: args.onModelChosen ?? null,
         cli: cliContext,
+        streamHandler: ctx.summaryStream,
       }),
     onFixedModelError: (attempt, error) => {
       if (isUnsupportedAttachmentError(error)) {
@@ -533,7 +537,7 @@ export async function summarizeAsset(ctx: AssetSummaryContext, args: SummarizeAs
     throw new Error("No model available for this input");
   }
 
-  const { summary, summaryAlreadyPrinted, modelMeta, maxOutputTokensForCall } = execution.result;
+  const { summary, summaryEmitted, modelMeta, maxOutputTokensForCall } = execution.result;
   const usedAttempt = execution.usedAttempt;
   const summaryFromCache = execution.summaryFromCache;
 
@@ -624,7 +628,7 @@ export async function summarizeAsset(ctx: AssetSummaryContext, args: SummarizeAs
     return;
   }
 
-  if (!summaryAlreadyPrinted) {
+  if (!summaryEmitted) {
     ctx.clearProgressForStdout();
     const rendered =
       !ctx.plain && isRichTty(ctx.stdout)

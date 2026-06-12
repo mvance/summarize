@@ -16,7 +16,7 @@ vi.mock("../src/prompts/index.js", () => ({
 vi.mock("../src/run/attachments.js", () => ({
   ensureCliAttachmentPath: mocks.ensureCliAttachmentPath,
 }));
-vi.mock("../src/run/env.js", () => ({
+vi.mock("../src/engine/cli-model-id.js", () => ({
   parseCliUserModelId: mocks.parseCliUserModelId,
 }));
 
@@ -41,6 +41,7 @@ function createContext(overrides: Record<string, unknown> = {}) {
         gatewayWrapped: true,
       })),
     },
+    summaryStream: null,
     fixedModelSpec: null,
     apiStatus: {
       zaiApiKey: "zai-key",

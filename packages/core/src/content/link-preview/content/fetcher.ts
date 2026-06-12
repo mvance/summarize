@@ -36,6 +36,34 @@ export interface HtmlDocumentFetchResult {
   finalUrl: string;
 }
 
+export type AssetLikeHtmlFetchReason = "binary-payload" | "content-type" | "content-disposition";
+
+export class AssetLikeHtmlFetchError extends Error {
+  readonly code = "ASSET_LIKE_HTML_FETCH";
+
+  constructor(
+    readonly reason: AssetLikeHtmlFetchReason,
+    detail?: string | null,
+  ) {
+    const label =
+      reason === "binary-payload"
+        ? "Unsupported binary payload for HTML document fetch"
+        : reason === "content-type"
+          ? `Unsupported content-type for HTML document fetch: ${detail ?? "missing"}`
+          : `Unsupported content-disposition for HTML document fetch: ${detail ?? "unknown"}`;
+    super(label);
+    this.name = "AssetLikeHtmlFetchError";
+  }
+}
+
+export function isAssetLikeHtmlFetchError(error: unknown): error is AssetLikeHtmlFetchError {
+  return (
+    error instanceof AssetLikeHtmlFetchError ||
+    (error instanceof Error &&
+      (error as Error & { code?: unknown }).code === "ASSET_LIKE_HTML_FETCH")
+  );
+}
+
 function looksLikeBinaryDocument(bytes: Uint8Array): boolean {
   if (bytes.length === 0) return false;
 
@@ -151,22 +179,20 @@ function assertHtmlPayload(
   },
 ) {
   if (looksLikeBinaryDocument(bytes)) {
-    throw new Error("Unsupported binary payload for HTML document fetch");
+    throw new AssetLikeHtmlFetchError("binary-payload");
   }
   if (rejectNonHtmlText && !contentType && !looksLikeHtmlText(bytes)) {
-    throw new Error("Unsupported content-type for HTML document fetch: missing");
+    throw new AssetLikeHtmlFetchError("content-type");
   }
   if (
     rejectNonHtmlText &&
     isAttachmentContentDisposition(contentDisposition) &&
     !looksLikeHtmlText(bytes)
   ) {
-    throw new Error(
-      `Unsupported content-disposition for HTML document fetch: ${contentDisposition}`,
-    );
+    throw new AssetLikeHtmlFetchError("content-disposition", contentDisposition);
   }
   if (rejectNonHtmlText && isTextAssetContentType(contentType) && !looksLikeHtmlText(bytes)) {
-    throw new Error(`Unsupported content-type for HTML document fetch: ${contentType}`);
+    throw new AssetLikeHtmlFetchError("content-type", contentType);
   }
 }
 
@@ -244,7 +270,7 @@ async function fetchHtmlOnce(
     const contentType = response.headers.get("content-type")?.toLowerCase() ?? null;
     const contentDisposition = response.headers.get("content-disposition")?.toLowerCase() ?? null;
     if (contentType && !isHtmlLikeContentType(contentType) && !contentType.startsWith("text/")) {
-      throw new Error(`Unsupported content-type for HTML document fetch: ${contentType}`);
+      throw new AssetLikeHtmlFetchError("content-type", contentType);
     }
 
     const totalBytes = (() => {

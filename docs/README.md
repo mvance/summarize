@@ -9,6 +9,7 @@ summary: "Docs index for summarize behaviors and modes."
 - `docs/cli.md` — CLI models (Claude/Codex/Gemini/Agent/OpenClaw/OpenCode/Copilot/Antigravity/pi)
 - `docs/config.md` — config file location, precedence, and schema
 - `docs/extract-only.md` — extract mode (no summary LLM call)
+- `docs/engine.md` — headless execution engine architecture
 - `docs/firecrawl.md` — Firecrawl mode + API key
 - `docs/language.md` — output language (`--language` / config `language`)
 - `docs/llm.md` — LLM summarization + model config (Gateway/OpenAI)

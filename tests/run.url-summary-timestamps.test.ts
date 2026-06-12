@@ -4,7 +4,7 @@ import {
   ensureSummaryKeyMoments,
   resolveSummaryTimestampUpperBound,
   sanitizeSummaryKeyMoments,
-} from "../src/run/flows/url/summary-timestamps.js";
+} from "../src/engine/summary-timestamps.js";
 
 describe("url summary timestamp sanitization", () => {
   it("uses the known media duration when transcript timestamps stop earlier", () => {

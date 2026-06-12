@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../src/run/flows/asset/preprocess.js", () => ({
   prepareAssetPrompt: mocks.prepareAssetPrompt,
 }));
-vi.mock("../src/run/model-attempts.js", () => ({
+vi.mock("../src/engine/model-attempts.js", () => ({
   runModelAttempts: mocks.runModelAttempts,
 }));
 
@@ -96,6 +96,7 @@ const createContext = (overrides: Partial<Parameters<typeof summarizeAsset>[0]> 
       zaiBaseUrl: "",
       nvidiaBaseUrl: "",
     },
+    summaryStream: null,
   };
   return {
     ctx: { ...ctx, ...overrides },
@@ -222,7 +223,7 @@ describe("asset summary early branches", () => {
     mocks.runModelAttempts.mockResolvedValue({
       result: {
         summary: "Model summary.",
-        summaryAlreadyPrinted: false,
+        summaryEmitted: false,
         modelMeta: { provider: "openai", canonical: "openai/gpt-5.2" },
         maxOutputTokensForCall: null,
       },

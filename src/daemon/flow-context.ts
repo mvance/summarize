@@ -6,6 +6,8 @@ import type {
   LinkPreviewProgressEvent,
   MediaCache,
 } from "../content/index.js";
+import type { SummaryStreamHandler } from "../engine/events.js";
+import { createModelExecutor } from "../engine/model-executor.js";
 import type { ExecFileFn } from "../markitdown.js";
 import type { FixedModelSpec } from "../model-spec.js";
 import { execFileTracked } from "../processes.js";
@@ -26,13 +28,33 @@ import {
   resolveOutputLanguageSetting,
   resolveSummaryLength,
 } from "../run/run-settings.js";
-import { createSummaryEngine } from "../run/summary-engine.js";
 import { scopeTranscriptCacheForDiarization } from "../shared/transcript-diarization-cache-scope.js";
 import type { SlideImage, SlideSettings, SlideSourceKind } from "../slides/index.js";
 
 type TextSink = {
   writeChunk: (text: string) => void;
 };
+
+export function createDaemonSummaryStreamHandler(stdoutSink: TextSink): SummaryStreamHandler {
+  return {
+    onChunk: ({ streamed, prevStreamed }) => {
+      const normalizedStreamed = streamed.replace(/^\n+/, "");
+      const normalizedPrevious = prevStreamed.replace(/^\n+/, "");
+      const chunk = normalizedStreamed.startsWith(normalizedPrevious)
+        ? normalizedStreamed.slice(normalizedPrevious.length)
+        : normalizedStreamed;
+      if (!chunk) return false;
+      stdoutSink.writeChunk(chunk);
+      return true;
+    },
+    onDone: (finalText) => {
+      if (finalText.endsWith("\n")) return false;
+      stdoutSink.writeChunk("\n");
+      return true;
+    },
+    onReset: () => {},
+  };
+}
 
 function createWritableFromTextSink(sink: TextSink): NodeJS.WritableStream {
   const stream = new Writable({
@@ -237,19 +259,13 @@ export function createDaemonUrlFlowContext(args: DaemonUrlFlowContextArgs): UrlF
   const preprocessMode = resolvedOverrides.preprocessMode ?? "auto";
   const youtubeMode = resolvedOverrides.youtubeMode ?? "auto";
 
-  const summaryEngine = createSummaryEngine({
+  const summaryEngine = createModelExecutor({
     env: envForRun,
     envForRun,
-    stdout,
-    stderr,
     execFileImpl: execFileTracked as unknown as ExecFileFn,
     timeoutMs,
     retries,
     streamingEnabled: true,
-    streamingOutputMode: "delta",
-    plain: true,
-    verbose: false,
-    verboseColor: false,
     openaiUseChatCompletions,
     cliConfigForRun: cliConfigForRun ?? null,
     cliAvailability,
@@ -257,7 +273,6 @@ export function createDaemonUrlFlowContext(args: DaemonUrlFlowContextArgs): UrlF
     resolveMaxOutputTokensForCall: metrics.resolveMaxOutputTokensForCall,
     resolveMaxInputTokensForCall: metrics.resolveMaxInputTokensForCall,
     llmCalls: metrics.llmCalls,
-    clearProgressForStdout: () => {},
     apiKeys: {
       xaiApiKey,
       openaiApiKey: apiKey,
@@ -276,6 +291,7 @@ export function createDaemonUrlFlowContext(args: DaemonUrlFlowContextArgs): UrlF
     ollama: { baseUrl: ollamaBaseUrl },
     providerBaseUrls,
   });
+  const summaryStream = createDaemonSummaryStreamHandler(stdoutSink);
 
   const outputLanguage = resolveOutputLanguageSetting({
     raw: languageRaw,
@@ -331,6 +347,7 @@ export function createDaemonUrlFlowContext(args: DaemonUrlFlowContextArgs): UrlF
       wantsFreeNamedModel,
       isNamedModelSelection,
       summaryEngine,
+      summaryStream,
       getLiteLlmCatalog: metrics.getLiteLlmCatalog,
       llmCalls: metrics.llmCalls,
     },
@@ -480,6 +497,7 @@ export function createDaemonUrlFlowContext(args: DaemonUrlFlowContextArgs): UrlF
         openaiApiKey,
       },
       summaryEngine,
+      summaryStream,
       getLiteLlmCatalog: metrics.getLiteLlmCatalog,
       llmCalls: metrics.llmCalls,
     },

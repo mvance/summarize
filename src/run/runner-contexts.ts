@@ -85,6 +85,7 @@ export function createRunnerFlowContexts(options: {
       wantsFreeNamedModel: model.wantsFreeNamedModel,
       isNamedModelSelection: model.isNamedModelSelection,
       summaryEngine: model.summaryEngine,
+      summaryStream: model.summaryStream,
       getLiteLlmCatalog: model.getLiteLlmCatalog,
       llmCalls: model.llmCalls,
     },
