@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
 import http from "node:http";
 import path from "node:path";
+import { resolveExecutableInPath } from "../application/environment.js";
 import { loadSummarizeConfig } from "../config.js";
 import { createDaemonLogger } from "../logging/daemon.js";
 import { setProcessObserver } from "../processes.js";
 import { createCacheStateFromConfig } from "../run/cache-state.js";
-import { resolveExecutableInPath } from "../run/env.js";
 import { createMediaCacheFromConfig } from "../run/media-cache-state.js";
 import { resolvePackageVersion } from "../version.js";
 import { AuthRateLimiter } from "./auth-rate-limit.js";

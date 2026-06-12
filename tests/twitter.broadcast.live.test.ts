@@ -2,10 +2,10 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { resolveExecutableInPath } from "../src/application/environment.js";
 import { createLinkPreviewClient } from "../src/content/index.js";
 import { readTweetWithPreferredClient } from "../src/run/bird.js";
 import { resolveTwitterCookies } from "../src/run/cookies/twitter.js";
-import { resolveExecutableInPath } from "../src/run/env.js";
 import { extractSlidesForSource, resolveSlideSource } from "../src/slides/index.js";
 import { resolveSlideSettings } from "../src/slides/settings.js";
 

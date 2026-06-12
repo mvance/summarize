@@ -1,8 +1,9 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { resolveBundledFfmpegCommand } from "@steipete/summarize-core/ffmpeg";
+import { resolveExecutableInPath } from "../application/environment.js";
 import type { MediaCache } from "../content/index.js";
-import { canSpawnCommand, resolveExecutableInPath } from "../run/env.js";
+import { canSpawnCommand } from "../run/env.js";
 import {
   buildSlidesMediaCacheKey,
   downloadRemoteVideo,

@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
+import { resolveRunContextState } from "../src/application/context.js";
 import {
   createExecutableRunModel,
   createRunModelRuntime,
   resolveRunModelSpec,
 } from "../src/application/model-runtime.js";
-import { resolveRunContextState } from "../src/run/run-context.js";
 
 describe("application model runtime", () => {
   it("resolves model intent separately from process resources", () => {

@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { resolveRunContextState } from "../src/run/run-context.js";
+import { resolveRunContextState } from "../src/application/context.js";
 
 describe("run context state", () => {
   it("combines config + env resolution", () => {

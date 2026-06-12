@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { resolveRunApiStatus } from "../src/run/run-api-status.js";
-import { resolveEnvState } from "../src/run/run-env.js";
+import { resolveRunApiStatus } from "../src/application/api-status.js";
+import { resolveEnvState } from "../src/application/environment-state.js";
 
 describe("run API status", () => {
   it("projects provider and extraction runtime state without CLI selection fields", () => {

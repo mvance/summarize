@@ -7,7 +7,7 @@ import {
   supportsDnsPinnedFetch,
 } from "@steipete/summarize-core/content";
 import { describe, expect, it, vi } from "vitest";
-import { createRunMetrics } from "../src/run/run-metrics.js";
+import { createRunMetrics } from "../src/application/metrics.js";
 
 async function withBunRuntime<T>(fn: () => Promise<T> | T): Promise<T> {
   const descriptor = Object.getOwnPropertyDescriptor(process.versions, "bun");

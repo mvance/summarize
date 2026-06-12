@@ -1,9 +1,9 @@
 import { getModels } from "@earendil-works/pi-ai";
 import { isOpenRouterBaseUrl } from "@steipete/summarize-core";
+import { resolveEnvState } from "../application/environment-state.js";
+import { resolveCliAvailability } from "../application/environment.js";
 import type { CliProvider, SummarizeConfig } from "../config.js";
 import type { GatewayProvider } from "../llm/provider-capabilities.js";
-import { resolveCliAvailability } from "../run/env.js";
-import { resolveEnvState } from "../run/run-env.js";
 import { discoverOpenAiCompatibleModels } from "./model-discovery.js";
 
 export type ModelPickerOption = {

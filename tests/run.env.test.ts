@@ -3,13 +3,15 @@ import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
-  canSpawnCommand,
-  hasUvxCli,
   parseBooleanEnv,
-  parseCliProviderArg,
-  parseCliUserModelId,
   resolveCliAvailability,
   resolveExecutableInPath,
+} from "../src/application/environment.js";
+import {
+  canSpawnCommand,
+  hasUvxCli,
+  parseCliProviderArg,
+  parseCliUserModelId,
 } from "../src/run/env.js";
 
 const makeBin = (name: string) => {

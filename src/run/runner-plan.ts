@@ -1,4 +1,5 @@
 import type { Command } from "commander";
+import { resolveRunContextState } from "../application/context.js";
 import { createRunFlowContexts } from "../application/flow-contexts.js";
 import {
   createExecutableRunModel,
@@ -22,7 +23,6 @@ import { writeVerbose } from "./logging.js";
 import { createMediaCacheFromConfig } from "./media-cache-state.js";
 import type { PerfTrace } from "./perf-trace.js";
 import { createProgressGate } from "./progress.js";
-import { resolveRunContextState } from "./run-context.js";
 import { resolveRunInput } from "./run-input.js";
 import { buildPromptLengthInstruction, resolveSummaryLength } from "./run-settings.js";
 import { resolveStreamSettings } from "./run-stream.js";

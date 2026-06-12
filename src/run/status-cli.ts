@@ -1,14 +1,14 @@
 import { isOpenRouterBaseUrl } from "@steipete/summarize-core";
+import { resolveEnvState } from "../application/environment-state.js";
+import { resolveCliAvailability, resolveExecutableInPath } from "../application/environment.js";
+import { resolveProviderRuntimeBindings } from "../application/provider-runtime.js";
 import type { CliProvider, ModelConfig, SummarizeConfig } from "../config.js";
 import { loadSummarizeConfig } from "../config.js";
 import { discoverOpenAiCompatibleModels } from "../daemon/model-discovery.js";
 import { buildModelPickerOptions } from "../daemon/models.js";
 import { resolveCliBinary } from "../llm/cli.js";
 import { getGatewayProviderProfile, type GatewayProvider } from "../llm/provider-capabilities.js";
-import { resolveCliAvailability, resolveExecutableInPath } from "./env.js";
 import { buildStatusHelp } from "./help.js";
-import { resolveProviderRuntimeBindings } from "./provider-runtime.js";
-import { resolveEnvState } from "./run-env.js";
 
 type StatusModel = {
   selection: string;

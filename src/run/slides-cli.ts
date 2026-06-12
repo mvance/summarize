@@ -1,4 +1,5 @@
 import { CommanderError } from "commander";
+import { resolveEnvState } from "../application/environment-state.js";
 import { loadSummarizeConfig } from "../config.js";
 import { parseDurationMs } from "../flags.js";
 import {
@@ -18,7 +19,6 @@ import { formatVersionLine } from "../version.js";
 import { applyHelpStyle, buildSlidesProgram } from "./help.js";
 import { writeVerbose } from "./logging.js";
 import { createMediaCacheFromConfig } from "./media-cache-state.js";
-import { resolveEnvState } from "./run-env.js";
 import { renderSlidesInline, type SlidesRenderMode } from "./slides-render.js";
 import { isRichTty, supportsColor } from "./terminal.js";
 

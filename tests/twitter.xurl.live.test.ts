@@ -1,8 +1,8 @@
 import { execFileSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
+import { resolveExecutableInPath } from "../src/application/environment.js";
 import { createLinkPreviewClient } from "../src/content/index.js";
 import { readTweetWithPreferredClient } from "../src/run/bird.js";
-import { resolveExecutableInPath } from "../src/run/env.js";
 
 const ENV = process.env as Record<string, string | undefined>;
 const XURL_PATH = resolveExecutableInPath("xurl", ENV);

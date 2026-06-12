@@ -1,4 +1,5 @@
 import { Writable } from "node:stream";
+import { resolveRunContextState } from "../application/context.js";
 import { createRunFlowContexts } from "../application/flow-contexts.js";
 import {
   createExecutableRunModel,
@@ -16,7 +17,6 @@ import type { SummaryStreamHandler } from "../engine/events.js";
 import type { ExecFileFn } from "../markitdown.js";
 import { execFileTracked } from "../processes.js";
 import type { UrlFlowContext } from "../run/flows/url/types.js";
-import { resolveRunContextState } from "../run/run-context.js";
 import {
   buildPromptLengthInstruction,
   createEmptyRunOverrides,

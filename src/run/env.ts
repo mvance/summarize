@@ -1,37 +1,7 @@
 import { spawn } from "node:child_process";
-import { accessSync, constants as fsConstants } from "node:fs";
-import path from "node:path";
-import type { CliProvider, SummarizeConfig } from "../config.js";
+import { resolveExecutableInPath } from "../application/environment.js";
+import type { CliProvider } from "../config.js";
 export { parseCliUserModelId } from "../engine/cli-model-id.js";
-import { isCliDisabled, resolveCliBinary } from "../llm/cli.js";
-
-type ConfigForCli = SummarizeConfig | null;
-
-function isExecutable(filePath: string): boolean {
-  try {
-    accessSync(filePath, fsConstants.X_OK);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-export function resolveExecutableInPath(
-  binary: string,
-  env: Record<string, string | undefined>,
-): string | null {
-  if (!binary) return null;
-  if (path.isAbsolute(binary)) {
-    return isExecutable(binary) ? binary : null;
-  }
-  const pathEnv = env.PATH ?? "";
-  for (const entry of pathEnv.split(path.delimiter)) {
-    if (!entry) continue;
-    const candidate = path.join(entry, binary);
-    if (isExecutable(candidate)) return candidate;
-  }
-  return null;
-}
 
 export async function canSpawnCommand({
   command,
@@ -69,37 +39,6 @@ export function hasUvxCli(env: Record<string, string | undefined>): boolean {
   return resolveExecutableInPath("uvx", env) !== null;
 }
 
-export function resolveCliAvailability({
-  env,
-  config,
-}: {
-  env: Record<string, string | undefined>;
-  config: ConfigForCli;
-}): Partial<Record<CliProvider, boolean>> {
-  const cliConfig = config?.cli ?? null;
-  const providers: CliProvider[] = [
-    "claude",
-    "codex",
-    "gemini",
-    "agent",
-    "openclaw",
-    "opencode",
-    "copilot",
-    "agy",
-    "pi",
-  ];
-  const availability: Partial<Record<CliProvider, boolean>> = {};
-  for (const provider of providers) {
-    if (isCliDisabled(provider, cliConfig)) {
-      availability[provider] = false;
-      continue;
-    }
-    const binary = resolveCliBinary(provider, cliConfig, env);
-    availability[provider] = resolveExecutableInPath(binary, env) !== null;
-  }
-  return availability;
-}
-
 export function parseCliProviderArg(raw: string): CliProvider {
   const normalized = raw.trim().toLowerCase();
   if (
@@ -116,13 +55,4 @@ export function parseCliProviderArg(raw: string): CliProvider {
     return normalized as CliProvider;
   }
   throw new Error(`Unsupported --cli: ${raw}`);
-}
-
-export function parseBooleanEnv(value: string | null | undefined): boolean | null {
-  if (typeof value !== "string") return null;
-  const normalized = value.trim().toLowerCase();
-  if (normalized.length === 0) return null;
-  if (["1", "true", "yes", "on"].includes(normalized)) return true;
-  if (["0", "false", "no", "off"].includes(normalized)) return false;
-  return null;
 }

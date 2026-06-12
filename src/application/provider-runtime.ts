@@ -1,8 +1,8 @@
 import type { SummarizeConfig } from "../config.js";
 import { resolveGitHubModelsApiKey } from "../llm/github-models.js";
 import type { ProviderRuntimeBindings } from "../llm/provider-profile.js";
-import { parseBooleanEnv } from "./env.js";
-import type { EnvState } from "./run-env.js";
+import type { EnvState } from "./environment-state.js";
+import { parseBooleanEnv } from "./environment.js";
 
 export function resolveOpenAiUseChatCompletions({
   env,

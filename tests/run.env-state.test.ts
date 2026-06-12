@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { resolveEnvState } from "../src/application/environment-state.js";
 import type { SummarizeConfig } from "../src/config.js";
-import { resolveEnvState } from "../src/run/run-env.js";
 
 describe("resolveEnvState", () => {
   it("resolves various API keys and configurations from env and config", () => {

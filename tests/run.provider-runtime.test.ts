@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { resolveProviderRuntimeBindings } from "../src/run/provider-runtime.js";
-import { resolveEnvState } from "../src/run/run-env.js";
+import { resolveEnvState } from "../src/application/environment-state.js";
+import { resolveProviderRuntimeBindings } from "../src/application/provider-runtime.js";
 
 describe("provider runtime bindings", () => {
   it("maps every configured gateway provider into shared runtime bindings", () => {

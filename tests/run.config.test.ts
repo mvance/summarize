@@ -2,7 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { resolveConfigState } from "../src/run/run-config.js";
+import { resolveConfigState } from "../src/application/config-state.js";
 
 function resolveTestConfigState(programOpts: Record<string, unknown>) {
   return resolveConfigState({

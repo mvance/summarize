@@ -1,4 +1,7 @@
 import type { Context, Message } from "@earendil-works/pi-ai";
+import { resolveEnvState } from "../application/environment-state.js";
+import { resolveModelSelection } from "../application/model-selection.js";
+import { resolveProviderRuntimeBindings } from "../application/provider-runtime.js";
 import type { CliProvider, SummarizeConfig } from "../config.js";
 import { createFixedModelAttempt } from "../engine/fixed-model-attempt.js";
 import { resolveModelAttemptOpenAiOverrides } from "../engine/provider-attempt.js";
@@ -10,9 +13,6 @@ import { parseGatewayStyleModelId } from "../llm/model-id.js";
 import { mergeModelRequestOptions, mergeRequestOptionsForProvider } from "../llm/model-options.js";
 import { buildAutoModelAttempts, envHasKey } from "../model-auto.js";
 import { parseCliUserModelId } from "../run/env.js";
-import { resolveProviderRuntimeBindings } from "../run/provider-runtime.js";
-import { resolveEnvState } from "../run/run-env.js";
-import { resolveModelSelection } from "../run/run-models.js";
 
 type ChatSession = {
   id: string;

@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { createRunMetrics } from "../src/run/run-metrics.js";
+import { createRunMetrics } from "../src/application/metrics.js";
 
 describe("run metrics cost estimation", () => {
   it("keeps the total unknown when any billable call lacks usage and an explicit cost", async () => {

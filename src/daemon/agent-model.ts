@@ -1,6 +1,8 @@
 import type { Api, Model } from "@earendil-works/pi-ai";
 import { getModel } from "@earendil-works/pi-ai";
 import { isOpenRouterBaseUrl } from "@steipete/summarize-core";
+import { resolveRunContextState } from "../application/context.js";
+import { resolveModelSelection } from "../application/model-selection.js";
 import type { CliProvider } from "../config.js";
 import { buildGitHubModelsHeaders, resolveGitHubModelsApiKey } from "../llm/github-models.js";
 import { parseGatewayStyleModelId } from "../llm/model-id.js";
@@ -15,8 +17,6 @@ import { resolveMinimaxModel } from "../llm/providers/models.js";
 import { createSyntheticModel } from "../llm/providers/shared.js";
 import { buildAutoModelAttempts, envHasKey, type AutoModelAttempt } from "../model-auto.js";
 import { parseCliUserModelId } from "../run/env.js";
-import { resolveRunContextState } from "../run/run-context.js";
-import { resolveModelSelection } from "../run/run-models.js";
 import { resolveRunOverrides } from "../run/run-settings.js";
 
 type AgentApiKeys = {

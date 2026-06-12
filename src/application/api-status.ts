@@ -1,5 +1,5 @@
 import type { RunApiStatus } from "../shared/run-api-status.js";
-import type { EnvState } from "./run-env.js";
+import type { EnvState } from "./environment-state.js";
 
 export function resolveRunApiStatus(envState: EnvState): RunApiStatus {
   return {

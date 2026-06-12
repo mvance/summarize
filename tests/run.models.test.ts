@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveModelSelection } from "../src/run/run-models.js";
+import { resolveModelSelection } from "../src/application/model-selection.js";
 
 describe("run model selection", () => {
   it("resolves built-in GPT fast presets", () => {

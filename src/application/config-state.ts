@@ -4,7 +4,7 @@ import { parseEmbeddedVideoMode, parseVideoMode } from "../flags.js";
 import { type OutputLanguage, parseOutputLanguage } from "../language.js";
 import { parseOpenAiReasoningEffort, parseOpenAiServiceTier } from "../llm/model-options.js";
 import type { ModelRequestOptions, OpenAiReasoningEffort } from "../llm/model-options.js";
-import { parseBooleanEnv } from "./env.js";
+import { parseBooleanEnv } from "./environment.js";
 
 export type ConfigState = {
   config: SummarizeConfig | null;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveDesiredOutputTokens } from "../src/run/run-output.js";
+import { resolveDesiredOutputTokens } from "../src/application/output-policy.js";
 
 describe("run-output", () => {
   it("returns the explicit max output tokens override", () => {
