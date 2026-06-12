@@ -170,6 +170,30 @@ describe("model executor OpenAI chat-completions routing", () => {
     expect(call.openaiBaseUrlOverride).toBe("https://minimax.example.com/v1");
     expect(call.forceChatCompletions).toBe(true);
   });
+
+  it("does not forward the OpenAI key to Ollama", async () => {
+    const engine = createTestModelExecutor(undefined);
+    const attempt = engine.applyOpenAiGatewayOverrides({
+      transport: "native",
+      userModelId: "ollama/qwen3:8b",
+      llmModelId: "ollama/qwen3:8b",
+      openrouterProviders: null,
+      forceOpenRouter: false,
+      requiredEnv: "OLLAMA_BASE_URL",
+    });
+    await engine.runSummaryAttempt({
+      attempt,
+      prompt: { userText: "Summarize this." } as Prompt,
+      allowStreaming: false,
+    });
+
+    const call = mocks.summarizeWithModelId.mock.calls[0]?.[0] as {
+      apiKeys?: { openaiApiKey?: string | null };
+      openaiBaseUrlOverride?: string | null;
+    };
+    expect(call.apiKeys?.openaiApiKey).toBeNull();
+    expect(call.openaiBaseUrlOverride).toBe("http://localhost:11434/v1");
+  });
 });
 
 describe("model executor streaming", () => {

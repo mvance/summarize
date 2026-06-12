@@ -320,7 +320,10 @@ export function createModelExecutor(deps: ModelExecutorDeps) {
     const parsedModel = parseGatewayStyleModelId(attempt.llmModelId);
     const apiKeysForLlm = {
       xaiApiKey: deps.apiKeys.xaiApiKey,
-      openaiApiKey: attempt.openaiApiKeyOverride ?? deps.apiKeys.openaiApiKey,
+      openaiApiKey:
+        attempt.openaiApiKeyOverride === undefined
+          ? deps.apiKeys.openaiApiKey
+          : attempt.openaiApiKeyOverride,
       googleApiKey: deps.keyFlags.googleConfigured ? deps.apiKeys.googleApiKey : null,
       anthropicApiKey: deps.keyFlags.anthropicConfigured ? deps.apiKeys.anthropicApiKey : null,
       openrouterApiKey: deps.keyFlags.openrouterConfigured ? deps.apiKeys.openrouterApiKey : null,

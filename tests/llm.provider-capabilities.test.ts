@@ -208,6 +208,7 @@ describe("llm provider capabilities", () => {
       forceChatCompletions: true,
     });
     expect(resolveProviderOpenAiOverrides({ provider: "ollama", runtime })).toEqual({
+      openaiApiKeyOverride: null,
       openaiBaseUrlOverride: "http://ollama.example:11434/v1",
       forceChatCompletions: true,
     });

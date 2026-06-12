@@ -174,9 +174,7 @@ export function resolveProviderOpenAiOverrides({
   const apiKey = runtime.apiKeys[provider];
 
   return {
-    ...(provider !== "openai" && provider !== "ollama"
-      ? { openaiApiKeyOverride: apiKey ?? null }
-      : {}),
+    ...(provider !== "openai" ? { openaiApiKeyOverride: apiKey ?? null } : {}),
     ...(openaiBaseUrlOverride != null ? { openaiBaseUrlOverride } : {}),
     ...(typeof forceChatCompletions === "boolean" ? { forceChatCompletions } : {}),
   };
