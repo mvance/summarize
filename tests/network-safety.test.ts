@@ -1,4 +1,5 @@
 import {
+  getNetworkAddressFamily,
   isBlockedNetworkAddress,
   isBlockedNetworkHostname,
   normalizeNetworkHostname,
@@ -40,8 +41,12 @@ describe("network safety policy", () => {
 
   it("normalizes URL hostnames and blocks localhost names", () => {
     expect(normalizeNetworkHostname("[::1]")).toBe("::1");
+    expect(getNetworkAddressFamily("8.8.8.8")).toBe(4);
+    expect(getNetworkAddressFamily("[2606:4700:4700::1111]")).toBe(6);
+    expect(getNetworkAddressFamily("example.com")).toBe(0);
     expect(isBlockedNetworkHostname("localhost")).toBe(true);
     expect(isBlockedNetworkHostname("feed.localhost.")).toBe(true);
+    expect(isBlockedNetworkHostname("printer.local")).toBe(true);
     expect(isBlockedNetworkHostname("example.com")).toBe(false);
   });
 });

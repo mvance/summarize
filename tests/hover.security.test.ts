@@ -22,6 +22,9 @@ describe("hover summary security boundaries", () => {
     expect(isHoverSummarizeUrlAllowed("http://172.16.0.10/internal")).toBe(false);
     expect(isHoverSummarizeUrlAllowed("http://192.168.1.20/router")).toBe(false);
     expect(isHoverSummarizeUrlAllowed("http://169.254.169.254/latest/meta-data/")).toBe(false);
+    expect(isHoverSummarizeUrlAllowed("http://100.64.0.1/internal")).toBe(false);
+    expect(isHoverSummarizeUrlAllowed("http://224.0.0.1/multicast")).toBe(false);
+    expect(isHoverSummarizeUrlAllowed("http://[::ffff:127.0.0.1]/admin")).toBe(false);
     expect(isHoverSummarizeUrlAllowed("http://localhost:8787/health")).toBe(false);
     expect(isHoverSummarizeUrlAllowed("http://panel.localhost/admin")).toBe(false);
     expect(isHoverSummarizeUrlAllowed("http://printer.local/status")).toBe(false);

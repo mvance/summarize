@@ -27,6 +27,10 @@
       "types": "./dist/types/content/local-file.d.ts",
       "import": "./dist/esm/content/local-file.js"
     },
+    "./content/network-safety": {
+      "types": "./dist/types/content/network-safety.d.ts",
+      "import": "./dist/esm/content/network-safety.js"
+    },
     "./content/youtube": {
       "types": "./dist/types/content/youtube.d.ts",
       "import": "./dist/esm/content/youtube.js"

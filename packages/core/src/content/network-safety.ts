@@ -1,5 +1,3 @@
-import { isIP } from "node:net";
-
 function parseIpv4(address: string): number[] | null {
   const parts = address.split(".");
   if (parts.length !== 4) return null;
@@ -101,12 +99,19 @@ export function normalizeNetworkHostname(hostname: string): string {
 
 export function isBlockedNetworkHostname(hostname: string): boolean {
   const host = normalizeNetworkHostname(hostname).toLowerCase().replace(/\.$/, "");
-  return host === "localhost" || host.endsWith(".localhost");
+  return host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local");
+}
+
+export function getNetworkAddressFamily(address: string): 0 | 4 | 6 {
+  const normalized = normalizeNetworkHostname(address);
+  if (parseIpv4(normalized)) return 4;
+  if (normalized.includes(":") && expandIpv6(normalized)) return 6;
+  return 0;
 }
 
 export function isBlockedNetworkAddress(address: string): boolean {
   const normalized = normalizeNetworkHostname(address);
-  const family = isIP(normalized);
+  const family = getNetworkAddressFamily(normalized);
   if (family === 4) return isBlockedIpv4(normalized);
   if (family === 6) return isBlockedIpv6(normalized);
   return true;

@@ -35,6 +35,7 @@ export {
   type NetworkLookupAddress,
 } from "./network-guard.js";
 export {
+  getNetworkAddressFamily,
   isBlockedNetworkAddress,
   isBlockedNetworkHostname,
   normalizeNetworkHostname,

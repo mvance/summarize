@@ -1,6 +1,5 @@
 import { lookup as dnsLookup } from "node:dns/promises";
 import { createRequire } from "node:module";
-import { isIP } from "node:net";
 import { fetchWithDnsPinnedAddresses } from "./dns-pinned-fetch.js";
 import {
   attachDnsPinnedAddresses,
@@ -10,6 +9,7 @@ import {
   supportsDnsPinnedFetch,
 } from "./fetch-capabilities.js";
 import {
+  getNetworkAddressFamily,
   isBlockedNetworkAddress,
   isBlockedNetworkHostname,
   normalizeNetworkHostname,
@@ -54,7 +54,7 @@ function createPinnedDispatcher(addresses: NetworkLookupAddress[]): unknown {
   const { Agent } = loadUndici();
   const pinnedAddresses = addresses.map((entry) => ({
     address: entry.address,
-    family: entry.family ?? (isIP(entry.address) || 4),
+    family: entry.family || getNetworkAddressFamily(entry.address) || 4,
   }));
   return new Agent({
     autoSelectFamily: true,
@@ -122,7 +122,7 @@ async function resolveNetworkTarget(
   if (isBlockedNetworkHostname(hostname)) {
     throw new Error(`${targetLabel} resolves to a blocked local network host`);
   }
-  if (isIP(hostname)) {
+  if (getNetworkAddressFamily(hostname) !== 0) {
     if (isBlockedNetworkAddress(hostname)) {
       throw new Error(`${targetLabel} resolves to a blocked local network address`);
     }
