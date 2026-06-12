@@ -10,6 +10,7 @@ import {
 import { splitSummaryFromSlides } from "../../lib/slides-text";
 import { generateToken } from "../../lib/token";
 import { createAppearanceControls } from "./appearance-controls";
+import { createAutoSummarizeRuntime } from "./auto-summarize-runtime";
 import { createSidepanelBgMessageRuntime } from "./bg-message-runtime";
 import { bindSidepanelUiEvents } from "./bindings";
 import { bootstrapSidepanel } from "./bootstrap-runtime";
@@ -167,8 +168,6 @@ const panelMessagingRuntime = createPanelMessagingRuntime({
   },
 });
 const { handleLocalSlidesResponse, resolveLocalSlides, send, sendRaw } = panelMessagingRuntime;
-
-let autoKickTimer = 0;
 
 const slidesRendererReference =
   createRequiredRuntimeReference<ReturnType<typeof createSlidesViewRuntime>["slidesRenderer"]>(
@@ -717,14 +716,21 @@ const summaryStreamRuntime = createSummaryStreamRuntime({
 });
 const { streamController } = summaryStreamRuntime;
 
+const autoSummarizeRuntime = createAutoSummarizeRuntime({
+  getEnabled: () => getPanelSession().autoSummarize,
+  getPhase: () => panelState.phase,
+  hasSummary: () => Boolean(panelState.summaryMarkdown),
+  summarize: () => {
+    sendSummarize();
+  },
+});
+
 const summaryRunRuntime = createSummaryRunRuntime({
   panelState,
   dispatchPanelState: panelStateStore.dispatch,
   getActiveTabId,
   getActiveTabUrl,
-  clearAutoKickTimer: () => {
-    window.clearTimeout(autoKickTimer);
-  },
+  cancelAutoSummarize: autoSummarizeRuntime.cancel,
   summaryStream: {
     isStreaming: streamController.isStreaming,
     setPreserveChatOnNextReset: summaryStreamRuntime.setPreserveChatOnNextReset,
@@ -876,17 +882,6 @@ const bgMessageRuntime = createSidepanelBgMessageRuntime({
 
 function handleBgMessage(msg: BgToPanel) {
   bgMessageRuntime.handle(msg);
-}
-
-function scheduleAutoKick() {
-  if (!getPanelSession().autoSummarize) return;
-  window.clearTimeout(autoKickTimer);
-  autoKickTimer = window.setTimeout(() => {
-    if (!getPanelSession().autoSummarize) return;
-    if (panelState.phase !== "idle") return;
-    if (panelState.summaryMarkdown) return;
-    sendSummarize();
-  }, 350);
 }
 
 const interactionRuntime = createSidepanelInteractionRuntime({
@@ -1041,7 +1036,7 @@ bootstrapSidepanel({
   sendReady: () => {
     void send({ type: "panel:ready" });
   },
-  scheduleAutoKick,
+  scheduleAutoSummarize: autoSummarizeRuntime.schedule,
   sendPing: () => {
     void send({ type: "panel:ping" });
   },
@@ -1050,10 +1045,10 @@ bootstrapSidepanel({
       void send({ type: "panel:ready" });
     },
     sendClosed: () => {
-      window.clearTimeout(autoKickTimer);
+      autoSummarizeRuntime.cancel();
       void send({ type: "panel:closed" });
     },
-    scheduleAutoKick,
+    scheduleAutoSummarize: autoSummarizeRuntime.schedule,
     syncWithActiveTab,
     clearInlineError: () => {
       errorController.clearInlineError();

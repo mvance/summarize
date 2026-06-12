@@ -41,7 +41,7 @@ export function createSummaryRunRuntime({
   dispatchPanelState,
   getActiveTabId,
   getActiveTabUrl,
-  clearAutoKickTimer,
+  cancelAutoSummarize,
   summaryStream,
   slides,
   chat,
@@ -51,7 +51,7 @@ export function createSummaryRunRuntime({
   dispatchPanelState?: (action: PanelStateAction) => void;
   getActiveTabId: () => number | null;
   getActiveTabUrl: () => string | null;
-  clearAutoKickTimer: () => void;
+  cancelAutoSummarize: () => void;
   summaryStream: SummaryStreamPort;
   slides: SlidesRunPort;
   chat: ChatRunPort;
@@ -95,7 +95,7 @@ export function createSummaryRunRuntime({
 
     view.setPhase("connecting");
     dispatch({ type: "panel-session-update", value: { lastAction: "summarize" } });
-    clearAutoKickTimer();
+    cancelAutoSummarize();
     if (panelState.chat.streaming) chat.finishStreamingMessage();
 
     const preserveChat = chat.shouldPreserveForRun(run.url);

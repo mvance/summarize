@@ -121,14 +121,14 @@ export function bindSidepanelUiEvents({
 export function bindSidepanelLifecycle({
   sendReady,
   sendClosed,
-  scheduleAutoKick,
+  scheduleAutoSummarize,
   syncWithActiveTab,
   clearInlineError,
   sendSummarize,
 }: {
   sendReady: () => void;
   sendClosed: () => void;
-  scheduleAutoKick: () => void;
+  scheduleAutoSummarize: () => void;
   syncWithActiveTab: () => Promise<void>;
   clearInlineError: () => void;
   sendSummarize: (opts?: { refresh?: boolean }) => void;
@@ -141,7 +141,7 @@ export function bindSidepanelLifecycle({
     panelMarkedOpen = true;
     clearInlineError();
     sendReady();
-    scheduleAutoKick();
+    scheduleAutoSummarize();
     void syncWithActiveTab();
   };
 

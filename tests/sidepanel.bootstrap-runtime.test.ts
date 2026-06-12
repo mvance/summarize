@@ -71,7 +71,7 @@ describe("sidepanel bootstrap runtime", () => {
       toggleDrawerClosed: () => calls.push("drawer"),
       renderMarkdownDisplay: () => calls.push("render"),
       sendReady: () => calls.push("ready"),
-      scheduleAutoKick: () => calls.push("auto-kick"),
+      scheduleAutoSummarize: () => calls.push("auto-kick"),
       sendPing: () => calls.push("ping"),
       bindSidepanelLifecycle: { sendReady: () => {} } as never,
     });
@@ -135,7 +135,7 @@ describe("sidepanel bootstrap runtime", () => {
       toggleDrawerClosed: () => calls.push("drawer"),
       renderMarkdownDisplay: () => calls.push("render"),
       sendReady: () => calls.push("ready"),
-      scheduleAutoKick: () => calls.push("auto-kick"),
+      scheduleAutoSummarize: () => calls.push("auto-kick"),
       sendPing: () => calls.push("ping"),
       bindSidepanelLifecycle: { sendReady: () => {} } as never,
     });

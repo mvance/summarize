@@ -39,7 +39,7 @@ function createHarness(
     chatClearHistory: vi.fn(async () => {}),
     chatFinishStreamingMessage: vi.fn(),
     chatReset: vi.fn(),
-    clearAutoKickTimer: vi.fn(),
+    cancelAutoSummarize: vi.fn(),
     queueEmptyRender: vi.fn(),
     renderMarkdown: vi.fn(),
     setHeaderSubtitle: vi.fn(),
@@ -63,7 +63,7 @@ function createHarness(
       : undefined,
     getActiveTabId: () => panelState.navigation.activeTabId,
     getActiveTabUrl: () => panelState.navigation.activeTabUrl,
-    clearAutoKickTimer: calls.clearAutoKickTimer,
+    cancelAutoSummarize: calls.cancelAutoSummarize,
     summaryStream: {
       isStreaming: () => options.streaming ?? false,
       setPreserveChatOnNextReset: calls.summarySetPreserveChat,
@@ -144,7 +144,7 @@ describe("summary run runtime", () => {
     expect(harness.calls.chatFinishStreamingMessage).toHaveBeenCalledOnce();
     expect(harness.calls.chatClearHistory).toHaveBeenCalledOnce();
     expect(harness.calls.chatReset).toHaveBeenCalledOnce();
-    expect(harness.calls.clearAutoKickTimer).toHaveBeenCalledOnce();
+    expect(harness.calls.cancelAutoSummarize).toHaveBeenCalledOnce();
     expect(harness.calls.setMetricsMode).toHaveBeenCalledWith("summary");
     expect(harness.calls.setHeaderTitle).toHaveBeenCalledWith(run.url);
     expect(harness.calls.queueEmptyRender).toHaveBeenCalledOnce();

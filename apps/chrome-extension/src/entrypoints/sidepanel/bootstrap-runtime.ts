@@ -55,7 +55,7 @@ export function bootstrapSidepanel(options: {
   toggleDrawerClosed: () => void;
   renderMarkdownDisplay: () => void;
   sendReady: () => void;
-  scheduleAutoKick: () => void;
+  scheduleAutoSummarize: () => void;
   sendPing: () => void;
   bindSidepanelLifecycle: Parameters<typeof bindSidepanelLifecycle>[0];
 }) {
@@ -101,7 +101,7 @@ export function bootstrapSidepanel(options: {
     options.toggleDrawerClosed();
     options.renderMarkdownDisplay();
     options.sendReady();
-    options.scheduleAutoKick();
+    options.scheduleAutoSummarize();
   })();
 
   setInterval(() => {
