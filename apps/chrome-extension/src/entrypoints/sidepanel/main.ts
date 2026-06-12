@@ -15,8 +15,7 @@ import { bindSidepanelUiEvents } from "./bindings";
 import { bootstrapSidepanel } from "./bootstrap-runtime";
 import { createSidepanelChatRuntime } from "./chat-runtime";
 import { createSidepanelDom } from "./dom";
-import { createErrorController } from "./error-controller";
-import { createHeaderController } from "./header-controller";
+import { createSidepanelFeedbackRuntime } from "./feedback-runtime";
 import { createSidepanelInteractionRuntime } from "./interaction-runtime";
 import { createMetricsController } from "./metrics-controller";
 import { createNavigationRuntime } from "./navigation-runtime";
@@ -38,7 +37,7 @@ import { createSummaryStreamRuntime } from "./summary-stream-runtime";
 import { createSummaryViewRuntime } from "./summary-view-runtime";
 import { registerSidepanelTestHooks } from "./test-hooks";
 import { parseTimestampHref } from "./timestamp-links";
-import type { PanelPhase, UiState } from "./types";
+import type { UiState } from "./types";
 import { createTypographyController } from "./typography-controller";
 import { createUiStateRuntime } from "./ui-state-runtime";
 
@@ -195,20 +194,6 @@ const slidesTextController = createSlidesTextController({
   getSlidesOcrEnabled: () => getSlidesState().slidesOcrEnabled,
 });
 
-function showSlideNotice(message: string, opts?: { allowRetry?: boolean }) {
-  slideNoticeMessageEl.textContent = message;
-  slideNoticeRetryBtn.hidden = !opts?.allowRetry;
-  slideNoticeEl.classList.remove("hidden");
-  headerController.updateHeaderOffset();
-}
-
-function hideSlideNotice() {
-  slideNoticeEl.classList.add("hidden");
-  slideNoticeMessageEl.textContent = "";
-  slideNoticeRetryBtn.hidden = true;
-  headerController.updateHeaderOffset();
-}
-
 function stopSlidesStream() {
   slidesRuntime.stopSlidesStream();
 }
@@ -255,76 +240,36 @@ function refreshSummarizeControl() {
 
 const isStreaming = () => panelState.phase === "connecting" || panelState.phase === "streaming";
 
-const optionsTabStorageKey = "summarize:options-tab";
-
-const openOptionsTab = (tabId: string) => {
-  try {
-    localStorage.setItem(optionsTabStorageKey, tabId);
-  } catch {
-    // ignore
-  }
-  void send({ type: "panel:openOptions" });
-};
-
-const headerController = createHeaderController({
+const feedbackRuntime = createSidepanelFeedbackRuntime({
+  panelState,
+  dispatchPanelState: panelStateStore.dispatch,
   headerEl,
   titleEl,
   subtitleEl,
   progressFillEl,
-  getState: () => ({
-    phase: panelState.phase,
-    summaryFromCache: panelState.summaryFromCache,
-  }),
+  panelErrorEl: errorEl,
+  panelErrorMessageEl: errorMessageEl,
+  panelErrorRetryBtn: errorRetryBtn,
+  panelErrorLogsBtn: errorLogsBtn,
+  inlineErrorEl,
+  inlineErrorMessageEl,
+  inlineErrorRetryBtn,
+  inlineErrorLogsBtn,
+  inlineErrorCloseBtn,
+  slideNoticeEl,
+  slideNoticeMessageEl,
+  slideNoticeRetryBtn,
+  retryLastAction,
+  retrySlidesStream,
+  sendOpenOptions: () => {
+    void send({ type: "panel:openOptions" });
+  },
+  setSlidesBusy,
+  rebuildSlideDescriptions,
+  queueSlidesRender,
 });
-
-headerController.updateHeaderOffset();
-window.addEventListener("resize", headerController.updateHeaderOffset);
-
-const errorController = createErrorController({
-  panelEl: errorEl,
-  panelMessageEl: errorMessageEl,
-  panelRetryBtn: errorRetryBtn,
-  panelLogsBtn: errorLogsBtn,
-  inlineEl: inlineErrorEl,
-  inlineMessageEl: inlineErrorMessageEl,
-  inlineRetryBtn: inlineErrorRetryBtn,
-  inlineLogsBtn: inlineErrorLogsBtn,
-  inlineCloseBtn: inlineErrorCloseBtn,
-  onRetry: () => retryLastAction(),
-  onOpenLogs: () => openOptionsTab("logs"),
-  onPanelVisibilityChange: () => headerController.updateHeaderOffset(),
-});
-
-slideNoticeRetryBtn.addEventListener("click", () => {
-  retrySlidesStream();
-});
-
-const setPhase = (phase: PanelPhase, opts?: { error?: string | null }) => {
-  panelStateStore.dispatch({ type: "phase", phase, error: opts?.error });
-  if (phase === "error") {
-    const message =
-      panelState.error && panelState.error.trim().length > 0
-        ? panelState.error
-        : "Something went wrong.";
-    errorController.showPanelError(message);
-    setSlidesBusy(false);
-  } else {
-    errorController.clearPanelError();
-    if (phase !== "streaming" && phase !== "connecting") {
-      setSlidesBusy(false);
-    }
-  }
-  if (phase === "connecting" || phase === "streaming") {
-    headerController.armProgress();
-  }
-  if (phase !== "connecting" && phase !== "streaming") {
-    headerController.stopProgress();
-  }
-  if (phase !== "connecting" && phase !== "streaming" && panelState.slides) {
-    rebuildSlideDescriptions();
-    queueSlidesRender();
-  }
-};
+const { errorController, headerController, hideSlideNotice, setPhase, showSlideNotice } =
+  feedbackRuntime;
 
 const navigationRuntime = createNavigationRuntime({
   getCurrentSource: () => panelState.currentSource,
@@ -471,20 +416,6 @@ const panelCacheController = createPanelCacheController({
   sendRequest: (request) => {
     void send({ type: "panel:get-cache", ...request });
   },
-});
-
-window.addEventListener("error", (event) => {
-  const message =
-    event.error instanceof Error ? event.error.stack || event.error.message : event.message;
-  headerController.setStatus(`Error: ${message}`);
-  setPhase("error", { error: message });
-});
-
-window.addEventListener("unhandledrejection", (event) => {
-  const reason = (event as PromiseRejectionEvent).reason;
-  const message = reason instanceof Error ? reason.stack || reason.message : String(reason);
-  headerController.setStatus(`Error: ${message}`);
-  setPhase("error", { error: message });
 });
 
 let slidesViewRuntime: ReturnType<typeof createSlidesViewRuntime> | null = null;
