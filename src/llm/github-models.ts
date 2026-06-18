@@ -47,3 +47,31 @@ export function buildGitHubModelsHeaders(
     "X-GitHub-Api-Version": GITHUB_MODELS_API_VERSION,
   };
 }
+
+export function resolveGitHubModelsCompatFallbackModelId(modelId: string): string | null {
+  const normalized = modelId.trim().toLowerCase();
+  if (!normalized.startsWith("openai/gpt-5") || normalized === "openai/gpt-5-chat") {
+    return null;
+  }
+  return "openai/gpt-5-chat";
+}
+
+export function shouldRetryGitHubModelsCompat(error: unknown): boolean {
+  const statusCode =
+    typeof (error as { statusCode?: unknown })?.statusCode === "number"
+      ? Number((error as { statusCode?: unknown }).statusCode)
+      : null;
+  if (statusCode === 400 || statusCode === 404 || statusCode === 500 || statusCode === 502) {
+    return true;
+  }
+
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof (error as { errorMessage?: unknown })?.errorMessage === "string"
+        ? String((error as { errorMessage: string }).errorMessage)
+        : typeof error === "string"
+          ? error
+          : "";
+  return /\b(?:400|404|500|502)\b/u.test(message);
+}

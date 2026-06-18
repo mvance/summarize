@@ -3,7 +3,9 @@ import {
   buildGitHubModelsHeaders,
   GITHUB_MODELS_API_VERSION,
   resolveGitHubCopilotBackendModelId,
+  resolveGitHubModelsCompatFallbackModelId,
   resolveGitHubModelsApiKey,
+  shouldRetryGitHubModelsCompat,
 } from "../src/llm/github-models.js";
 
 describe("github models helpers", () => {
@@ -50,5 +52,18 @@ describe("github models helpers", () => {
       Accept: "application/vnd.github+json",
       "X-GitHub-Api-Version": GITHUB_MODELS_API_VERSION,
     });
+  });
+
+  it("recognizes GitHub Models compatibility fallbacks from status objects and stream errors", () => {
+    expect(resolveGitHubModelsCompatFallbackModelId("openai/gpt-5.4-nano")).toBe(
+      "openai/gpt-5-chat",
+    );
+    expect(resolveGitHubModelsCompatFallbackModelId("openai/gpt-5-chat")).toBeNull();
+    expect(resolveGitHubModelsCompatFallbackModelId("anthropic/claude-haiku-4.5")).toBeNull();
+    expect(shouldRetryGitHubModelsCompat({ statusCode: 500 })).toBe(true);
+    expect(shouldRetryGitHubModelsCompat(new Error("404 Unknown model: openai/gpt-5.4-nano"))).toBe(
+      true,
+    );
+    expect(shouldRetryGitHubModelsCompat({ errorMessage: "401 Unauthorized" })).toBe(false);
   });
 });
