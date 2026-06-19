@@ -13,7 +13,11 @@ describe("chrome panel slides context", () => {
       session: { windowId: 1 } as never,
       requestId: "slides-1",
       requestedUrl: null,
-      loadSettings: vi.fn(async () => ({ token: "", extendedLogging: false })) as never,
+      loadSettings: vi.fn(async () => ({
+        token: "",
+        daemonPort: "8787",
+        extendedLogging: false,
+      })) as never,
       getActiveTab: vi.fn(async () => null) as never,
       canSummarizeUrl: () => false,
       panelSessionStore: {
@@ -51,7 +55,11 @@ describe("chrome panel slides context", () => {
       session: { windowId: 7 } as never,
       requestId: "slides-2",
       requestedUrl: "https://example.com/video",
-      loadSettings: vi.fn(async () => ({ token: "secret", extendedLogging: false })) as never,
+      loadSettings: vi.fn(async () => ({
+        token: "secret",
+        daemonPort: "8787",
+        extendedLogging: false,
+      })) as never,
       getActiveTab: vi.fn(async () => ({
         id: 4,
         url: "https://example.com/video",

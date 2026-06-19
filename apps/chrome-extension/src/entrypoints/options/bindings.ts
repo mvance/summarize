@@ -1,3 +1,4 @@
+import { normalizeDaemonPort } from "../../lib/settings";
 import type { createLogsViewer } from "./logs-viewer";
 import type { createModelPresetsController } from "./model-presets";
 import type { createProcessesViewer } from "./processes-viewer";
@@ -6,6 +7,7 @@ type OptionsBindingsArgs = {
   elements: {
     formEl: HTMLFormElement;
     tokenEl: HTMLInputElement;
+    daemonPortEl: HTMLInputElement;
     tokenCopyBtn: HTMLButtonElement;
     modelPresetEl: HTMLSelectElement;
     modelCustomEl: HTMLInputElement;
@@ -67,6 +69,22 @@ export function bindOptionsInputs({
       processesViewer.handleTokenChanged();
     }, 350);
     scheduleAutoSave(600);
+  });
+
+  let portRefreshTimer = 0;
+  elements.daemonPortEl.addEventListener("input", () => {
+    window.clearTimeout(portRefreshTimer);
+    portRefreshTimer = window.setTimeout(() => {
+      elements.daemonPortEl.value = normalizeDaemonPort(elements.daemonPortEl.value);
+      // Persist first: the daemon origin is derived from the saved port, so the
+      // status/preset/log checks below must read the new port from storage.
+      void saveNow().then(() => {
+        void modelPresets.refreshPresets(elements.tokenEl.value);
+        void checkDaemonStatus(elements.tokenEl.value);
+        logsViewer.handleTokenChanged();
+        processesViewer.handleTokenChanged();
+      });
+    }, 500);
   });
 
   elements.tokenCopyBtn.addEventListener("click", () => {

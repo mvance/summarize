@@ -77,8 +77,9 @@ Media/slides can independently use **Browser** or **Daemon**. Browser media uses
    - Windows: Start menu → Terminal (or PowerShell) — **right-click → Run as administrator**
    - Linux: your Terminal app
 4. Paste the command from the Setup screen and press Enter.
-   - Installed binary: `summarize daemon install --token <TOKEN>`
-   - Repo/dev checkout: `pnpm summarize daemon install --token <TOKEN> --dev`
+   - Installed binary: `summarize daemon install --token <TOKEN> --port 8787`
+   - Repo/dev checkout: `pnpm summarize daemon install --token <TOKEN> --port 8787 --dev`
+   - Non-default port: replace `8787`, then enter the same port under **Options → Runtime → Daemon → Port**.
 5. Back in your browser, the Daemon runtime setup screen should disappear once the daemon is running.
 6. Verify / troubleshoot:
    - `summarize daemon status`

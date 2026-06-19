@@ -431,6 +431,7 @@ export function buildDaemonHelp(): string {
     "  --dev            Install service that runs src/cli.ts via Node (repo dev mode)",
     "  --port <n>       (default: 8787)",
     "  --token <token>  (required for install)",
+    "  Custom ports must also be set in Extension Options → Runtime → Daemon → Port.",
   ].join("\n");
 }
 

@@ -2,6 +2,10 @@
 
 ## 0.19.1 - Unreleased
 
+### Features
+
+- Chrome extension: allow the local daemon port to be configured under **Options → Runtime → Daemon**, with consistent routing for daemon calls and authenticated slide images (#312, thanks @enieuwy).
+
 ### Fixes
 
 - Streaming: share EOF-safe, whitespace-preserving SSE parsing across core, CLI providers, and extension clients.
