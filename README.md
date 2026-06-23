@@ -348,7 +348,7 @@ Use `summarize --help` or `summarize help` for the full help text.
 - `--model auto`: automatic model selection + fallback (default)
 - `--model <name>`: use a built-in or config-defined preset (see Configuration)
 - `--timeout <duration>`: `30s`, `2m`, `5000ms` (default `2m`)
-- `--retries <count>`: LLM retry attempts on timeout (default `1`)
+- `--retries <count>`: LLM retry attempts after timeouts or transient API failures (default `1`)
 - `--length short|medium|long|xl|xxl|s|m|l|<chars>`
 - `--language, --lang <language>`: output language (`auto` = match source)
 - `--max-output-tokens <count>`: hard cap for LLM output tokens

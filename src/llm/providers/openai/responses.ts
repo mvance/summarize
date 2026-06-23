@@ -5,7 +5,7 @@ import { normalizeOpenAiUsage } from "../../usage.js";
 import { bytesToBase64 } from "../shared.js";
 import type { OpenAiClientConfig } from "../types.js";
 import { buildOpenAiResponsesRequestOptions } from "./request-options.js";
-import { createDeferredUsage, parseOpenAiSseJsonStream } from "./sse.js";
+import { createDeferredUsage, createOpenAiSseError, parseOpenAiSseJsonStream } from "./sse.js";
 import {
   buildOpenAiRequestHeaders,
   contextToResponsesInput,
@@ -133,14 +133,7 @@ export async function streamOpenAiResponsesText({
             continue;
           }
           if (type === "response.failed" || type === "error") {
-            const error = event.error;
-            const message =
-              error &&
-              typeof error === "object" &&
-              typeof (error as { message?: unknown }).message === "string"
-                ? String((error as { message?: unknown }).message)
-                : "OpenAI stream failed.";
-            throw new Error(message);
+            throw createOpenAiSseError(event);
           }
         }
       } finally {

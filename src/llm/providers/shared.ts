@@ -18,6 +18,15 @@ export function extractText(message: AssistantMessage): string {
   return text.trim();
 }
 
+export function throwIfAssistantMessageFailed(message: AssistantMessage, modelId: string): void {
+  if (message.stopReason !== "error" && message.stopReason !== "aborted") return;
+  const detail = message.errorMessage?.trim();
+  if (message.stopReason === "aborted") {
+    throw new DOMException(detail || `LLM request aborted (model ${modelId}).`, "AbortError");
+  }
+  throw new Error(detail || `LLM request failed (model ${modelId}).`);
+}
+
 export function wantsImages(context: Context): boolean {
   for (const msg of context.messages) {
     if (msg.role === "user" || msg.role === "toolResult") {

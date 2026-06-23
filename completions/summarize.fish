@@ -83,7 +83,7 @@ for cmd in summarize summarizer
     complete -c $cmd -n '__summarize_no_subcommand' -l max-output-tokens -d 'Hard cap for LLM output tokens' -x
     complete -c $cmd -n '__summarize_no_subcommand' -l force-summary -d 'Force LLM summary even for short content'
     complete -c $cmd -n '__summarize_no_subcommand' -l timeout -d 'Timeout for fetching/LLM' -x
-    complete -c $cmd -n '__summarize_no_subcommand' -l retries -d 'LLM retry attempts on timeout' -x
+    complete -c $cmd -n '__summarize_no_subcommand' -l retries -d 'LLM retries after timeouts or transient API failures' -x
 
     # Model options
     complete -c $cmd -n '__summarize_no_subcommand' -l model -d 'LLM model id' -x

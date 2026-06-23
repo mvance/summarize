@@ -20,6 +20,7 @@ import {
   normalizeAnthropicModelAccessError,
   prepareAnthropicReasoning,
 } from "./providers/anthropic.js";
+import { normalizeGoogleAssistantError } from "./providers/google.js";
 import { enableMinimaxReasoningSplit } from "./providers/minimax.js";
 import {
   resolveAnthropicModel,
@@ -333,7 +334,11 @@ export async function streamTextWithContext({
       const textDeltas = collectTextDeltas({
         stream,
         onError: (error) => {
-          lastError = error;
+          lastError =
+            normalizeGoogleAssistantError(
+              error as { stopReason?: string; errorMessage?: string },
+              parsed.model,
+            ) ?? error;
         },
       });
       return {

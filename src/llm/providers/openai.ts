@@ -16,6 +16,7 @@ import type {
   OpenAiTextCompletionResult,
   OpenAiTextStreamResult,
 } from "./openai/types.js";
+import { throwIfAssistantMessageFailed } from "./shared.js";
 import type { OpenAiClientConfig } from "./types.js";
 
 export { completeOpenAiDocument } from "./openai/responses.js";
@@ -117,6 +118,7 @@ export async function completeOpenAiText({
     apiKey: openaiConfig.apiKey,
     signal,
   });
+  throwIfAssistantMessageFailed(result, `openai/${modelId}`);
   const text = result.content
     .filter((c) => c.type === "text")
     .map((c) => c.text)

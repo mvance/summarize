@@ -16,15 +16,30 @@ type GoogleContentBlockLike = {
   text?: string;
 };
 
+function parseGoogleErrorJson(value: string): unknown | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  for (const candidate of [
+    trimmed,
+    trimmed.slice(trimmed.indexOf("{"), trimmed.lastIndexOf("}") + 1),
+  ]) {
+    if (!candidate.startsWith("{") || !candidate.endsWith("}")) continue;
+    try {
+      return JSON.parse(candidate) as unknown;
+    } catch {}
+  }
+  return null;
+}
+
 function extractGoogleErrorMessage(value: unknown): string | null {
   if (typeof value === "string") {
     const trimmed = value.trim();
     if (!trimmed) return null;
-    try {
-      const parsed = JSON.parse(trimmed) as unknown;
+    const parsed = parseGoogleErrorJson(trimmed);
+    if (parsed) {
       const nested = extractGoogleErrorMessage(parsed);
       if (nested) return nested;
-    } catch {}
+    }
     return trimmed;
   }
   if (!value || typeof value !== "object") return null;
@@ -36,17 +51,48 @@ function extractGoogleErrorMessage(value: unknown): string | null {
   );
 }
 
+function extractGoogleErrorStatusCode(value: unknown): number | null {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const parsed = parseGoogleErrorJson(trimmed);
+    return parsed ? extractGoogleErrorStatusCode(parsed) : null;
+  }
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  const code =
+    typeof record.code === "number"
+      ? record.code
+      : typeof record.code === "string" && /^\d{3}$/.test(record.code.trim())
+        ? Number(record.code)
+        : null;
+  if (code !== null && Number.isInteger(code) && code >= 100 && code <= 599) return code;
+  return (
+    extractGoogleErrorStatusCode(record.error) ??
+    extractGoogleErrorStatusCode(record.message) ??
+    extractGoogleErrorStatusCode(record.details)
+  );
+}
+
 export function normalizeGoogleAssistantError(
   response: GoogleAssistantLike | null | undefined,
   modelId: string,
 ): Error | null {
   const raw = typeof response?.errorMessage === "string" ? response.errorMessage : "";
+  if (response?.stopReason === "aborted") {
+    return new DOMException(
+      raw.trim() || `Google request aborted for model "${modelId}".`,
+      "AbortError",
+    );
+  }
   if (!raw.trim() && response?.stopReason !== "error") return null;
   const message = extractGoogleErrorMessage(raw) ?? `Google request failed for model "${modelId}".`;
-  if (/not found|not supported|Call ListModels/i.test(message)) {
-    return new Error(`Google API rejected model "${modelId}": ${message}`);
-  }
-  return new Error(`Google request failed for model "${modelId}": ${message}`);
+  const statusCode = extractGoogleErrorStatusCode(raw);
+  const error = /not found|not supported|Call ListModels/i.test(message)
+    ? new Error(`Google API rejected model "${modelId}": ${message}`)
+    : new Error(`Google request failed for model "${modelId}": ${message}`);
+  if (statusCode !== null) (error as { statusCode?: number }).statusCode = statusCode;
+  return error;
 }
 
 function extractGoogleResponseText(content: GoogleContentBlockLike[]): string {

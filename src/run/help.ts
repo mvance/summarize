@@ -152,7 +152,11 @@ export function buildProgram() {
       "Timeout for content fetching and LLM request: 30 (seconds), 30s, 2m, 5000ms",
       "2m",
     )
-    .option("--retries <count>", "LLM retry attempts on timeout (default: 1).", "1")
+    .option(
+      "--retries <count>",
+      "LLM retry attempts after timeouts or transient API failures (default: 1).",
+      "1",
+    )
     .option(
       "--model <model>",
       "LLM model id: auto, <name>, cli/<provider>/<model>, xai/..., openai/..., nvidia/..., minimax/..., google/..., anthropic/..., zai/... or openrouter/<author>/<slug> (default: auto)",

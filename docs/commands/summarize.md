@@ -142,7 +142,7 @@ If `[input]` is omitted, summarize prints concise help and exits.
 : Hard cap for LLM output tokens. Accepts `2000`, `2k`. Overrides provider defaults.
 
 `--retries <count>`
-: LLM retry attempts on timeout. Default `1`.
+: LLM retry attempts after timeouts or transient API failures. Default `1`.
 
 ### Output
 

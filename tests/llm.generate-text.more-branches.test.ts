@@ -82,6 +82,48 @@ describe("llm/generate-text extra branches", () => {
     );
   });
 
+  it("streamTextWithModelId preserves Google status codes from SDK error events", async () => {
+    const googleError = {
+      ...makeAssistantMessage({ text: "", provider: "google" }),
+      content: [],
+      stopReason: "error" as const,
+      errorMessage: JSON.stringify({
+        error: {
+          code: 429,
+          message: "Resource exhausted",
+          status: "RESOURCE_EXHAUSTED",
+        },
+      }),
+    };
+    mocks.streamSimple.mockImplementationOnce(() =>
+      makeTextDeltaStream([], makeAssistantMessage({ text: "", provider: "google" }), {
+        error: googleError,
+      }),
+    );
+
+    const result = await streamTextWithModelId({
+      modelId: "google/gemini-3-flash-preview",
+      apiKeys: {
+        openaiApiKey: null,
+        xaiApiKey: null,
+        googleApiKey: "k",
+        anthropicApiKey: null,
+        openrouterApiKey: null,
+      },
+      prompt: { userText: "hi" },
+      timeoutMs: 2000,
+      fetchImpl: globalThis.fetch.bind(globalThis),
+    });
+
+    for await (const _chunk of result.textStream) {
+      // Drain stream to observe the provider error.
+    }
+    expect(result.lastError()).toMatchObject({
+      message: expect.stringContaining("Resource exhausted"),
+      statusCode: 429,
+    });
+  });
+
   it("generateTextWithModelId retries on timeout-like errors", async () => {
     vi.useFakeTimers();
     const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0);
@@ -116,6 +158,86 @@ describe("llm/generate-text extra branches", () => {
       expect(result.text).toBe("OK");
       expect(onRetry).toHaveBeenCalled();
       expect(calls).toBe(2);
+    } finally {
+      randomSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it("generateTextWithModelId retries transient API errors", async () => {
+    vi.useFakeTimers();
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0);
+    try {
+      let calls = 0;
+      mocks.completeSimple.mockImplementation(async () => {
+        calls += 1;
+        if (calls === 1) {
+          throw Object.assign(new Error("OpenAI API error (502)."), { statusCode: 502 });
+        }
+        return makeAssistantMessage({ text: "OK" });
+      });
+
+      const onRetry = vi.fn();
+      const promise = generateTextWithModelId({
+        modelId: "openai/gpt-5-chat",
+        apiKeys: {
+          openaiApiKey: "k",
+          xaiApiKey: null,
+          googleApiKey: null,
+          anthropicApiKey: null,
+          openrouterApiKey: null,
+        },
+        prompt: { userText: "hi" },
+        timeoutMs: 2000,
+        fetchImpl: globalThis.fetch.bind(globalThis),
+        retries: 1,
+        onRetry,
+      });
+
+      await vi.runOnlyPendingTimersAsync();
+      const result = await promise;
+      expect(result.text).toBe("OK");
+      expect(onRetry).toHaveBeenCalledWith(expect.objectContaining({ attempt: 1, maxRetries: 1 }));
+      expect(calls).toBe(2);
+    } finally {
+      randomSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it("retries resolved terminal errors instead of returning partial text", async () => {
+    vi.useFakeTimers();
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0);
+    mocks.completeSimple.mockClear();
+    try {
+      mocks.completeSimple
+        .mockImplementationOnce(async () => ({
+          ...makeAssistantMessage({ text: "truncated", provider: "xai" }),
+          stopReason: "error" as const,
+          errorMessage: "connection closed",
+        }))
+        .mockImplementationOnce(async () =>
+          makeAssistantMessage({ text: "recovered", provider: "xai" }),
+        );
+
+      const promise = generateTextWithModelId({
+        modelId: "xai/grok-4-fast-non-reasoning",
+        apiKeys: {
+          openaiApiKey: null,
+          xaiApiKey: "k",
+          googleApiKey: null,
+          anthropicApiKey: null,
+          openrouterApiKey: null,
+        },
+        prompt: { userText: "hi" },
+        timeoutMs: 2000,
+        fetchImpl: globalThis.fetch.bind(globalThis),
+        retries: 1,
+      });
+
+      await vi.runOnlyPendingTimersAsync();
+      await expect(promise).resolves.toMatchObject({ text: "recovered" });
+      expect(mocks.completeSimple).toHaveBeenCalledTimes(2);
     } finally {
       randomSpy.mockRestore();
       vi.useRealTimers();

@@ -112,7 +112,7 @@ installed, auto mode can use local CLI models via `cli.enabled` or implicit auto
 - `--service-tier default|fast|priority|flex`
   - OpenAI service tier override. `fast` is the summarize-facing alias for OpenAI `priority`; `default` sends no service tier.
 - `--retries <count>`
-  - LLM retry attempts on timeout (default: 1).
+  - LLM retry attempts after timeouts or transient API failures (default: 1).
 - `--json` (includes prompt + summary in one JSON object)
 
 ## Prompt rules

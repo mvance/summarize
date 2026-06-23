@@ -1,6 +1,6 @@
 import { normalizeOpenAiUsage } from "../../usage.js";
 import { buildOpenAiChatRequestOptions } from "./request-options.js";
-import { createDeferredUsage, parseOpenAiSseJsonStream } from "./sse.js";
+import { createDeferredUsage, createOpenAiSseError, parseOpenAiSseJsonStream } from "./sse.js";
 import {
   buildOpenAiRequestHeaders,
   contextToChatCompletionMessages,
@@ -111,14 +111,7 @@ export async function streamOpenAiChatText({
       try {
         for await (const event of parseOpenAiSseJsonStream(response.body!)) {
           if (event.error) {
-            const error = event.error;
-            const message =
-              error &&
-              typeof error === "object" &&
-              typeof (error as { message?: unknown }).message === "string"
-                ? String((error as { message?: unknown }).message)
-                : "OpenAI stream failed.";
-            throw new Error(message);
+            throw createOpenAiSseError(event);
           }
           if (event.usage) finalUsage = normalizeOpenAiUsage(event.usage);
           const choices = Array.isArray(event.choices) ? event.choices : [];

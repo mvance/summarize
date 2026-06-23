@@ -1,5 +1,6 @@
 import type { CliProvider } from "../config.js";
 import { isCliDisabled, runCliModel } from "../llm/cli.js";
+import { isRetryableLlmError, resolveLlmErrorMessage } from "../llm/generate-text-shared.js";
 import { streamTextWithModelId } from "../llm/generate-text.js";
 import { parseGatewayStyleModelId } from "../llm/model-id.js";
 import { mergeRequestOptionsForProvider } from "../llm/model-options.js";
@@ -61,6 +62,22 @@ export type ModelExecutorDeps = {
   providerRuntime: ProviderRuntimeBindings;
   openrouterApiKey: string | null;
 };
+
+class StreamHandlerError extends Error {
+  readonly handlerError: unknown;
+
+  constructor(handlerError: unknown) {
+    const normalized =
+      handlerError instanceof Error
+        ? handlerError
+        : new Error(resolveLlmErrorMessage(handlerError) || "Summary output failed", {
+            cause: handlerError,
+          });
+    super(normalized.message, { cause: normalized });
+    this.name = "StreamHandlerError";
+    this.handlerError = normalized;
+  }
+}
 
 export function createModelExecutor(deps: ModelExecutorDeps) {
   const providerRuntime = deps.providerRuntime;
@@ -289,7 +306,7 @@ export function createModelExecutor(deps: ModelExecutorDeps) {
     let getLastStreamError: (() => unknown) | null = null;
 
     let streamResult: Awaited<ReturnType<typeof streamTextWithModelId>> | null = null;
-    const summarizeWithoutStreaming = async () => {
+    const summarizeWithoutStreaming = async (retries = deps.retries) => {
       const result = await summarizeWithModelId({
         modelId: parsedModelEffective.canonical,
         prompt,
@@ -306,7 +323,7 @@ export function createModelExecutor(deps: ModelExecutorDeps) {
         ollamaBaseUrlOverride: providerRuntime.baseUrls.ollama,
         forceChatCompletions,
         requestOptions,
-        retries: deps.retries,
+        retries,
         onRetry: createRetryLogger(parsedModelEffective.canonical),
       });
       deps.llmCalls.push({
@@ -319,7 +336,18 @@ export function createModelExecutor(deps: ModelExecutorDeps) {
     };
     const canFallbackFromStreamError = (error: unknown): boolean =>
       isStreamingTimeoutError(error) ||
+      (deps.retries > 0 && isRetryableLlmError(error)) ||
       (parsedModelEffective.provider === "google" && isGoogleStreamingUnsupportedError(error));
+    const remainingRetriesAfterStreamFallback = (error: unknown): number =>
+      isRetryableLlmError(error) ? Math.max(0, deps.retries - 1) : deps.retries;
+    const normalizeStreamError = (error: unknown): Error =>
+      error instanceof Error
+        ? error
+        : new Error(resolveLlmErrorMessage(error) || "LLM stream failed", { cause: error });
+    const throwIfStreamFailed = () => {
+      const error = getLastStreamError?.();
+      if (error) throw normalizeStreamError(error);
+    };
     const writeStreamFallbackNotice = (error: unknown) => {
       if (isStreamingTimeoutError(error)) {
         deps.log?.(
@@ -327,16 +355,29 @@ export function createModelExecutor(deps: ModelExecutorDeps) {
         );
         return;
       }
+      if (isRetryableLlmError(error)) {
+        deps.log?.(
+          `Transient streaming failure for ${parsedModelEffective.canonical}; retrying non-streaming.`,
+        );
+        return;
+      }
       deps.log?.(
         `Google model ${parsedModelEffective.canonical} rejected streamGenerateContent; falling back to non-streaming.`,
       );
     };
-    const createStreamInterruptedError = (error: unknown) =>
-      new EngineError(
-        "SUMMARY_STREAM_INTERRUPTED",
-        error instanceof Error ? error.message : "Summary stream failed after output",
-        { cause: error },
-      );
+    const createStreamInterruptedError = (error: unknown) => {
+      const normalized = normalizeStreamError(error);
+      return new EngineError("SUMMARY_STREAM_INTERRUPTED", normalized.message, {
+        cause: normalized,
+      });
+    };
+    const callStreamHandler = async <T>(operation: () => T | Promise<T>): Promise<T> => {
+      try {
+        return await operation();
+      } catch (error) {
+        throw new StreamHandlerError(error);
+      }
+    };
     try {
       deps.trace?.("summary:stream-open");
       streamResult = await streamTextWithModelId({
@@ -359,7 +400,7 @@ export function createModelExecutor(deps: ModelExecutorDeps) {
     } catch (error) {
       if (canFallbackFromStreamError(error)) {
         writeStreamFallbackNotice(error);
-        summary = await summarizeWithoutStreaming();
+        summary = await summarizeWithoutStreaming(remainingRetriesAfterStreamFallback(error));
         streamResult = null;
       } else {
         throw error;
@@ -389,15 +430,20 @@ export function createModelExecutor(deps: ModelExecutorDeps) {
             const firstChunk = !streamHandlerStarted;
             streamHandlerStarted = true;
             streamOutputEmitted =
-              (await streamHandler.onChunk({
-                streamed: merged.next,
-                prevStreamed: firstChunk ? "" : prevStreamed,
-                appended: firstChunk ? merged.next : merged.appended,
-              })) || streamOutputEmitted;
+              (await callStreamHandler(() =>
+                streamHandler.onChunk({
+                  streamed: merged.next,
+                  prevStreamed: firstChunk ? "" : prevStreamed,
+                  appended: firstChunk ? merged.next : merged.appended,
+                }),
+              )) || streamOutputEmitted;
           }
         }
 
+        throwIfStreamFailed();
+
         const finalText = (await streamResult.finalText)?.trim() ?? "";
+        throwIfStreamFailed();
         if (finalText.length > streamed.length && finalText.startsWith(streamed)) {
           const prevStreamed = streamed;
           const firstChunk = !streamHandlerStarted;
@@ -405,26 +451,38 @@ export function createModelExecutor(deps: ModelExecutorDeps) {
           if (streamHandler) {
             streamHandlerStarted = true;
             streamOutputEmitted =
-              (await streamHandler.onChunk({
-                streamed,
-                prevStreamed: firstChunk ? "" : prevStreamed,
-                appended: firstChunk ? streamed : streamed.slice(prevStreamed.length),
-              })) || streamOutputEmitted;
+              (await callStreamHandler(() =>
+                streamHandler.onChunk({
+                  streamed,
+                  prevStreamed: firstChunk ? "" : prevStreamed,
+                  appended: firstChunk ? streamed : streamed.slice(prevStreamed.length),
+                }),
+              )) || streamOutputEmitted;
           }
         }
 
         streamedRaw = streamed;
         const trimmed = streamed.trim();
         streamed = trimmed;
+        if (!streamed) throw new Error("LLM returned an empty summary");
         streamCompleted = true;
       } catch (error) {
         if (streamHandler && streamHandlerStarted && !streamOutputEmitted) {
-          await streamHandler.onReset();
+          try {
+            await callStreamHandler(() => streamHandler.onReset());
+          } catch (resetError) {
+            const cause =
+              resetError instanceof StreamHandlerError ? resetError.handlerError : resetError;
+            throw createStreamInterruptedError(cause);
+          }
           streamHandlerStarted = false;
+        }
+        if (error instanceof StreamHandlerError) {
+          throw createStreamInterruptedError(error.handlerError);
         }
         if (canFallbackFromStreamError(error) && !streamOutputEmitted) {
           writeStreamFallbackNotice(error);
-          summary = await summarizeWithoutStreaming();
+          summary = await summarizeWithoutStreaming(remainingRetriesAfterStreamFallback(error));
           streamResult = null;
         } else {
           throw streamOutputEmitted ? createStreamInterruptedError(error) : error;
@@ -463,13 +521,17 @@ export function createModelExecutor(deps: ModelExecutorDeps) {
 
     if (!streamResult && streamHandler) {
       const cleaned = summary.trim();
-      const chunkEmitted = await streamHandler.onChunk({
-        streamed: cleaned,
-        prevStreamed: "",
-        appended: cleaned,
-      });
-      const finalOutputEmitted = (await streamHandler.onDone?.(cleaned)) ?? false;
-      summaryEmitted = chunkEmitted || finalOutputEmitted;
+      try {
+        const chunkEmitted = await streamHandler.onChunk({
+          streamed: cleaned,
+          prevStreamed: "",
+          appended: cleaned,
+        });
+        const finalOutputEmitted = (await streamHandler.onDone?.(cleaned)) ?? false;
+        summaryEmitted = chunkEmitted || finalOutputEmitted;
+      } catch (error) {
+        throw createStreamInterruptedError(error);
+      }
     }
 
     return {

@@ -15,6 +15,21 @@ function collectChunks() {
 }
 
 describe("createStreamOutputGate", () => {
+  it("reports output only after line mode flushes a complete line", () => {
+    const stdout = collectChunks();
+    const gate = createStreamOutputGate({
+      stdout: stdout.stream,
+      clearProgressForStdout: vi.fn(),
+      restoreProgressAfterStdout: null,
+      outputMode: "line",
+      richTty: false,
+    });
+
+    expect(gate.handleChunk("buffered", "")).toBe(false);
+    expect(gate.handleChunk("buffered\n", "buffered")).toBe(true);
+    expect(stdout.chunks).toEqual(["buffered\n"]);
+  });
+
   it("rewrites TTY delta output when cumulative chunks correct earlier text", () => {
     const stdout = collectChunks();
     const restore = vi.fn();

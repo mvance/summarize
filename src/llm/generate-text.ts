@@ -4,7 +4,7 @@ import { maybeGenerateDocumentText } from "./generate-text-document.js";
 import {
   computeRetryDelayMs,
   isGoogleEmptySummaryError,
-  isRetryableTimeoutError,
+  isRetryableLlmError,
   promptToContext,
   resolveEffectiveTemperature,
   resolveGoogleEmptyResponseFallbackModelId,
@@ -35,7 +35,7 @@ import {
   resolveXaiModel,
 } from "./providers/models.js";
 import { completeOpenAiText } from "./providers/openai.js";
-import { extractText } from "./providers/shared.js";
+import { extractText, throwIfAssistantMessageFailed } from "./providers/shared.js";
 import type { OpenAiClientConfig } from "./providers/types.js";
 import type { LlmTokenUsage } from "./types.js";
 import { normalizeTokenUsage } from "./usage.js";
@@ -55,6 +55,16 @@ type RetryNotice = {
   delayMs: number;
   error: unknown;
 };
+
+class DocumentFallbackError extends Error {
+  readonly fallbackError: unknown;
+
+  constructor(fallbackError: unknown) {
+    super("Document fallback failed", { cause: fallbackError });
+    this.name = "DocumentFallbackError";
+    this.fallbackError = fallbackError;
+  }
+}
 
 export async function generateTextWithModelId({
   modelId,
@@ -107,45 +117,73 @@ export async function generateTextWithModelId({
     model: parsed.model,
     temperature,
   });
+  const maxRetries = Math.max(0, retries);
 
-  const documentResult = await maybeGenerateDocumentText({
-    parsed,
-    apiKeys,
-    prompt,
-    maxOutputTokens,
-    temperature: effectiveTemperature,
-    timeoutMs,
-    fetchImpl,
-    forceOpenRouter,
-    openaiBaseUrlOverride,
-    anthropicBaseUrlOverride,
-    googleBaseUrlOverride,
-    forceChatCompletions,
-    requestOptions,
-    retryWithModelId: (fallbackModelId) =>
-      generateTextWithModelId({
-        modelId: fallbackModelId,
+  let documentAttempt = 0;
+  while (documentAttempt <= maxRetries) {
+    try {
+      const documentResult = await maybeGenerateDocumentText({
+        parsed,
         apiKeys,
         prompt,
-        temperature,
         maxOutputTokens,
+        temperature: effectiveTemperature,
         timeoutMs,
         fetchImpl,
         forceOpenRouter,
         openaiBaseUrlOverride,
         anthropicBaseUrlOverride,
         googleBaseUrlOverride,
-        xaiBaseUrlOverride,
-        zaiBaseUrlOverride,
-        ollamaBaseUrlOverride,
         forceChatCompletions,
         requestOptions,
-        retries,
-        onRetry,
-      }),
-  });
-  if (documentResult) {
-    return documentResult;
+        retryWithModelId: async (fallbackModelId) => {
+          try {
+            return await generateTextWithModelId({
+              modelId: fallbackModelId,
+              apiKeys,
+              prompt,
+              temperature,
+              maxOutputTokens,
+              timeoutMs,
+              fetchImpl,
+              forceOpenRouter,
+              openaiBaseUrlOverride,
+              anthropicBaseUrlOverride,
+              googleBaseUrlOverride,
+              xaiBaseUrlOverride,
+              zaiBaseUrlOverride,
+              ollamaBaseUrlOverride,
+              forceChatCompletions,
+              requestOptions,
+              retries: Math.max(0, maxRetries - documentAttempt),
+              onRetry,
+            });
+          } catch (error) {
+            throw new DocumentFallbackError(error);
+          }
+        },
+      });
+      if (documentResult) return documentResult;
+      break;
+    } catch (error) {
+      if (error instanceof DocumentFallbackError) throw error.fallbackError;
+      const normalizedError =
+        error instanceof DOMException && error.name === "AbortError"
+          ? new Error(`LLM request timed out after ${timeoutMs}ms (model ${parsed.canonical}).`)
+          : error;
+      if (!isRetryableLlmError(normalizedError) || documentAttempt >= maxRetries) {
+        throw normalizedError;
+      }
+      const delayMs = computeRetryDelayMs(documentAttempt);
+      onRetry?.({
+        attempt: documentAttempt + 1,
+        maxRetries,
+        delayMs,
+        error: normalizedError,
+      });
+      await sleep(delayMs);
+      documentAttempt += 1;
+    }
   }
 
   const context = promptToContext(prompt);
@@ -181,12 +219,12 @@ export async function generateTextWithModelId({
       apiKey,
       signal,
     });
+    throwIfAssistantMessageFailed(result, parsed.canonical);
     const text = extractText(result);
     if (!text) throw new Error(`LLM returned an empty summary (model ${parsed.canonical}).`);
     return { text, usage: normalizeTokenUsage(result.usage) };
   };
 
-  const maxRetries = Math.max(0, retries);
   let attempt = 0;
 
   while (attempt <= maxRetries) {
@@ -209,6 +247,7 @@ export async function generateTextWithModelId({
           apiKey,
           signal: controller.signal,
         });
+        throwIfAssistantMessageFailed(result, parsed.canonical);
         const text = extractText(result);
         if (!text) throw new Error(`LLM returned an empty summary (model ${parsed.canonical}).`);
         return {
@@ -384,7 +423,7 @@ export async function generateTextWithModelId({
         const normalized = normalizeAnthropicModelAccessError(normalizedError, parsed.model);
         if (normalized) throw normalized;
       }
-      if (isRetryableTimeoutError(normalizedError) && attempt < maxRetries) {
+      if (isRetryableLlmError(normalizedError) && attempt < maxRetries) {
         const delayMs = computeRetryDelayMs(attempt);
         onRetry?.({ attempt: attempt + 1, maxRetries, delayMs, error: normalizedError });
         await sleep(delayMs);

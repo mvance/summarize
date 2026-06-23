@@ -65,7 +65,11 @@ describe("slides summary stream handler", () => {
     });
 
     const payload = "Intro line\n\n[slide:1]\nAfter";
-    await handler.onChunk({ streamed: payload, prevStreamed: "", appended: payload });
+    const emitted = await handler.onChunk({
+      streamed: payload,
+      prevStreamed: "",
+      appended: payload,
+    });
     await handler.onDone?.(payload);
 
     const output = chunks.join("");
@@ -74,6 +78,41 @@ describe("slides summary stream handler", () => {
     expect(output).toContain("After");
     expect(output).not.toContain("[slide:1]");
     expect(renderedSlides).toEqual([1]);
+    expect(emitted).toBe(true);
+  });
+
+  it("resets buffered markers before a non-streaming retry", async () => {
+    const { stream, chunks } = makeStdout(false);
+    const handler = createSlidesSummaryStreamHandler({
+      stdout: stream,
+      env: {},
+      envForRun: {},
+      plain: true,
+      outputMode: "line",
+      clearProgressForStdout: () => {},
+      renderSlide: async () => {},
+      getSlideIndexOrder: () => [],
+    });
+
+    const bufferedEmitted = await handler.onChunk({
+      streamed: "[sli",
+      prevStreamed: "",
+      appended: "[sli",
+    });
+    expect(bufferedEmitted).toBe(false);
+
+    await handler.onReset();
+    const recovered = "Recovered summary";
+    const recoveredChunkEmitted = await handler.onChunk({
+      streamed: recovered,
+      prevStreamed: "",
+      appended: recovered,
+    });
+    const recoveredFinalEmitted = await handler.onDone?.(recovered);
+
+    expect(chunks.join("")).toBe("Recovered summary\n");
+    expect(recoveredChunkEmitted).toBe(false);
+    expect(recoveredFinalEmitted).toBe(true);
   });
 
   it("detects headline-style first lines as slide titles", async () => {

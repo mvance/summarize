@@ -1,5 +1,6 @@
 import type { Context } from "@earendil-works/pi-ai";
 import { describe, expect, it, vi } from "vitest";
+import { isRetryableLlmError } from "../src/llm/generate-text-shared.js";
 import {
   completeOpenAiDocument,
   completeOpenAiResponsesText,
@@ -105,22 +106,43 @@ describe("OpenAI Responses coverage", () => {
       ),
     ).rejects.toThrow("stream response was empty");
 
-    for (const event of [
-      { type: "response.failed", error: { message: "specific" } },
-      { type: "error", error: "bad" },
+    for (const { event, message, retryable } of [
+      {
+        event: {
+          type: "response.failed",
+          response: { error: { code: "server_error", message: "specific" } },
+        },
+        message: "specific",
+        retryable: true,
+      },
+      {
+        event: { type: "error", code: "rate_limit_exceeded", message: "slow down" },
+        message: "slow down",
+        retryable: true,
+      },
+      {
+        event: { type: "error", error: "bad" },
+        message: "stream failed",
+        retryable: false,
+      },
     ]) {
       const failed = await streamOpenAiResponsesText(
         request(
           vi.fn(async () => new Response(`data: ${JSON.stringify(event)}\n\n`)) as typeof fetch,
         ),
       );
-      await expect(async () => {
-        for await (const _chunk of failed.textStream) {
-          // consume
+      const error = await (async () => {
+        try {
+          for await (const _chunk of failed.textStream) {
+            // consume
+          }
+        } catch (caught) {
+          return caught;
         }
-      }).rejects.toThrow(
-        event.error && typeof event.error === "object" ? "specific" : "stream failed",
-      );
+        throw new Error("Expected stream failure");
+      })();
+      expect(error).toMatchObject({ message: expect.stringContaining(message) });
+      expect(isRetryableLlmError(error)).toBe(retryable);
       await expect(failed.usage).resolves.toBeNull();
     }
   });

@@ -321,6 +321,58 @@ describe("llm generate/stream", () => {
     expect(body.input?.[0]?.content?.[0]?.file_data).toMatch(/^data:application\/pdf;base64,/);
   });
 
+  it("retries transient OpenAI PDF response failures", async () => {
+    vi.useFakeTimers();
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0);
+    process.env.OPENAI_BASE_URL = "";
+    try {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ error: { message: "bad gateway" } }), { status: 502 }),
+        )
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              output_text: "ok after retry",
+              usage: { input_tokens: 2, output_tokens: 3, total_tokens: 5 },
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          ),
+        );
+      const onRetry = vi.fn();
+      const promise = generateTextWithModelId({
+        modelId: "openai/gpt-5.2",
+        apiKeys: {
+          xaiApiKey: null,
+          openaiApiKey: "k",
+          googleApiKey: null,
+          anthropicApiKey: null,
+          openrouterApiKey: null,
+        },
+        prompt: buildDocumentPrompt({
+          text: "Summarize the attached PDF.",
+          bytes: buildMinimalPdf("Hello PDF"),
+          filename: "test.pdf",
+        }),
+        timeoutMs: 2000,
+        fetchImpl: fetchMock as typeof fetch,
+        retries: 1,
+        onRetry,
+      });
+
+      await vi.runOnlyPendingTimersAsync();
+      const result = await promise;
+
+      expect(result.text).toBe("ok after retry");
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(onRetry).toHaveBeenCalledWith(expect.objectContaining({ attempt: 1, maxRetries: 1 }));
+    } finally {
+      randomSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
   it("uses Gemini inline data for PDF prompts", async () => {
     mocks.completeSimple.mockClear();
 
@@ -698,6 +750,58 @@ describe("llm generate/stream", () => {
     expect(String(fetchMock.mock.calls[1]?.[0])).toContain("models/gemini-2.5-flash");
   });
 
+  it("does not replenish retries after a Google document fallback fails", async () => {
+    vi.useFakeTimers();
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0);
+    try {
+      const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes("models/gemini-3-flash-preview:generateContent")) {
+          return new Response(JSON.stringify({ candidates: [{ content: { parts: [] } }] }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        return new Response(JSON.stringify({ error: { message: "unavailable" } }), {
+          status: 503,
+          headers: { "content-type": "application/json" },
+        });
+      });
+      const promise = generateTextWithModelId({
+        modelId: "google/gemini-3-flash-preview",
+        apiKeys: {
+          xaiApiKey: null,
+          openaiApiKey: null,
+          googleApiKey: "k",
+          anthropicApiKey: null,
+          openrouterApiKey: null,
+        },
+        prompt: buildDocumentPrompt({
+          text: "Summarize the attached PDF.",
+          bytes: buildMinimalPdf("Hello PDF"),
+          filename: "test.pdf",
+        }),
+        timeoutMs: 2000,
+        fetchImpl: fetchMock as typeof fetch,
+        retries: 1,
+      });
+
+      const rejection = expect(promise).rejects.toThrow(/Google API error \(503\)/);
+      await vi.runOnlyPendingTimersAsync();
+      await rejection;
+
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(
+        fetchMock.mock.calls.filter(([input]) =>
+          String(input).includes("models/gemini-3-flash-preview:generateContent"),
+        ),
+      ).toHaveLength(1);
+    } finally {
+      randomSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
   it("surfaces embedded Google API errors instead of reporting an empty summary", async () => {
     mocks.completeSimple.mockClear();
     mocks.completeSimple.mockImplementationOnce(async () => ({
@@ -748,6 +852,90 @@ describe("llm generate/stream", () => {
         maxOutputTokens: 10,
       }),
     ).rejects.toThrow(/Google API rejected model "gemini-3-flash"/);
+  });
+
+  it("retries transient Google SDK response failures", async () => {
+    vi.useFakeTimers();
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0);
+    mocks.completeSimple.mockClear();
+    mocks.completeSimple
+      .mockImplementationOnce(async () => ({
+        ...makeAssistantMessage({ text: "", provider: "google" }),
+        content: [],
+        stopReason: "error",
+        errorMessage: `got status: UNAVAILABLE. ${JSON.stringify({
+          error: {
+            code: 503,
+            message: "The service is currently unavailable",
+            status: "UNAVAILABLE",
+          },
+        })}`,
+      }))
+      .mockImplementationOnce(async () =>
+        makeAssistantMessage({ text: "recovered", provider: "google" }),
+      );
+
+    try {
+      const promise = generateTextWithModelId({
+        modelId: "google/gemini-3-flash-preview",
+        apiKeys: {
+          openaiApiKey: null,
+          xaiApiKey: null,
+          googleApiKey: "k",
+          anthropicApiKey: null,
+          openrouterApiKey: null,
+        },
+        prompt: { userText: "hi" },
+        timeoutMs: 2000,
+        fetchImpl: globalThis.fetch.bind(globalThis),
+        retries: 1,
+      });
+
+      await vi.runOnlyPendingTimersAsync();
+      await expect(promise).resolves.toMatchObject({ text: "recovered" });
+      expect(mocks.completeSimple).toHaveBeenCalledTimes(2);
+    } finally {
+      randomSpy.mockRestore();
+    }
+  });
+
+  it("retries resolved Google abort results", async () => {
+    vi.useFakeTimers();
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0);
+    mocks.completeSimple.mockClear();
+    mocks.completeSimple
+      .mockImplementationOnce(async () => ({
+        ...makeAssistantMessage({ text: "", provider: "google", stopReason: "aborted" }),
+        content: [],
+        errorMessage: "Request was aborted",
+      }))
+      .mockImplementationOnce(async () =>
+        makeAssistantMessage({ text: "recovered", provider: "google" }),
+      );
+
+    try {
+      const promise = generateTextWithModelId({
+        modelId: "google/gemini-3-flash-preview",
+        apiKeys: {
+          openaiApiKey: null,
+          xaiApiKey: null,
+          googleApiKey: "k",
+          anthropicApiKey: null,
+          openrouterApiKey: null,
+        },
+        prompt: { userText: "hi" },
+        timeoutMs: 2000,
+        fetchImpl: globalThis.fetch.bind(globalThis),
+        retries: 1,
+      });
+
+      await vi.runOnlyPendingTimersAsync();
+      await expect(promise).resolves.toMatchObject({ text: "recovered" });
+      expect(mocks.completeSimple).toHaveBeenCalledTimes(2);
+    } finally {
+      randomSpy.mockRestore();
+      vi.useRealTimers();
+    }
   });
 
   it("enforces missing-key errors per provider", async () => {

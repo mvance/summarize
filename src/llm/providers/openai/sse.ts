@@ -16,6 +16,25 @@ export async function* parseOpenAiSseJsonStream(
   }
 }
 
+export function createOpenAiSseError(event: Record<string, unknown>): Error {
+  const asRecord = (value: unknown): Record<string, unknown> | null =>
+    value && typeof value === "object" ? (value as Record<string, unknown>) : null;
+  const directError = asRecord(event.error);
+  const responseError = asRecord(asRecord(event.response)?.error);
+  const details = responseError ?? directError ?? event;
+  const rawCode = details.code ?? details.type ?? event.code;
+  const code = typeof rawCode === "string" ? rawCode : null;
+  const message =
+    typeof details.message === "string"
+      ? details.message
+      : typeof event.message === "string"
+        ? event.message
+        : "OpenAI stream failed.";
+  const error = new Error(message);
+  if (code) (error as { code?: string }).code = code;
+  return error;
+}
+
 export function createDeferredUsage(): {
   promise: Promise<LlmTokenUsage | null>;
   resolve: (value: LlmTokenUsage | null) => void;

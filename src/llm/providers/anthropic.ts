@@ -6,7 +6,13 @@ import type { OpenAiReasoningEffort } from "../model-options.js";
 import type { LlmTokenUsage } from "../types.js";
 import { normalizeAnthropicUsage, normalizeTokenUsage } from "../usage.js";
 import { resolveAnthropicModel } from "./models.js";
-import { bytesToBase64, extractText, resolveBaseUrlOverride, tryGetModel } from "./shared.js";
+import {
+  bytesToBase64,
+  extractText,
+  resolveBaseUrlOverride,
+  throwIfAssistantMessageFailed,
+  tryGetModel,
+} from "./shared.js";
 
 function effortToThinkingLevel(
   effort: OpenAiReasoningEffort | undefined,
@@ -131,6 +137,7 @@ export async function completeAnthropicText({
     apiKey,
     signal,
   });
+  throwIfAssistantMessageFailed(result, `anthropic/${modelId}`);
   const text = extractText(result);
   if (!text) throw new Error(`LLM returned an empty summary (model anthropic/${modelId}).`);
   return { text, usage: normalizeTokenUsage(result.usage) };
