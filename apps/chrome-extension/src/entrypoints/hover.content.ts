@@ -1,5 +1,6 @@
 import { defineContentScript } from "wxt/utils/define-content-script";
 import { META_SITE_EXCLUDE_MATCHES } from "../lib/content-script-matches";
+import { resolveCapabilityExecution } from "../lib/model-routing";
 import { mergeStreamingChunk } from "../lib/runtime-contracts";
 import { loadSettings, type Settings } from "../lib/settings";
 
@@ -119,9 +120,30 @@ export function shouldHandleHoverTriggerEvent(event: Pick<Event, "isTrusted">): 
 }
 
 export function shouldStartHoverRequest(
-  settings: Pick<Settings, "hoverSummaries"> | null,
+  settings:
+    | (Pick<Settings, "hoverSummaries"> &
+        Partial<
+          Pick<Settings, "model" | "provider" | "providerApiKeys" | "summaryRuntime" | "token">
+        >)
+    | null,
 ): boolean {
-  return Boolean(settings?.hoverSummaries);
+  if (!settings?.hoverSummaries) return false;
+  if (
+    !settings.model ||
+    !settings.provider ||
+    !settings.providerApiKeys ||
+    !settings.summaryRuntime
+  ) {
+    return true;
+  }
+  return resolveCapabilityExecution({
+    model: settings.model,
+    provider: settings.provider,
+    providerApiKeys: settings.providerApiKeys,
+    summaryRuntime: settings.summaryRuntime,
+  }) !== "daemon"
+    ? true
+    : Boolean(settings.token?.trim());
 }
 
 function ensureTooltip(): Tooltip {
