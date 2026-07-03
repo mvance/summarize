@@ -90,6 +90,7 @@ export async function executeMediaFile(
   const openaiKey = ctx.env.OPENAI_API_KEY ?? ctx.apiStatus.openaiApiKey;
   const falKey = ctx.env.FAL_KEY ?? ctx.apiStatus.falApiKey;
   const assemblyaiKey = ctx.env.ASSEMBLYAI_API_KEY ?? ctx.apiStatus.assemblyaiApiKey;
+  const deepgramKey = ctx.env.DEEPGRAM_API_KEY ?? ctx.apiStatus.deepgramApiKey;
   const elevenlabsKey = ctx.env.ELEVENLABS_API_KEY ?? ctx.apiStatus.elevenlabsApiKey;
 
   // Helper to check if a binary is available on PATH
@@ -123,6 +124,7 @@ export async function executeMediaFile(
     falApiKey: falKey,
     groqApiKey: groqKey,
     assemblyaiApiKey: assemblyaiKey ?? ctx.apiStatus.assemblyaiApiKey,
+    deepgramApiKey: deepgramKey,
     elevenlabsApiKey: elevenlabsKey,
     geminiApiKey: geminiKey,
     openaiApiKey: openaiKey,
@@ -152,7 +154,10 @@ export async function executeMediaFile(
 6. FAL Whisper:
    Set FAL_KEY=...
 
-7. Local whisper.cpp:
+7. Deepgram:
+   Set DEEPGRAM_API_KEY=...
+
+8. Local whisper.cpp:
    brew install whisper-cpp
    Ensure whisper-cli is on your PATH (or set SUMMARIZE_WHISPER_CPP_BINARY)
 

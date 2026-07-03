@@ -36,6 +36,7 @@ export interface ProviderFetchOptions {
   geminiApiKey?: string | null;
   openaiApiKey?: string | null;
   assemblyaiApiKey?: string | null;
+  deepgramApiKey?: string | null;
   elevenlabsApiKey?: string | null;
   mediaCache?: MediaCache | null;
   resolveTwitterCookies?: ResolveTwitterCookies | null;

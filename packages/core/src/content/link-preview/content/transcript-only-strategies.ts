@@ -33,7 +33,7 @@ const TRANSCRIPT_ONLY_STRATEGIES: readonly TranscriptOnlyStrategy[] = [
     matches: (url) => Boolean(extractSpotifyEpisodeId(url)),
     requiresTranscriptionProvider: true,
     availabilityError:
-      "Spotify episode transcription requires a transcription provider (install whisper-cpp or set GROQ_API_KEY, ASSEMBLYAI_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY, or FAL_KEY); otherwise you may only get a captcha/recaptcha HTML page.",
+      "Spotify episode transcription requires a transcription provider (install whisper-cpp or set GROQ_API_KEY, ASSEMBLYAI_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY, FAL_KEY, or DEEPGRAM_API_KEY); otherwise you may only get a captcha/recaptcha HTML page.",
     transcriptMode: (mode) => mode,
     failureLabel: "Spotify episode",
     transcriptNote: "Spotify episode: skipped HTML fetch to avoid captcha pages",
@@ -47,7 +47,7 @@ const TRANSCRIPT_ONLY_STRATEGIES: readonly TranscriptOnlyStrategy[] = [
     matches: (url) => Boolean(extractApplePodcastIds(url)),
     requiresTranscriptionProvider: true,
     availabilityError:
-      "Apple Podcasts transcription requires a transcription provider (install whisper-cpp or set GROQ_API_KEY, ASSEMBLYAI_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY, or FAL_KEY); otherwise you may only get a slow/blocked HTML page.",
+      "Apple Podcasts transcription requires a transcription provider (install whisper-cpp or set GROQ_API_KEY, ASSEMBLYAI_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY, FAL_KEY, or DEEPGRAM_API_KEY); otherwise you may only get a slow/blocked HTML page.",
     transcriptMode: (mode) => mode,
     failureLabel: "Apple Podcasts episode",
     transcriptNote: "Apple Podcasts: skipped HTML fetch (prefer iTunes lookup / enclosures)",

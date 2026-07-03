@@ -5,6 +5,7 @@ export type TranscriptionProvider =
   | "gemini"
   | "openai"
   | "fal"
+  | "deepgram"
   | "whisper.cpp"
   | "onnx-parakeet"
   | "onnx-canary";

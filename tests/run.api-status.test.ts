@@ -17,6 +17,7 @@ describe("run API status", () => {
       FAL_KEY: "fal",
       GROQ_API_KEY: "groq",
       ASSEMBLYAI_API_KEY: "assembly",
+      DEEPGRAM_API_KEY: "deepgram",
       ELEVENLABS_API_KEY: "eleven",
     };
     const envState = resolveEnvState({ env, envForRun: env, configForCli: null });
@@ -35,6 +36,7 @@ describe("run API status", () => {
       falApiKey: "fal",
       groqApiKey: "groq",
       assemblyaiApiKey: "assembly",
+      deepgramApiKey: "deepgram",
       elevenlabsApiKey: "eleven",
     });
     expect(status).not.toHaveProperty("cliAvailability");

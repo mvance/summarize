@@ -2,15 +2,18 @@ type Env = Record<string, string | undefined>;
 
 export const DEFAULT_GEMINI_TRANSCRIPTION_MODEL = "gemini-2.5-flash";
 export const GEMINI_TRANSCRIPTION_MODEL_ENV = "SUMMARIZE_GEMINI_TRANSCRIPTION_MODEL";
+export const DEFAULT_DEEPGRAM_TRANSCRIPTION_MODEL = "nova-3";
+export const DEEPGRAM_TRANSCRIPTION_MODEL_ENV = "SUMMARIZE_DEEPGRAM_TRANSCRIPTION_MODEL";
 export const TRANSCRIPTION_PROVIDER_ENV_LIST = [
   "GROQ_API_KEY",
   "ASSEMBLYAI_API_KEY",
   "GEMINI_API_KEY",
   "OPENAI_API_KEY",
   "FAL_KEY",
+  "DEEPGRAM_API_KEY",
 ] as const;
 export const TRANSCRIPTION_PROVIDER_ENV_LABEL =
-  "GROQ_API_KEY, ASSEMBLYAI_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY, or FAL_KEY";
+  "GROQ_API_KEY, ASSEMBLYAI_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY, FAL_KEY, or DEEPGRAM_API_KEY";
 
 export function normalizeApiKey(raw: string | null | undefined): string | null {
   const trimmed = typeof raw === "string" ? raw.trim() : "";
@@ -60,6 +63,19 @@ export function resolveAssemblyAiApiKey({
   return normalizeApiKey(source.ASSEMBLYAI_API_KEY);
 }
 
+export function resolveDeepgramApiKey({
+  env,
+  deepgramApiKey,
+}: {
+  env?: Env;
+  deepgramApiKey?: string | null;
+}): string | null {
+  const explicit = normalizeApiKey(deepgramApiKey);
+  if (explicit) return explicit;
+  const source = env ?? process.env;
+  return normalizeApiKey(source.DEEPGRAM_API_KEY);
+}
+
 export function resolveElevenLabsApiKey({
   env,
   elevenlabsApiKey,
@@ -102,6 +118,11 @@ export function resolveFalApiKey({
 export function resolveGeminiTranscriptionModel(env?: Env): string {
   const source = env ?? process.env;
   return source[GEMINI_TRANSCRIPTION_MODEL_ENV]?.trim() || DEFAULT_GEMINI_TRANSCRIPTION_MODEL;
+}
+
+export function resolveDeepgramTranscriptionModel(env?: Env): string {
+  const source = env ?? process.env;
+  return source[DEEPGRAM_TRANSCRIPTION_MODEL_ENV]?.trim() || DEFAULT_DEEPGRAM_TRANSCRIPTION_MODEL;
 }
 
 export function buildMissingTranscriptionProviderMessage(): string {

@@ -45,6 +45,7 @@ type YtDlpRequest = {
   geminiApiKey?: string | null;
   openaiApiKey?: string | null;
   falApiKey?: string | null;
+  deepgramApiKey?: string | null;
   diarization?: DiarizationPreference | null;
   downloadVideo?: boolean;
   url: string;
@@ -65,6 +66,7 @@ export const fetchTranscriptWithYtDlp = async ({
   geminiApiKey,
   openaiApiKey,
   falApiKey,
+  deepgramApiKey,
   diarization = null,
   downloadVideo = false,
   url,
@@ -84,6 +86,7 @@ export const fetchTranscriptWithYtDlp = async ({
     geminiApiKey,
     openaiApiKey,
     falApiKey,
+    deepgramApiKey,
   });
 
   const localFileInput = resolveYtDlpLocalMediaSource(url, mediaKind);
@@ -156,6 +159,7 @@ export const fetchTranscriptWithYtDlp = async ({
       geminiApiKey: effectiveTranscription.geminiApiKey,
       openaiApiKey: effectiveTranscription.openaiApiKey,
       falApiKey: effectiveTranscription.falApiKey,
+      deepgramApiKey: effectiveTranscription.deepgramApiKey,
       diarization,
       totalDurationSeconds: probedDurationSeconds,
       env: effectiveEnv,

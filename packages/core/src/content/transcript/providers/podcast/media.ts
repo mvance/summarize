@@ -63,6 +63,7 @@ export async function transcribeMediaUrl({
   geminiApiKey,
   openaiApiKey,
   falApiKey,
+  deepgramApiKey,
   notes,
   progress,
 }: {
@@ -77,6 +78,7 @@ export async function transcribeMediaUrl({
   geminiApiKey?: string | null;
   openaiApiKey?: string | null;
   falApiKey?: string | null;
+  deepgramApiKey?: string | null;
   notes: string[];
   progress: {
     url: string;
@@ -93,6 +95,7 @@ export async function transcribeMediaUrl({
     geminiApiKey,
     openaiApiKey,
     falApiKey,
+    deepgramApiKey,
   });
   const effectiveEnv = effectiveTranscription.env ?? process.env;
   const remoteMediaMaxBytes = effectiveTranscription.remoteMediaMaxBytes ?? MAX_REMOTE_MEDIA_BYTES;
@@ -119,8 +122,12 @@ export async function transcribeMediaUrl({
     mediaKind: "audio",
     totalBytes,
   });
+  const shouldUseDeepgramFileUpload =
+    Boolean(effectiveTranscription.deepgramApiKey) &&
+    (head.contentLength === null || head.contentLength > MAX_OPENAI_UPLOAD_BYTES);
   const shouldTranscribeInMemory =
-    !canChunk || (head.contentLength !== null && head.contentLength <= MAX_OPENAI_UPLOAD_BYTES);
+    !shouldUseDeepgramFileUpload &&
+    (!canChunk || (head.contentLength !== null && head.contentLength <= MAX_OPENAI_UPLOAD_BYTES));
   if (shouldTranscribeInMemory) {
     const bytes = await downloadCappedMediaBytes(fetchImpl, url, remoteMediaMaxBytes, totalBytes, {
       onProgress: (downloadedBytes) =>
@@ -162,6 +169,7 @@ export async function transcribeMediaUrl({
       geminiApiKey: effectiveTranscription.geminiApiKey,
       openaiApiKey: effectiveTranscription.openaiApiKey,
       falApiKey: effectiveTranscription.falApiKey,
+      deepgramApiKey: effectiveTranscription.deepgramApiKey,
       totalDurationSeconds: durationSecondsHint,
       env: effectiveEnv,
       onProgress: (event) => {
@@ -224,6 +232,7 @@ export async function transcribeMediaUrl({
       geminiApiKey: effectiveTranscription.geminiApiKey,
       openaiApiKey: effectiveTranscription.openaiApiKey,
       falApiKey: effectiveTranscription.falApiKey,
+      deepgramApiKey: effectiveTranscription.deepgramApiKey,
       totalDurationSeconds: probedDurationSeconds,
       env: effectiveEnv,
       onProgress: (event) => {

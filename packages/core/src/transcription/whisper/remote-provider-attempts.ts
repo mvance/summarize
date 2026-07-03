@@ -1,6 +1,7 @@
 import { transcribeWithAssemblyAi, transcribeFileWithAssemblyAi } from "./assemblyai.js";
 import type { CloudProvider } from "./cloud-providers.js";
 import { MAX_OPENAI_UPLOAD_BYTES } from "./constants.js";
+import { transcribeFileWithDeepgram, transcribeWithDeepgram } from "./deepgram.js";
 import { transcribeWithFal } from "./fal.js";
 import { isFfmpegAvailable, transcodeBytesToMp3 } from "./ffmpeg.js";
 import { transcribeFileWithGemini, transcribeWithGemini } from "./gemini.js";
@@ -42,6 +43,7 @@ export async function attemptRemoteBytesProvider(args: {
   geminiApiKey: string | null;
   openaiApiKey: string | null;
   falApiKey: string | null;
+  deepgramApiKey: string | null;
   env: Env;
   notes: string[];
   onProgress?: ((event: WhisperProgressEvent) => void) | null;
@@ -58,6 +60,7 @@ export async function attemptRemoteFileProvider(args: {
   filename: string | null;
   assemblyaiApiKey: string | null;
   geminiApiKey: string | null;
+  deepgramApiKey: string | null;
   env: Env;
 }): Promise<RemoteFileAttemptResult> {
   if (args.provider === "assemblyai") {
@@ -99,6 +102,36 @@ export async function attemptRemoteFileProvider(args: {
     }
   }
 
+  if (args.provider === "deepgram") {
+    try {
+      const result = await transcribeFileWithDeepgram({
+        filePath: args.filePath,
+        mediaType: args.mediaType,
+        apiKey: args.deepgramApiKey!,
+        env: args.env,
+      });
+      if (result.text) {
+        return {
+          kind: "result",
+          result: {
+            text: result.text,
+            provider: "deepgram",
+            error: null,
+            notes: [],
+            segments: result.segments,
+          },
+        };
+      }
+      return { kind: "error", error: new Error("Deepgram transcription returned empty text") };
+    } catch (caught) {
+      return {
+        kind: "error",
+        error:
+          caught instanceof Error ? caught : wrapError("Deepgram transcription failed", caught),
+      };
+    }
+  }
+
   return { kind: "delegate-to-bytes" };
 }
 
@@ -110,6 +143,7 @@ const BYTE_PROVIDER_EXECUTORS: Record<
     geminiApiKey: string | null;
     openaiApiKey: string | null;
     falApiKey: string | null;
+    deepgramApiKey: string | null;
     env: Env;
     notes: string[];
     onProgress?: ((event: WhisperProgressEvent) => void) | null;
@@ -278,6 +312,38 @@ const BYTE_PROVIDER_EXECUTORS: Record<
         state,
         result: null,
         error: wrapError("FAL transcription failed", caught),
+      };
+    }
+  },
+  deepgram: async ({ state, deepgramApiKey, env }) => {
+    try {
+      const result = await transcribeWithDeepgram(state.bytes, state.mediaType, deepgramApiKey!, {
+        env,
+      });
+      if (result.text) {
+        return {
+          state,
+          result: {
+            text: result.text,
+            provider: "deepgram",
+            error: null,
+            notes: [],
+            segments: result.segments,
+          },
+          error: null,
+        };
+      }
+      return {
+        state,
+        result: null,
+        error: new Error("Deepgram transcription returned empty text"),
+      };
+    } catch (caught) {
+      return {
+        state,
+        result: null,
+        error:
+          caught instanceof Error ? caught : wrapError("Deepgram transcription failed", caught),
       };
     }
   },

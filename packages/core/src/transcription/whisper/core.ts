@@ -34,6 +34,7 @@ type MediaRequest = {
   geminiApiKey?: string | null;
   openaiApiKey: string | null;
   falApiKey: string | null;
+  deepgramApiKey?: string | null;
   diarization?: DiarizationPreference | null;
   totalDurationSeconds?: number | null;
   onProgress?: ((event: WhisperProgressEvent) => void) | null;
@@ -51,6 +52,7 @@ export async function transcribeMediaWithWhisper({
   geminiApiKey = null,
   openaiApiKey,
   falApiKey,
+  deepgramApiKey = null,
   diarization = null,
   totalDurationSeconds = null,
   onProgress,
@@ -97,7 +99,7 @@ export async function transcribeMediaWithWhisper({
 
   if (groqError) {
     notes.push(
-      `Groq transcription failed; falling back to local/AssemblyAI/Gemini/OpenAI: ${groqError.message}`,
+      `Groq transcription failed; falling back to local/AssemblyAI/Gemini/OpenAI/FAL/Deepgram: ${groqError.message}`,
     );
   }
 
@@ -134,6 +136,7 @@ export async function transcribeMediaWithWhisper({
     geminiApiKey,
     openaiApiKey,
     falApiKey,
+    deepgramApiKey,
     env,
     onProgress,
     transcribeOversizedBytesWithChunking: ({ bytes, mediaType, filename, onProgress }) =>
@@ -152,6 +155,7 @@ export async function transcribeMediaWithWhisper({
             geminiApiKey,
             openaiApiKey,
             falApiKey,
+            deepgramApiKey,
             segmentSeconds: DEFAULT_SEGMENT_SECONDS,
             onProgress,
             env,
@@ -170,6 +174,7 @@ export async function transcribeMediaFileWithWhisper({
   geminiApiKey = null,
   openaiApiKey,
   falApiKey,
+  deepgramApiKey = null,
   diarization = null,
   segmentSeconds = DEFAULT_SEGMENT_SECONDS,
   totalDurationSeconds = null,
@@ -210,6 +215,7 @@ export async function transcribeMediaFileWithWhisper({
       geminiApiKey,
       openaiApiKey,
       falApiKey,
+      deepgramApiKey,
       segmentSeconds,
       totalDurationSeconds,
       onProgress,
@@ -251,6 +257,7 @@ export async function transcribeMediaFileWithWhisper({
     geminiApiKey,
     openaiApiKey,
     falApiKey,
+    deepgramApiKey,
     env,
     totalDurationSeconds,
     onProgress,
@@ -271,6 +278,7 @@ export async function transcribeMediaFileWithWhisper({
             geminiApiKey,
             openaiApiKey,
             falApiKey,
+            deepgramApiKey,
             env,
           }),
       }),
@@ -349,6 +357,7 @@ async function transcribeGroqFileFirst({
   geminiApiKey,
   openaiApiKey,
   falApiKey,
+  deepgramApiKey,
   segmentSeconds,
   totalDurationSeconds,
   onProgress,
@@ -363,6 +372,7 @@ async function transcribeGroqFileFirst({
   geminiApiKey: string | null;
   openaiApiKey: string | null;
   falApiKey: string | null;
+  deepgramApiKey: string | null;
   segmentSeconds: number;
   totalDurationSeconds: number | null;
   onProgress?: ((event: WhisperProgressEvent) => void) | null;
@@ -377,13 +387,13 @@ async function transcribeGroqFileFirst({
       if (text) return { text, provider: "groq", error: null, notes };
       const error = new Error("Groq transcription returned empty text");
       notes.push(
-        "Groq transcription returned empty text; falling back to local/AssemblyAI/Gemini/OpenAI",
+        "Groq transcription returned empty text; falling back to local/AssemblyAI/Gemini/OpenAI/FAL/Deepgram",
       );
       return { text: null, provider: "groq", error, notes };
     } catch (error) {
       const wrapped = wrapError("Groq transcription failed", error);
       notes.push(
-        `Groq transcription failed; falling back to local/AssemblyAI/Gemini/OpenAI: ${
+        `Groq transcription failed; falling back to local/AssemblyAI/Gemini/OpenAI/FAL/Deepgram: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );
@@ -415,6 +425,7 @@ async function transcribeGroqFileFirst({
         geminiApiKey,
         openaiApiKey,
         falApiKey,
+        deepgramApiKey,
         env,
       }),
   });
@@ -422,7 +433,7 @@ async function transcribeGroqFileFirst({
   if (chunked.text) return { ...chunked, notes };
   const error = chunked.error ?? new Error("Groq chunked transcription failed");
   notes.push(
-    `Groq chunked transcription failed; falling back to local/AssemblyAI/Gemini/OpenAI: ${error.message}`,
+    `Groq chunked transcription failed; falling back to local/AssemblyAI/Gemini/OpenAI/FAL/Deepgram: ${error.message}`,
   );
   return { text: null, provider: "groq", error, notes };
 }

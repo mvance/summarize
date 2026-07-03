@@ -19,7 +19,7 @@ When `--transcriber auto` is set (default), summarize tries providers in this or
 
 1. **Groq** — fastest cloud option. Needs `GROQ_API_KEY`.
 2. **Local ONNX** (Parakeet or Canary) or `whisper.cpp` — fully offline. Needs the env vars from this command.
-3. **AssemblyAI / Gemini / OpenAI / FAL** — cloud fallbacks, in that order, gated by their respective API keys.
+3. **AssemblyAI / Gemini / OpenAI / FAL / Deepgram** — cloud fallbacks, in that order, gated by their respective API keys.
 
 Skipping all of those falls back to the OpenAI-compatible Whisper endpoint in `OPENAI_WHISPER_BASE_URL`.
 

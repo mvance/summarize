@@ -47,7 +47,7 @@ export const fetchTranscript = async (
   }
   if (mode === "yt-dlp" && !transcriptionCapabilities.canTranscribe) {
     throw new Error(
-      "Missing transcription provider for --youtube yt-dlp (install whisper-cpp or set GROQ_API_KEY/ASSEMBLYAI_API_KEY/GEMINI_API_KEY/OPENAI_API_KEY/FAL_KEY)",
+      "Missing transcription provider for --youtube yt-dlp (install whisper-cpp or set GROQ_API_KEY/ASSEMBLYAI_API_KEY/GEMINI_API_KEY/OPENAI_API_KEY/FAL_KEY/DEEPGRAM_API_KEY)",
     );
   }
   if (diarization && !options.ytDlpPath) {
@@ -113,7 +113,7 @@ export const fetchTranscript = async (
     if (transcript) return transcript;
   }
 
-  // Try yt-dlp (audio download + Groq/AssemblyAI/Gemini/OpenAI/FAL transcription) if mode is 'auto', 'no-auto', or 'yt-dlp'
+  // Try yt-dlp (audio download + cloud/local transcription) if mode is 'auto', 'no-auto', or 'yt-dlp'
   if (mode === "yt-dlp" || ((mode === "no-auto" || mode === "auto") && canRunYtDlp)) {
     const transcript = await tryYtDlpTranscript({ flow, mode });
     if (transcript) return transcript;

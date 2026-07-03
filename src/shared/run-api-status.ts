@@ -4,6 +4,7 @@ export type RunApiStatus = {
   openrouterConfigured: boolean;
   groqApiKey: string | null;
   assemblyaiApiKey: string | null;
+  deepgramApiKey: string | null;
   elevenlabsApiKey: string | null;
   openaiApiKey: string | null;
   xaiApiKey: string | null;

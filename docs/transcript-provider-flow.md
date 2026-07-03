@@ -75,6 +75,7 @@ Goal: keep provider entrypoints thin; keep provider policy explicit.
   - Gemini
   - OpenAI
   - FAL
+  - Deepgram
 - speaker diarization (`--diarize`):
   - ElevenLabs
   - OpenAI

@@ -288,6 +288,7 @@ export async function tryYtDlpTranscript(args: {
     geminiApiKey: flow.options.geminiApiKey,
     openaiApiKey: flow.options.openaiApiKey,
     falApiKey: flow.options.falApiKey,
+    deepgramApiKey: flow.options.deepgramApiKey,
     diarization: flow.options.transcriptDiarization ?? null,
     downloadVideo: flow.options.transcriptVideoDownload ?? false,
     mediaCache: flow.options.mediaCache ?? null,

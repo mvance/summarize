@@ -93,6 +93,7 @@ export function createUrlExtractionSession({
       falApiKey: model.apiStatus.falApiKey,
       groqApiKey: model.apiStatus.groqApiKey,
       assemblyaiApiKey: model.apiStatus.assemblyaiApiKey,
+      deepgramApiKey: model.apiStatus.deepgramApiKey,
       elevenlabsApiKey: model.apiStatus.elevenlabsApiKey,
       openaiApiKey: model.apiStatus.openaiApiKey,
       geminiApiKey: model.apiStatus.googleApiKey,

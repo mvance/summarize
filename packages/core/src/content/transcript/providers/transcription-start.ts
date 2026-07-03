@@ -10,7 +10,10 @@ import {
   buildCloudModelIdChain,
   buildCloudProviderHint,
 } from "../../../transcription/whisper/cloud-providers.js";
-import { resolveGeminiTranscriptionModel } from "../../../transcription/whisper/provider-setup.js";
+import {
+  resolveDeepgramTranscriptionModel,
+  resolveGeminiTranscriptionModel,
+} from "../../../transcription/whisper/provider-setup.js";
 import type { TranscriptionProviderHint } from "../../link-preview/deps.js";
 import { resolveTranscriptionConfig, type TranscriptionConfig } from "../transcription-config.js";
 
@@ -22,12 +25,14 @@ export type TranscriptionAvailability = {
   hasLocalWhisper: boolean;
   hasGroq: boolean;
   hasAssemblyAi: boolean;
+  hasDeepgram: boolean;
   hasElevenLabs: boolean;
   hasGemini: boolean;
   hasOpenai: boolean;
   hasFal: boolean;
   hasAnyProvider: boolean;
   geminiModelId: string;
+  deepgramModelId: string;
   effectiveEnv: Env;
 };
 
@@ -36,6 +41,7 @@ export async function resolveTranscriptionAvailability({
   transcription,
   groqApiKey,
   assemblyaiApiKey,
+  deepgramApiKey,
   geminiApiKey,
   openaiApiKey,
   falApiKey,
@@ -44,6 +50,7 @@ export async function resolveTranscriptionAvailability({
   transcription?: Partial<TranscriptionConfig> | null;
   groqApiKey?: string | null;
   assemblyaiApiKey?: string | null;
+  deepgramApiKey?: string | null;
   geminiApiKey?: string | null;
   openaiApiKey?: string | null;
   falApiKey?: string | null;
@@ -53,6 +60,7 @@ export async function resolveTranscriptionAvailability({
     transcription,
     groqApiKey,
     assemblyaiApiKey,
+    deepgramApiKey,
     geminiApiKey,
     openaiApiKey,
     falApiKey,
@@ -66,12 +74,20 @@ export async function resolveTranscriptionAvailability({
   const hasLocalWhisper = await isWhisperCppReady(effectiveEnv);
   const hasGroq = Boolean(effective.groqApiKey);
   const hasAssemblyAi = Boolean(effective.assemblyaiApiKey);
+  const hasDeepgram = Boolean(effective.deepgramApiKey);
   const hasElevenLabs = Boolean(effective.elevenlabsApiKey);
   const hasGemini = Boolean(effective.geminiApiKey);
   const hasOpenai = Boolean(effective.openaiApiKey);
   const hasFal = Boolean(effective.falApiKey);
   const hasAnyProvider =
-    onnxReady || hasLocalWhisper || hasGroq || hasAssemblyAi || hasGemini || hasOpenai || hasFal;
+    onnxReady ||
+    hasLocalWhisper ||
+    hasGroq ||
+    hasAssemblyAi ||
+    hasGemini ||
+    hasOpenai ||
+    hasFal ||
+    hasDeepgram;
 
   return {
     preferredOnnxModel,
@@ -79,12 +95,14 @@ export async function resolveTranscriptionAvailability({
     hasLocalWhisper,
     hasGroq,
     hasAssemblyAi,
+    hasDeepgram,
     hasElevenLabs,
     hasGemini,
     hasOpenai,
     hasFal,
     hasAnyProvider,
     geminiModelId: effective.geminiModel ?? resolveGeminiTranscriptionModel(effectiveEnv),
+    deepgramModelId: resolveDeepgramTranscriptionModel(effectiveEnv),
     effectiveEnv,
   };
 }
@@ -94,6 +112,7 @@ export async function resolveTranscriptionStartInfo({
   transcription,
   groqApiKey,
   assemblyaiApiKey,
+  deepgramApiKey,
   geminiApiKey,
   openaiApiKey,
   falApiKey,
@@ -103,6 +122,7 @@ export async function resolveTranscriptionStartInfo({
   transcription?: Partial<TranscriptionConfig> | null;
   groqApiKey?: string | null;
   assemblyaiApiKey?: string | null;
+  deepgramApiKey?: string | null;
   geminiApiKey?: string | null;
   openaiApiKey?: string | null;
   falApiKey?: string | null;
@@ -117,6 +137,7 @@ export async function resolveTranscriptionStartInfo({
     transcription,
     groqApiKey,
     assemblyaiApiKey,
+    deepgramApiKey,
     geminiApiKey,
     openaiApiKey,
     falApiKey,
@@ -160,6 +181,7 @@ function resolveCloudModelId(availability: TranscriptionAvailability): string | 
   const cloudModelId = buildCloudModelIdChain({
     availability,
     geminiModelId: availability.geminiModelId,
+    deepgramModelId: availability.deepgramModelId,
   });
   if (!availability.hasGroq) return cloudModelId;
   return cloudModelId
@@ -175,6 +197,7 @@ function resolveCloudProviderHint(
     hasGemini: availability.hasGemini,
     hasOpenai: availability.hasOpenai,
     hasFal: availability.hasFal,
+    hasDeepgram: availability.hasDeepgram,
   });
   const chain = availability.hasGroq
     ? ["groq", cloudHint].filter(Boolean).join("->")

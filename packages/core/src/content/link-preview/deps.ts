@@ -34,7 +34,8 @@ export type CloudTranscriptionProviderHint =
   | "elevenlabs"
   | "gemini"
   | "openai"
-  | "fal";
+  | "fal"
+  | "deepgram";
 
 export type TranscriptionProviderHint =
   | "cpp"
@@ -192,6 +193,7 @@ export interface LinkPreviewDeps {
   falApiKey?: string | null;
   groqApiKey?: string | null;
   assemblyaiApiKey?: string | null;
+  deepgramApiKey?: string | null;
   elevenlabsApiKey?: string | null;
   geminiApiKey?: string | null;
   openaiApiKey?: string | null;

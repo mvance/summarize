@@ -1,5 +1,6 @@
 import {
   resolveAssemblyAiApiKey,
+  resolveDeepgramApiKey,
   resolveElevenLabsApiKey,
   resolveFalApiKey,
   resolveGeminiApiKey,
@@ -11,6 +12,7 @@ export type TranscriptionConfig = {
   env?: Record<string, string | undefined>;
   groqApiKey: string | null;
   assemblyaiApiKey: string | null;
+  deepgramApiKey: string | null;
   elevenlabsApiKey: string | null;
   geminiApiKey: string | null;
   openaiApiKey: string | null;
@@ -24,6 +26,7 @@ type TranscriptionConfigInput = {
   transcription?: Partial<TranscriptionConfig> | null;
   groqApiKey?: string | null;
   assemblyaiApiKey?: string | null;
+  deepgramApiKey?: string | null;
   elevenlabsApiKey?: string | null;
   geminiApiKey?: string | null;
   openaiApiKey?: string | null;
@@ -60,6 +63,10 @@ export function resolveTranscriptionConfig(input: TranscriptionConfigInput): Tra
     assemblyaiApiKey: resolveAssemblyAiApiKey({
       env,
       assemblyaiApiKey: fromObject?.assemblyaiApiKey ?? input.assemblyaiApiKey,
+    }),
+    deepgramApiKey: resolveDeepgramApiKey({
+      env,
+      deepgramApiKey: fromObject?.deepgramApiKey ?? input.deepgramApiKey,
     }),
     elevenlabsApiKey: resolveElevenLabsApiKey({
       env,

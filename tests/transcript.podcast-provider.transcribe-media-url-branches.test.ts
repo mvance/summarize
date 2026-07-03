@@ -110,6 +110,57 @@ describe("podcast provider - transcribeMediaUrl branch coverage", () => {
     }
   });
 
+  it("transcribes a podcast enclosure through Deepgram", async () => {
+    const { fetchTranscript } = await importPodcastProvider({ spawnPlan: "ffmpeg-missing" });
+    const enclosureUrl = "https://example.com/episode.mp3";
+    const xml = `<rss><channel><item><enclosure url="${enclosureUrl}" type="audio/mpeg"/></item></channel></rss>`;
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if ((init?.method ?? "GET").toUpperCase() === "HEAD") {
+        return new Response(null, {
+          status: 200,
+          headers: {
+            "content-type": "audio/mpeg",
+            "content-length": String(30 * 1024 * 1024),
+          },
+        });
+      }
+      expect(init?.headers).toBeUndefined();
+      return new Response(new Uint8Array([1, 2, 3]), {
+        status: 200,
+        headers: { "content-type": "audio/mpeg" },
+      });
+    });
+    const deepgramFetch = vi.fn(async () =>
+      Response.json({
+        results: {
+          channels: [{ alternatives: [{ transcript: "Deepgram podcast transcript" }] }],
+          utterances: [],
+        },
+      }),
+    );
+
+    try {
+      vi.stubGlobal("fetch", deepgramFetch);
+      const result = await fetchTranscript(
+        { url: "https://example.com/feed.xml", html: xml, resourceKey: null },
+        {
+          ...baseOptions,
+          fetch: fetchImpl as unknown as typeof fetch,
+          openaiApiKey: null,
+          deepgramApiKey: "DG",
+        },
+      );
+
+      expect(result.source).toBe("whisper");
+      expect(result.text).toBe("Deepgram podcast transcript");
+      expect(result.metadata?.transcriptionProvider).toBe("deepgram");
+      expect(String(result.notes)).not.toContain("ffmpeg not available");
+    } finally {
+      vi.unstubAllGlobals();
+      vi.doUnmock("node:child_process");
+    }
+  });
+
   it("falls back when HEAD fails by downloading to a temp file", async () => {
     const { fetchTranscript } = await importPodcastProvider({ spawnPlan: "ffmpeg-ok" });
     const enclosureUrl = "https://example.com/episode.mp3";

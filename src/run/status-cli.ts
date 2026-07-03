@@ -225,6 +225,17 @@ function resolveConfiguredProviders({
       source: firstConfiguredEnv(env, ["OPENROUTER_API_KEY", "OPENAI_API_KEY"]) ?? undefined,
     });
   }
+  if (envState.deepgramApiKey) {
+    pushProvider(providers, {
+      id: "deepgram",
+      label: "Deepgram transcription",
+      kind: "api",
+      state: "configured",
+      source: "DEEPGRAM_API_KEY",
+      model: nonEmpty(env.SUMMARIZE_DEEPGRAM_TRANSCRIPTION_MODEL) ?? "nova-3",
+      endpoint: "api.deepgram.com",
+    });
+  }
   for (const entry of API_STATUS_PROVIDERS) {
     if (!runtime.apiKeys[entry.provider]) continue;
     const baseUrl =

@@ -27,6 +27,7 @@ type CloudArgs = {
   geminiApiKey: string | null;
   openaiApiKey: string | null;
   falApiKey: string | null;
+  deepgramApiKey: string | null;
   env: Env;
 };
 
@@ -80,6 +81,7 @@ async function transcribeBytesAcrossProviders({
   geminiApiKey,
   openaiApiKey,
   falApiKey,
+  deepgramApiKey,
   env,
   onProgress,
   transcribeOversizedBytesWithChunking,
@@ -118,6 +120,7 @@ async function transcribeBytesAcrossProviders({
       geminiApiKey,
       openaiApiKey,
       falApiKey,
+      deepgramApiKey,
       env,
       notes,
       onProgress,
@@ -163,6 +166,7 @@ export async function transcribeBytesWithRemoteFallbacks({
   geminiApiKey,
   openaiApiKey,
   falApiKey,
+  deepgramApiKey,
   env,
   onProgress,
   transcribeOversizedBytesWithChunking,
@@ -185,6 +189,7 @@ export async function transcribeBytesWithRemoteFallbacks({
       geminiApiKey,
       openaiApiKey,
       falApiKey,
+      deepgramApiKey,
     }),
     bytes,
     mediaType,
@@ -196,6 +201,7 @@ export async function transcribeBytesWithRemoteFallbacks({
     geminiApiKey,
     openaiApiKey,
     falApiKey,
+    deepgramApiKey,
     env,
     onProgress,
     transcribeOversizedBytesWithChunking,
@@ -213,6 +219,7 @@ export async function transcribeFileWithRemoteFallbacks({
   geminiApiKey,
   openaiApiKey,
   falApiKey,
+  deepgramApiKey,
   env,
   totalDurationSeconds,
   onProgress,
@@ -236,6 +243,7 @@ export async function transcribeFileWithRemoteFallbacks({
     geminiApiKey,
     openaiApiKey,
     falApiKey,
+    deepgramApiKey,
   });
   if (providerOrder.length === 0) {
     return buildNoProviderResult({ notes, groqApiKey, groqError });
@@ -265,6 +273,7 @@ export async function transcribeFileWithRemoteFallbacks({
       filename,
       assemblyaiApiKey,
       geminiApiKey,
+      deepgramApiKey,
       env,
     });
     if (fileAttempt.kind === "result") return withMergedNotes(fileAttempt.result, notes);
@@ -285,6 +294,13 @@ export async function transcribeFileWithRemoteFallbacks({
         notes.push(
           `Media too large for Whisper upload (${formatBytes(stat.size)}); install ffmpeg to enable chunked transcription`,
         );
+        const remainingProviders = providerOrder.slice(index + 1);
+        if (remainingProviders.includes("deepgram")) {
+          notes.push(
+            `Falling back to ${formatCloudFallbackTargets(remainingProviders)} without truncating the media`,
+          );
+          continue;
+        }
         const head = await readFirstBytes(filePath, MAX_OPENAI_UPLOAD_BYTES);
         return withMergedNotes(
           await transcribeBytesAcrossProviders({
@@ -299,6 +315,7 @@ export async function transcribeFileWithRemoteFallbacks({
             geminiApiKey,
             openaiApiKey,
             falApiKey,
+            deepgramApiKey,
             env,
             onProgress,
           }),
@@ -318,6 +335,7 @@ export async function transcribeFileWithRemoteFallbacks({
           geminiApiKey,
           openaiApiKey,
           falApiKey,
+          deepgramApiKey,
           env,
           onProgress,
         }),

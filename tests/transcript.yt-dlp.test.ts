@@ -70,6 +70,8 @@ describe("yt-dlp transcript helper", () => {
     vi.stubEnv("ASSEMBLYAI_API_KEY", "");
     vi.stubEnv("OPENAI_API_KEY", "");
     vi.stubEnv("FAL_KEY", "");
+    vi.stubEnv("DEEPGRAM_API_KEY", "");
+    vi.stubEnv("SUMMARIZE_DEEPGRAM_TRANSCRIPTION_MODEL", "");
     vi.stubEnv("GEMINI_API_KEY", "");
     vi.stubEnv("GOOGLE_GENERATIVE_AI_API_KEY", "");
     vi.stubEnv("GOOGLE_API_KEY", "");
@@ -116,6 +118,40 @@ describe("yt-dlp transcript helper", () => {
         expect.anything(),
         expect.anything(),
       );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("transcribes local yt-dlp media through Deepgram with timestamp segments", async () => {
+    const root = await mkdtemp(join(tmpdir(), "summarize-ytdlp-deepgram-"));
+    const filePath = join(root, "local-audio.mp3");
+    await writeFile(filePath, new Uint8Array([1, 2, 3]));
+    (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(
+      (input: RequestInfo | URL) => {
+        expect(new URL(input.toString()).hostname).toBe("api.deepgram.com");
+        return Response.json({
+          results: {
+            channels: [{ alternatives: [{ transcript: "Deepgram local transcript" }] }],
+            utterances: [{ start: 0.25, end: 1.5, transcript: "Deepgram local transcript" }],
+          },
+        });
+      },
+    );
+
+    try {
+      const result = await fetchTranscriptWithYtDlp({
+        ytDlpPath: null,
+        deepgramApiKey: "DG",
+        url: pathToFileURL(filePath).href,
+        mediaKind: "audio",
+      });
+
+      expect(result.text).toBe("Deepgram local transcript");
+      expect(result.provider).toBe("deepgram");
+      expect(result.segments).toEqual([
+        { startMs: 250, endMs: 1500, text: "Deepgram local transcript" },
+      ]);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -186,7 +222,7 @@ describe("yt-dlp transcript helper", () => {
 
     expect(result.text).toBeNull();
     expect(result.error?.message).toMatch(
-      /GROQ_API_KEY, ASSEMBLYAI_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY, or FAL_KEY/,
+      /GROQ_API_KEY, ASSEMBLYAI_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY, FAL_KEY, or DEEPGRAM_API_KEY/,
     );
   });
 

@@ -16,8 +16,9 @@ describe("transcription/whisper cloud providers", () => {
         geminiApiKey: "GEMINI",
         openaiApiKey: "OPENAI",
         falApiKey: "FAL",
+        deepgramApiKey: "DEEPGRAM",
       }),
-    ).toEqual(["assemblyai", "gemini", "openai", "fal"]);
+    ).toEqual(["assemblyai", "gemini", "openai", "fal", "deepgram"]);
   });
 
   it("formats provider labels for fallback notes", () => {
@@ -34,6 +35,7 @@ describe("transcription/whisper cloud providers", () => {
         hasGemini: true,
         hasOpenai: true,
         hasFal: false,
+        hasDeepgram: false,
       }),
     ).toBe("assemblyai->gemini->openai");
 
@@ -44,11 +46,13 @@ describe("transcription/whisper cloud providers", () => {
           hasGemini: true,
           hasOpenai: true,
           hasFal: true,
+          hasDeepgram: true,
         },
         geminiModelId: "gemini-2.5-flash",
+        deepgramModelId: "nova-3",
       }),
     ).toBe(
-      `${ASSEMBLYAI_TRANSCRIPTION_MODEL_ID}->google/gemini-2.5-flash->whisper-1->fal-ai/wizper`,
+      `${ASSEMBLYAI_TRANSCRIPTION_MODEL_ID}->google/gemini-2.5-flash->whisper-1->fal-ai/wizper->deepgram/nova-3`,
     );
   });
 
@@ -59,6 +63,7 @@ describe("transcription/whisper cloud providers", () => {
         hasGemini: false,
         hasOpenai: false,
         hasFal: false,
+        hasDeepgram: false,
       }),
     ).toBeNull();
 
@@ -69,8 +74,10 @@ describe("transcription/whisper cloud providers", () => {
           hasGemini: false,
           hasOpenai: false,
           hasFal: false,
+          hasDeepgram: false,
         },
         geminiModelId: "gemini-2.5-flash",
+        deepgramModelId: "nova-3",
       }),
     ).toBeNull();
   });

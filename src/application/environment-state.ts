@@ -9,6 +9,7 @@ export type EnvState = {
   openrouterConfigured: boolean;
   groqApiKey: string | null;
   assemblyaiApiKey: string | null;
+  deepgramApiKey: string | null;
   elevenlabsApiKey: string | null;
   openaiApiKey: string | null;
   xaiApiKey: string | null;
@@ -132,6 +133,10 @@ export function resolveEnvState({
     typeof envForRun.ASSEMBLYAI_API_KEY === "string"
       ? envForRun.ASSEMBLYAI_API_KEY.trim() || null
       : null;
+  const deepgramApiKey =
+    typeof envForRun.DEEPGRAM_API_KEY === "string"
+      ? envForRun.DEEPGRAM_API_KEY.trim() || null
+      : null;
   const elevenlabsApiKey =
     typeof envForRun.ELEVENLABS_API_KEY === "string"
       ? envForRun.ELEVENLABS_API_KEY.trim() || null
@@ -195,6 +200,7 @@ export function resolveEnvState({
     openrouterConfigured,
     groqApiKey,
     assemblyaiApiKey,
+    deepgramApiKey,
     elevenlabsApiKey,
     openaiApiKey,
     xaiApiKey,

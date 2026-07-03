@@ -15,7 +15,7 @@ Fast summaries from URLs, files, and media. Works in the terminal, a Chrome Side
 
 - URLs, files, and media: web pages, PDFs, images, audio/video, YouTube, podcasts, RSS.
 - Slide extraction for video sources (YouTube, direct video URLs, local video files) with OCR + timestamped cards.
-- Transcript-first media flow: published transcripts when available, then Groq/ONNX/whisper.cpp/AssemblyAI/Gemini/OpenAI/FAL transcription fallback when not.
+- Transcript-first media flow: published transcripts when available, then Groq/ONNX/whisper.cpp/AssemblyAI/Gemini/OpenAI/FAL/Deepgram transcription fallback when not.
 - Coding CLI providers: Claude, Codex, Gemini, Cursor Agent, OpenClaw, OpenCode, GitHub Copilot, Antigravity, pi.
 - Streaming output with Markdown rendering, metrics, and cache-aware status.
 - Local, paid, and free models: OpenAI‑compatible local endpoints, paid providers, plus an OpenRouter free preset.
@@ -142,6 +142,7 @@ Install these if you want media-heavy features:
   - `GEMINI_API_KEY` / `GOOGLE_GENERATIVE_AI_API_KEY` / `GOOGLE_API_KEY`
   - `OPENAI_API_KEY`
   - `FAL_KEY`
+  - `DEEPGRAM_API_KEY`
 
 macOS (Homebrew):
 
@@ -483,7 +484,7 @@ Non-YouTube URLs go through a fetch -> extract pipeline. When direct fetch/extra
 
 1. yt-dlp + Whisper (if `yt-dlp` is available): downloads audio, then transcribes with local `whisper.cpp` when installed
    (preferred), otherwise falls back to Groq (`GROQ_API_KEY`), AssemblyAI (`ASSEMBLYAI_API_KEY`), Gemini
-   (`GEMINI_API_KEY` / Google aliases), OpenAI (`OPENAI_API_KEY`), then FAL (`FAL_KEY`)
+   (`GEMINI_API_KEY` / Google aliases), OpenAI (`OPENAI_API_KEY`), FAL (`FAL_KEY`), then Deepgram (`DEEPGRAM_API_KEY`)
 2. Android VR direct audio + the same configured transcription chain when `yt-dlp` is unavailable or fails
 3. Apify (if `APIFY_API_TOKEN` is set): uses a scraping actor (`faVsWy9VTSNVIhWpR`)
 
@@ -499,6 +500,8 @@ Environment variables for yt-dlp mode:
 - `OPENAI_API_KEY` - OpenAI Whisper transcription
 - `OPENAI_WHISPER_BASE_URL` - optional OpenAI-compatible Whisper endpoint override
 - `FAL_KEY` - FAL AI Whisper fallback
+- `DEEPGRAM_API_KEY` - Deepgram Nova transcription fallback
+- `SUMMARIZE_DEEPGRAM_TRANSCRIPTION_MODEL` - optional Deepgram model override (default: `nova-3`)
 
 Apify costs money but tends to be more reliable when captions exist.
 
@@ -572,7 +575,7 @@ summarize "https://www.youtube.com/watch?v=..." --extract --format md --markdown
 
 Local audio/video files are transcribed first, then summarized. `--video-mode transcript` forces
 direct media URLs (and embedded media) through Whisper first. Prefers local `whisper.cpp` when available; otherwise requires
-one of `GROQ_API_KEY`, `ASSEMBLYAI_API_KEY`, `GEMINI_API_KEY` (or Google aliases), `OPENAI_API_KEY`, or `FAL_KEY`.
+one of `GROQ_API_KEY`, `ASSEMBLYAI_API_KEY`, `GEMINI_API_KEY` (or Google aliases), `OPENAI_API_KEY`, `FAL_KEY`, or `DEEPGRAM_API_KEY`.
 Use `--diarize [auto|elevenlabs|openai]` for speaker-labelled MP3/MP4 and other supported media;
 diarization requires `ELEVENLABS_API_KEY` or `OPENAI_API_KEY`.
 
@@ -598,7 +601,7 @@ Run: `summarize <url>`
 - RSS feeds (Podcasting 2.0 transcripts when available)
 - Embedded YouTube podcast pages (e.g. JREPodcast)
 
-Transcription: prefers local `whisper.cpp` when installed; otherwise uses Groq, AssemblyAI, Gemini, OpenAI, or FAL when keys are set.
+Transcription: prefers local `whisper.cpp` when installed; otherwise uses Groq, AssemblyAI, Gemini, OpenAI, FAL, or Deepgram when keys are set.
 
 ### Translation paths
 
@@ -612,7 +615,7 @@ When the input is audio/video, the CLI needs a transcript first. The transcript 
 2. Whisper transcription (fallback)
    - YouTube: prefers yt-dlp audio download, then Android VR direct audio, plus Whisper transcription when configured; Apify is a last resort.
    - Prefers local `whisper.cpp` when installed + model available.
-   - Otherwise uses cloud transcription in this order: Groq (`GROQ_API_KEY`) → AssemblyAI (`ASSEMBLYAI_API_KEY`) → Gemini (`GEMINI_API_KEY` / Google aliases) → OpenAI (`OPENAI_API_KEY`) → FAL (`FAL_KEY`).
+   - Otherwise uses cloud transcription in this order: Groq (`GROQ_API_KEY`) → AssemblyAI (`ASSEMBLYAI_API_KEY`) → Gemini (`GEMINI_API_KEY` / Google aliases) → OpenAI (`OPENAI_API_KEY`) → FAL (`FAL_KEY`) → Deepgram (`DEEPGRAM_API_KEY`).
 
 For direct media URLs, use `--video-mode transcript` to force transcribe -> summarize:
 
@@ -818,6 +821,8 @@ Optional services:
 - `GEMINI_API_KEY` / `GOOGLE_GENERATIVE_AI_API_KEY` / `GOOGLE_API_KEY` (Gemini transcription)
 - `OPENAI_API_KEY` / `OPENAI_WHISPER_BASE_URL` (OpenAI Whisper transcription)
 - `FAL_KEY` (FAL AI API key for audio transcription via Whisper)
+- `DEEPGRAM_API_KEY` (Deepgram API key for Nova transcription)
+- `SUMMARIZE_DEEPGRAM_TRANSCRIPTION_MODEL` (optional Deepgram model override; default `nova-3`)
 - `APIFY_API_TOKEN` (YouTube transcript fallback)
 
 ### Model limits

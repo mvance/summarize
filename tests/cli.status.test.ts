@@ -119,6 +119,48 @@ describe("summarize status", () => {
     expect(stderr.getText()).toBe("");
   });
 
+  it("reports configured Deepgram transcription without exposing the key", async () => {
+    const home = mkdtempSync(join(tmpdir(), "summarize-status-deepgram-"));
+    const configDir = join(home, ".summarize");
+    mkdirSync(configDir, { recursive: true });
+    writeFileSync(
+      join(configDir, "config.json"),
+      JSON.stringify({
+        env: {
+          DEEPGRAM_API_KEY: "deepgram-secret",
+          SUMMARIZE_DEEPGRAM_TRANSCRIPTION_MODEL: "whisper-large",
+        },
+      }),
+    );
+    const stdout = collectStream();
+    const stderr = collectStream();
+
+    await runCli(["status", "--json"], {
+      env: {
+        HOME: home,
+        PATH: "",
+      },
+      fetch: vi.fn() as unknown as typeof fetch,
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+    });
+
+    const raw = stdout.getText();
+    const report = JSON.parse(raw) as {
+      providers: Array<{ id: string; state: string; source?: string; model?: string }>;
+    };
+    expect(report.providers).toEqual([
+      expect.objectContaining({
+        id: "deepgram",
+        state: "configured",
+        source: "DEEPGRAM_API_KEY",
+        model: "whisper-large",
+      }),
+    ]);
+    expect(raw).not.toContain("deepgram-secret");
+    expect(stderr.getText()).toBe("");
+  });
+
   it("reports shared runtime provider aliases and endpoints", async () => {
     const home = mkdtempSync(join(tmpdir(), "summarize-status-runtime-"));
     const stdout = collectStream();

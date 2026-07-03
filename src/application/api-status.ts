@@ -8,6 +8,7 @@ export function resolveRunApiStatus(envState: EnvState): RunApiStatus {
     openrouterConfigured: envState.openrouterConfigured,
     groqApiKey: envState.groqApiKey,
     assemblyaiApiKey: envState.assemblyaiApiKey,
+    deepgramApiKey: envState.deepgramApiKey,
     elevenlabsApiKey: envState.elevenlabsApiKey,
     openaiApiKey: envState.openaiApiKey,
     xaiApiKey: envState.xaiApiKey,

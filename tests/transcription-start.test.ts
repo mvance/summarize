@@ -98,6 +98,24 @@ describe("transcription start helper", () => {
     expect(startInfo.modelId).toBe(ASSEMBLYAI_TRANSCRIPTION_MODEL_ID);
   });
 
+  it("reports Deepgram when only a Deepgram key is present", async () => {
+    whisperMock.isWhisperCppReady.mockResolvedValue(false);
+    whisperMock.resolveWhisperCppModelNameForDisplay.mockResolvedValue(null);
+
+    const startInfo = await resolveTranscriptionStartInfo({
+      env: {},
+      groqApiKey: null,
+      deepgramApiKey: "DG",
+      openaiApiKey: null,
+      falApiKey: null,
+    });
+
+    expect(startInfo.availability.hasAnyProvider).toBe(true);
+    expect(startInfo.availability.hasDeepgram).toBe(true);
+    expect(startInfo.providerHint).toBe("deepgram");
+    expect(startInfo.modelId).toBe("deepgram/nova-3");
+  });
+
   it("reports groq->assemblyai->gemini->openai when all preferred cloud fallbacks exist", async () => {
     whisperMock.isWhisperCppReady.mockResolvedValue(false);
     whisperMock.resolveWhisperCppModelNameForDisplay.mockResolvedValue(null);

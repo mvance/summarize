@@ -57,6 +57,7 @@ export async function fetchLinkContent(
     falApiKey: deps.falApiKey,
     groqApiKey: deps.groqApiKey,
     assemblyaiApiKey: deps.assemblyaiApiKey,
+    deepgramApiKey: deps.deepgramApiKey,
     geminiApiKey: deps.geminiApiKey,
     openaiApiKey: deps.openaiApiKey,
   });

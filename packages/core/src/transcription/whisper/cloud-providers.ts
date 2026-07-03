@@ -1,12 +1,12 @@
 import { ASSEMBLYAI_TRANSCRIPTION_MODEL_ID } from "./assemblyai.js";
 
-export type CloudProvider = "assemblyai" | "gemini" | "openai" | "fal";
+export type CloudProvider = "assemblyai" | "gemini" | "openai" | "fal" | "deepgram";
 
 type CloudProviderDescriptor = {
   provider: CloudProvider;
   label: string;
   standaloneLabel: string;
-  modelId: (args: { geminiModelId: string }) => string;
+  modelId: (args: { geminiModelId: string; deepgramModelId: string }) => string;
 };
 
 type CloudProviderKeyState = {
@@ -14,6 +14,7 @@ type CloudProviderKeyState = {
   geminiApiKey: string | null;
   openaiApiKey: string | null;
   falApiKey: string | null;
+  deepgramApiKey: string | null;
 };
 
 type CloudProviderAvailability = {
@@ -21,6 +22,7 @@ type CloudProviderAvailability = {
   hasGemini: boolean;
   hasOpenai: boolean;
   hasFal: boolean;
+  hasDeepgram: boolean;
 };
 
 const CLOUD_PROVIDER_DESCRIPTORS: readonly CloudProviderDescriptor[] = [
@@ -48,6 +50,12 @@ const CLOUD_PROVIDER_DESCRIPTORS: readonly CloudProviderDescriptor[] = [
     standaloneLabel: "Whisper/FAL",
     modelId: () => "fal-ai/wizper",
   },
+  {
+    provider: "deepgram",
+    label: "Deepgram",
+    standaloneLabel: "Deepgram",
+    modelId: ({ deepgramModelId }) => `deepgram/${deepgramModelId}`,
+  },
 ] as const;
 
 function getCloudProviderDescriptor(provider: CloudProvider): CloudProviderDescriptor {
@@ -64,6 +72,7 @@ function resolveCloudProviderOrderFromAvailability(
     geminiApiKey: availability.hasGemini ? "1" : null,
     openaiApiKey: availability.hasOpenai ? "1" : null,
     falApiKey: availability.hasFal ? "1" : null,
+    deepgramApiKey: availability.hasDeepgram ? "1" : null,
   });
 }
 
@@ -73,6 +82,7 @@ export function resolveCloudProviderOrder(state: CloudProviderKeyState): CloudPr
   if (state.geminiApiKey) order.push("gemini");
   if (state.openaiApiKey) order.push("openai");
   if (state.falApiKey) order.push("fal");
+  if (state.deepgramApiKey) order.push("deepgram");
   return order;
 }
 
@@ -93,12 +103,14 @@ export function buildCloudProviderHint(availability: CloudProviderAvailability):
 export function buildCloudModelIdChain({
   availability,
   geminiModelId,
+  deepgramModelId,
 }: {
   availability: CloudProviderAvailability;
   geminiModelId: string;
+  deepgramModelId: string;
 }): string | null {
   const parts = resolveCloudProviderOrderFromAvailability(availability).map((provider) =>
-    getCloudProviderDescriptor(provider).modelId({ geminiModelId }),
+    getCloudProviderDescriptor(provider).modelId({ geminiModelId, deepgramModelId }),
   );
   return parts.length > 0 ? parts.join("->") : null;
 }

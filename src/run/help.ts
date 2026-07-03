@@ -371,6 +371,7 @@ ${heading("Env Vars")}
   SUMMARIZE_YT_DLP_COOKIES_FROM_BROWSER optional yt-dlp cookies source (e.g. chrome, chrome:Profile 1)
   GROQ_API_KEY          optional Groq API key for audio transcription (whisper-large-v3-turbo)
   FAL_KEY               optional FAL AI API key for audio transcription
+  DEEPGRAM_API_KEY      optional Deepgram API key for audio transcription
 
 ${heading("Hint")}
   ${cmd("summarize refresh-free")} ${dim("# refresh free-model candidates into ~/.summarize/config.json")}
@@ -452,7 +453,7 @@ export function buildTranscriberHelp(): string {
     "Usage: summarize transcriber setup [--model parakeet|canary] [--theme <name>]",
     "",
     "Configures local ONNX transcription by printing the required env vars.",
-    "Auto selection prefers Groq first, then ONNX/whisper.cpp, then AssemblyAI/Gemini/OpenAI/FAL.",
+    "Auto selection prefers Groq first, then ONNX/whisper.cpp, then AssemblyAI/Gemini/OpenAI/FAL/Deepgram.",
     "",
     "Options:",
     "  --model <name>   parakeet (default) or canary",

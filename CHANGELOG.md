@@ -2,6 +2,10 @@
 
 ## 0.20.3 - Unreleased
 
+### Features
+
+- Transcription: add Deepgram Nova as an opt-in media, podcast, and yt-dlp fallback with timestamped utterances (#335, thanks @orchidautomation).
+
 ## 0.20.2 - 2026-07-02
 
 ### Features

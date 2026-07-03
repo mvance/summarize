@@ -335,7 +335,7 @@ describe("transcription/whisper local whisper.cpp", () => {
     expect(result.text).toBeNull();
     expect(result.provider).toBeNull();
     expect(result.error?.message).toContain(
-      "GROQ_API_KEY, ASSEMBLYAI_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY, or FAL_KEY",
+      "GROQ_API_KEY, ASSEMBLYAI_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY, FAL_KEY, or DEEPGRAM_API_KEY",
     );
     expect(spawn).toHaveBeenCalled();
   });
@@ -376,7 +376,7 @@ describe("transcription/whisper local whisper.cpp", () => {
     expect(result.text).toBeNull();
     expect(result.provider).toBeNull();
     expect(result.error?.message).toContain(
-      "GROQ_API_KEY, ASSEMBLYAI_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY, or FAL_KEY",
+      "GROQ_API_KEY, ASSEMBLYAI_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY, FAL_KEY, or DEEPGRAM_API_KEY",
     );
     expect(spawn).toHaveBeenCalled();
   });
@@ -683,7 +683,7 @@ describe("transcription/whisper local whisper.cpp", () => {
     expect(result.text).toBeNull();
     expect(result.provider).toBeNull();
     expect(result.error?.message).toContain(
-      "GROQ_API_KEY, ASSEMBLYAI_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY, or FAL_KEY",
+      "GROQ_API_KEY, ASSEMBLYAI_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY, FAL_KEY, or DEEPGRAM_API_KEY",
     );
     expect(result.notes.join(" ")).toContain("supports only flac/mp3/ogg/wav");
   });
@@ -729,7 +729,7 @@ describe("transcription/whisper local whisper.cpp", () => {
     expect(result.text).toBeNull();
     expect(result.provider).toBeNull();
     expect(result.error?.message).toContain(
-      "GROQ_API_KEY, ASSEMBLYAI_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY, or FAL_KEY",
+      "GROQ_API_KEY, ASSEMBLYAI_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY, FAL_KEY, or DEEPGRAM_API_KEY",
     );
     expect(spawn).toHaveBeenCalled();
   });
