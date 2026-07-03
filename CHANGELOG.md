@@ -2,6 +2,10 @@
 
 ## 0.21.2 - Unreleased
 
+### Fixes
+
+- Chrome extension: keep the font picker value on one line with an ellipsis in narrow side panels and apply themed styles to password and URL fields.
+
 ## 0.21.1 - 2026-07-03
 
 ### Fixes
