@@ -34,6 +34,13 @@ describe("runCliModel - agy provider", () => {
     expect(estimateWindowsCommandChars(["agy", "--print", quoteHeavyPrompt])).toBeGreaterThan(
       30_000,
     );
+    expect(estimateWindowsCommandChars(["agy", ""])).toBe("agy".length + 1 + 2);
+    expect(estimateWindowsCommandChars(["agy", "C:\\Program Files\\agy\\"])).toBeGreaterThan(
+      "agy C:\\Program Files\\agy\\".length,
+    );
+    expect(estimateWindowsCommandChars(["agy", 'say \\"hello"'])).toBeGreaterThan(
+      'agy say \\"hello"'.length,
+    );
   });
 
   it("invokes agy with --print prompt argument, returns plain text", async () => {
