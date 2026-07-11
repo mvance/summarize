@@ -35,7 +35,7 @@ function formatErrorMessageWithStderr(
 }
 
 function redactSensitiveText(text: string, sensitiveText?: string): string {
-  if (!sensitiveText || sensitiveText.length < 4) return text;
+  if (!sensitiveText) return text;
   return text.split(sensitiveText).join("[prompt redacted]");
 }
 

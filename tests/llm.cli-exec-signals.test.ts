@@ -191,7 +191,7 @@ describe("execCliWithInput signals", () => {
   });
 
   it("uses a generic timeout command when only redact text is provided", async () => {
-    const secret = "raw secret";
+    const secret = "x";
     const execError = Object.assign(new Error("timed out"), {
       code: "ETIMEDOUT",
       cmd: `cli --secret ${secret}`,
