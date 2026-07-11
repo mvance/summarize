@@ -34,6 +34,11 @@ function formatErrorMessageWithStderr(
   return `${message}${separator}${trimmedStderr}`;
 }
 
+function redactSensitiveText(text: string, sensitiveText?: string): string {
+  if (!sensitiveText) return text;
+  return text.split(sensitiveText).join("[prompt redacted]");
+}
+
 function formatTimeoutLabel(timeoutMs: number): string {
   if (Number.isFinite(timeoutMs) && timeoutMs > 0) {
     if (timeoutMs % 60_000 === 0) return `${Math.floor(timeoutMs / 60_000)}m`;
@@ -61,7 +66,17 @@ function getExecErrorMessage(error: CliExecError): string {
     : "CLI command failed";
 }
 
-function getExecCommand(error: CliExecError, cmd: string, args: string[]): string {
+function getExecCommand(
+  error: CliExecError,
+  cmd: string,
+  args: string[],
+  redactedCommand?: string,
+  shouldRedact = false,
+): string {
+  if (typeof redactedCommand === "string" && redactedCommand.trim().length > 0) {
+    return redactedCommand.trim();
+  }
+  if (shouldRedact) return `${cmd} [arguments redacted]`;
   return typeof error.cmd === "string" && error.cmd.trim().length > 0
     ? error.cmd.trim()
     : [cmd, ...args].join(" ");
@@ -73,6 +88,14 @@ function abortReason(signal: AbortSignal): Error {
     : new DOMException("This operation was aborted", "AbortError");
 }
 
+function errorOptions(
+  error: CliExecError,
+  redactedCommand?: string,
+  redactText?: string,
+): ErrorOptions | undefined {
+  return redactedCommand || redactText ? undefined : { cause: error };
+}
+
 export async function execCliWithInput({
   execFileImpl,
   cmd,
@@ -82,6 +105,8 @@ export async function execCliWithInput({
   env,
   cwd,
   signal,
+  redactedCommand,
+  redactText,
 }: {
   execFileImpl: ExecFileFn;
   cmd: string;
@@ -91,6 +116,8 @@ export async function execCliWithInput({
   env: Record<string, string | undefined>;
   cwd?: string;
   signal?: AbortSignal;
+  redactedCommand?: string;
+  redactText?: string;
 }): Promise<{ stdout: string; stderr: string }> {
   return await new Promise((resolve, reject) => {
     let interruptedSignal: NodeJS.Signals | null = null;
@@ -143,7 +170,8 @@ export async function execCliWithInput({
       },
       (error, stdout, stderr) => {
         cleanupSignalHandlers();
-        const stderrText = toUtf8String(stderr);
+        const shouldRedact = Boolean(redactedCommand || redactText);
+        const stderrText = redactSensitiveText(toUtf8String(stderr), redactText);
         if (aborted && signal) {
           reject(abortReason(signal));
           return;
@@ -155,19 +183,29 @@ export async function execCliWithInput({
         if (error) {
           if (isExecTimeoutError(error)) {
             const timeoutMessage =
-              `CLI command timed out after ${formatTimeoutLabel(timeoutMs)}: ${getExecCommand(error, cmd, args)}. ` +
+              `CLI command timed out after ${formatTimeoutLabel(timeoutMs)}: ${getExecCommand(error, cmd, args, redactedCommand, shouldRedact)}. ` +
               "Increase --timeout (e.g. 5m).";
             reject(
               new Error(formatErrorMessageWithStderr(timeoutMessage, stderrText, "\n"), {
-                cause: error,
+                ...errorOptions(error, redactedCommand, redactText),
               }),
             );
             return;
           }
+          const errorMessage =
+            shouldRedact && redactedCommand
+              ? `CLI command failed: ${redactedCommand}`
+              : shouldRedact
+                ? "CLI command failed"
+                : getExecErrorMessage(error);
           reject(
-            new Error(formatErrorMessageWithStderr(getExecErrorMessage(error), stderrText), {
-              cause: error,
-            }),
+            new Error(
+              formatErrorMessageWithStderr(
+                redactSensitiveText(errorMessage, redactText),
+                stderrText,
+              ),
+              errorOptions(error, redactedCommand, redactText),
+            ),
           );
           return;
         }
