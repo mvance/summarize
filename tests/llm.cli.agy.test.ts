@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveAgyMaxPrintArgBytes } from "../src/llm/cli-runners/plain.js";
+import { resolveAgyMaxPrintArgLimit } from "../src/llm/cli-runners/plain.js";
 import { resolveCliBinary, runCliModel } from "../src/llm/cli.js";
 import type { ExecFileFn } from "../src/markitdown.js";
 
@@ -18,9 +18,9 @@ const makeStub = (
 
 describe("runCliModel - agy provider", () => {
   it("uses a lower agy prompt argv limit on Windows", () => {
-    expect(resolveAgyMaxPrintArgBytes("win32")).toBe(30 * 1024);
-    expect(resolveAgyMaxPrintArgBytes("darwin")).toBe(120 * 1024);
-    expect(resolveAgyMaxPrintArgBytes("linux")).toBe(120 * 1024);
+    expect(resolveAgyMaxPrintArgLimit("win32")).toEqual({ limit: 25_000, type: "chars" });
+    expect(resolveAgyMaxPrintArgLimit("darwin")).toEqual({ limit: 120 * 1024, type: "bytes" });
+    expect(resolveAgyMaxPrintArgLimit("linux")).toEqual({ limit: 120 * 1024, type: "bytes" });
   });
 
   it("invokes agy with --print prompt argument, returns plain text", async () => {
@@ -184,7 +184,7 @@ describe("runCliModel - agy provider", () => {
     await expect(
       runCliModel({
         provider: "agy",
-        prompt: "x".repeat(resolveAgyMaxPrintArgBytes() + 1),
+        prompt: "x".repeat(resolveAgyMaxPrintArgLimit().limit + 1),
         model: null,
         allowTools: false,
         timeoutMs: 1000,

@@ -9,10 +9,16 @@ function hasAnyFlag(args: string[], flags: string[]): boolean {
 }
 
 const AGY_MAX_PRINT_ARG_BYTES = 120 * 1024;
-const AGY_WINDOWS_MAX_PRINT_ARG_BYTES = 30 * 1024;
+const AGY_WINDOWS_MAX_PRINT_ARG_CHARS = 25_000;
 
-export function resolveAgyMaxPrintArgBytes(platform: NodeJS.Platform = process.platform): number {
-  return platform === "win32" ? AGY_WINDOWS_MAX_PRINT_ARG_BYTES : AGY_MAX_PRINT_ARG_BYTES;
+export type AgyPrintArgLimit = { limit: number; type: "bytes" | "chars" };
+
+export function resolveAgyMaxPrintArgLimit(
+  platform: NodeJS.Platform = process.platform,
+): AgyPrintArgLimit {
+  return platform === "win32"
+    ? { limit: AGY_WINDOWS_MAX_PRINT_ARG_CHARS, type: "chars" }
+    : { limit: AGY_MAX_PRINT_ARG_BYTES, type: "bytes" };
 }
 
 export async function runCopilotCli(options: ResolvedCliRunOptions): Promise<CliRunResult> {
@@ -41,10 +47,12 @@ export async function runAgyCli(options: ResolvedCliRunOptions): Promise<CliRunR
   try {
     const args = [...options.providerExtraArgs];
     if (!options.allowTools && !hasAnyFlag(args, ["--sandbox"])) args.push("--sandbox");
-    const promptBytes = Buffer.byteLength(options.prompt, "utf8");
-    if (promptBytes > resolveAgyMaxPrintArgBytes()) {
+    const { limit, type } = resolveAgyMaxPrintArgLimit();
+    const promptSize =
+      type === "chars" ? options.prompt.length : Buffer.byteLength(options.prompt, "utf8");
+    if (promptSize > limit) {
       throw new Error(
-        `Antigravity CLI requires --print <prompt> and cannot safely receive large prompts over argv (${promptBytes} bytes). ` +
+        `Antigravity CLI requires --print <prompt> and cannot safely receive large prompts over argv (${promptSize} ${type}). ` +
           "Use a different CLI provider for this input, reduce extracted content, or update agy to support stdin/file input.",
       );
     }
