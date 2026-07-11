@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { Buffer } from "node:buffer";
 import { execCliWithInput } from "../cli-exec.js";
 import type { CliRunResult, ResolvedCliRunOptions } from "./types.js";
 
@@ -9,7 +10,7 @@ function hasAnyFlag(args: string[], flags: string[]): boolean {
 }
 
 const AGY_MAX_PRINT_ARG_BYTES = 120 * 1024;
-const AGY_WINDOWS_MAX_PRINT_ARG_CHARS = 25_000;
+const AGY_WINDOWS_MAX_COMMAND_CHARS = 30_000;
 
 export type AgyPrintArgLimit = { limit: number; type: "bytes" | "chars" };
 
@@ -17,8 +18,32 @@ export function resolveAgyMaxPrintArgLimit(
   platform: NodeJS.Platform = typeof process !== "undefined" ? process.platform : "linux",
 ): AgyPrintArgLimit {
   return platform === "win32"
-    ? { limit: AGY_WINDOWS_MAX_PRINT_ARG_CHARS, type: "chars" }
+    ? { limit: AGY_WINDOWS_MAX_COMMAND_CHARS, type: "chars" }
     : { limit: AGY_MAX_PRINT_ARG_BYTES, type: "bytes" };
+}
+
+function estimateWindowsCommandArgChars(arg: string): number {
+  if (arg.length === 0) return 2;
+  if (!/[\s"]/u.test(arg)) return arg.length;
+  let length = 2;
+  let backslashes = 0;
+  for (const char of arg) {
+    if (char === "\\") {
+      backslashes += 1;
+      length += 1;
+      continue;
+    }
+    if (char === '"') length += backslashes + 1;
+    backslashes = 0;
+    length += 1;
+  }
+  return length + backslashes;
+}
+
+export function estimateWindowsCommandChars(args: string[]): number {
+  return args.reduce((total, arg, index) => {
+    return total + (index === 0 ? 0 : 1) + estimateWindowsCommandArgChars(arg);
+  }, 0);
 }
 
 export async function runCopilotCli(options: ResolvedCliRunOptions): Promise<CliRunResult> {
@@ -41,15 +66,16 @@ export async function runCopilotCli(options: ResolvedCliRunOptions): Promise<Cli
 }
 
 export async function runAgyCli(options: ResolvedCliRunOptions): Promise<CliRunResult> {
+  const platform = typeof process !== "undefined" ? process.platform : "linux";
   const isolatedCwd = !options.allowTools
     ? await fs.mkdtemp(path.join(tmpdir(), "summarize-agy-"))
     : null;
   try {
     const args = [...options.providerExtraArgs];
     if (!options.allowTools && !hasAnyFlag(args, ["--sandbox"])) args.push("--sandbox");
-    const { limit, type } = resolveAgyMaxPrintArgLimit();
+    const { limit, type } = resolveAgyMaxPrintArgLimit(platform);
     const promptSize =
-      type === "chars" ? options.prompt.length : new TextEncoder().encode(options.prompt).length;
+      type === "chars" ? options.prompt.length : Buffer.byteLength(options.prompt, "utf8");
     if (promptSize > limit) {
       throw new Error(
         `Antigravity CLI requires --print <prompt> and cannot safely receive large prompts over argv (${promptSize} ${type}). ` +
@@ -64,7 +90,16 @@ export async function runAgyCli(options: ResolvedCliRunOptions): Promise<CliRunR
       args.push("--print-timeout", `${Math.max(1, Math.ceil(options.timeoutMs / 1000))}s`);
     }
     args.push("--print", options.prompt);
-    const timeoutCommand = [
+    if (platform === "win32") {
+      const commandChars = estimateWindowsCommandChars([options.binary, ...args]);
+      if (commandChars > limit) {
+        throw new Error(
+          `Antigravity CLI requires --print <prompt> and cannot safely receive large prompts over argv (${commandChars} escaped chars). ` +
+            "Use a different CLI provider for this input, reduce extracted content, or update agy to support stdin/file input.",
+        );
+      }
+    }
+    const redactedCommand = [
       options.binary,
       ...args.map((arg, index) => (args[index - 1] === "--print" ? "[prompt redacted]" : arg)),
     ].join(" ");
@@ -77,7 +112,8 @@ export async function runAgyCli(options: ResolvedCliRunOptions): Promise<CliRunR
       env: options.env,
       cwd: isolatedCwd ?? options.cwd,
       signal: options.signal,
-      timeoutCommand,
+      redactedCommand,
+      redactText: options.prompt,
     });
     const text = stdout.trim();
     if (!text) throw new Error("CLI returned empty output");

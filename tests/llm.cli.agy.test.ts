@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { resolveAgyMaxPrintArgLimit } from "../src/llm/cli-runners/plain.js";
+import {
+  estimateWindowsCommandChars,
+  resolveAgyMaxPrintArgLimit,
+} from "../src/llm/cli-runners/plain.js";
 import { resolveCliBinary, runCliModel } from "../src/llm/cli.js";
 import type { ExecFileFn } from "../src/markitdown.js";
 
@@ -18,9 +21,19 @@ const makeStub = (
 
 describe("runCliModel - agy provider", () => {
   it("uses a lower agy prompt argv limit on Windows", () => {
-    expect(resolveAgyMaxPrintArgLimit("win32")).toEqual({ limit: 25_000, type: "chars" });
+    expect(resolveAgyMaxPrintArgLimit("win32")).toEqual({ limit: 30_000, type: "chars" });
     expect(resolveAgyMaxPrintArgLimit("darwin")).toEqual({ limit: 120 * 1024, type: "bytes" });
     expect(resolveAgyMaxPrintArgLimit("linux")).toEqual({ limit: 120 * 1024, type: "bytes" });
+  });
+
+  it("accounts for Windows argv escaping overhead", () => {
+    const plainPrompt = "x".repeat(20_000);
+    const quoteHeavyPrompt = '"'.repeat(20_000);
+
+    expect(estimateWindowsCommandChars(["agy", "--print", plainPrompt])).toBeLessThan(30_000);
+    expect(estimateWindowsCommandChars(["agy", "--print", quoteHeavyPrompt])).toBeGreaterThan(
+      30_000,
+    );
   });
 
   it("invokes agy with --print prompt argument, returns plain text", async () => {
@@ -215,30 +228,49 @@ describe("runCliModel - agy provider", () => {
       } as unknown as ReturnType<ExecFileFn>;
     }) as ExecFileFn;
 
-    await expect(
-      runCliModel({
-        provider: "agy",
-        prompt,
-        model: null,
-        allowTools: false,
-        timeoutMs: 1000,
-        env: {},
-        execFileImpl,
-        config: null,
-      }),
-    ).rejects.toThrow(/agy .*--print \[prompt redacted\]/);
-    await expect(
-      runCliModel({
-        provider: "agy",
-        prompt,
-        model: null,
-        allowTools: false,
-        timeoutMs: 1000,
-        env: {},
-        execFileImpl,
-        config: null,
-      }),
-    ).rejects.not.toThrow(prompt);
+    const promise = runCliModel({
+      provider: "agy",
+      prompt,
+      model: null,
+      allowTools: false,
+      timeoutMs: 1000,
+      env: {},
+      execFileImpl,
+      config: null,
+    });
+
+    await expect(promise).rejects.toThrow(/agy .*--print \[prompt redacted\]/);
+    await expect(promise).rejects.not.toThrow(prompt);
+  });
+
+  it("redacts the agy prompt from non-timeout errors", async () => {
+    const prompt = "super secret page content";
+    const execFileImpl: ExecFileFn = ((cmd, args, _options, cb) => {
+      cb?.(
+        Object.assign(new Error(`Command failed: ${[cmd, ...args].join(" ")}`), {
+          code: 1,
+        }),
+        "",
+        `stderr includes ${prompt}`,
+      );
+      return {
+        stdin: { write: () => {}, end: () => {} },
+      } as unknown as ReturnType<ExecFileFn>;
+    }) as ExecFileFn;
+
+    const promise = runCliModel({
+      provider: "agy",
+      prompt,
+      model: null,
+      allowTools: false,
+      timeoutMs: 1000,
+      env: {},
+      execFileImpl,
+      config: null,
+    });
+
+    await expect(promise).rejects.toThrow("[prompt redacted]");
+    await expect(promise).rejects.not.toThrow(prompt);
   });
 
   it("rejects oversized agy prompts before passing them through argv", async () => {
