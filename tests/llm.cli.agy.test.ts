@@ -164,6 +164,31 @@ describe("runCliModel - agy provider", () => {
     expect(seen[2]?.filter((arg) => arg.includes("print-timeout"))).toEqual(["-print-timeout=10m"]);
   });
 
+  it("rejects oversized agy prompts before passing them through argv", async () => {
+    let called = false;
+    const execFileImpl: ExecFileFn = ((_cmd, _args, _options, cb) => {
+      called = true;
+      cb?.(null, "ok", "");
+      return {
+        stdin: { write: () => {}, end: () => {} },
+      } as unknown as ReturnType<ExecFileFn>;
+    }) as ExecFileFn;
+
+    await expect(
+      runCliModel({
+        provider: "agy",
+        prompt: "x".repeat(121 * 1024),
+        model: null,
+        allowTools: false,
+        timeoutMs: 1000,
+        env: {},
+        execFileImpl,
+        config: null,
+      }),
+    ).rejects.toThrow(/cannot safely receive large prompts over argv/);
+    expect(called).toBe(false);
+  });
+
   it("throws when agy returns empty output", async () => {
     const execFileImpl = makeStub(() => ({ stdout: "  \n" }));
     await expect(
