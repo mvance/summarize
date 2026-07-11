@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { resolveAgyMaxPrintArgBytes } from "../src/llm/cli-runners/plain.js";
 import { resolveCliBinary, runCliModel } from "../src/llm/cli.js";
 import type { ExecFileFn } from "../src/markitdown.js";
 
@@ -16,6 +17,12 @@ const makeStub = (
 };
 
 describe("runCliModel - agy provider", () => {
+  it("uses a lower agy prompt argv limit on Windows", () => {
+    expect(resolveAgyMaxPrintArgBytes("win32")).toBe(30 * 1024);
+    expect(resolveAgyMaxPrintArgBytes("darwin")).toBe(120 * 1024);
+    expect(resolveAgyMaxPrintArgBytes("linux")).toBe(120 * 1024);
+  });
+
   it("invokes agy with --print prompt argument, returns plain text", async () => {
     let seenCmd = "";
     let seenCwd = "";
@@ -177,7 +184,7 @@ describe("runCliModel - agy provider", () => {
     await expect(
       runCliModel({
         provider: "agy",
-        prompt: "x".repeat(121 * 1024),
+        prompt: "x".repeat(resolveAgyMaxPrintArgBytes() + 1),
         model: null,
         allowTools: false,
         timeoutMs: 1000,
