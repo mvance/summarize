@@ -27,7 +27,8 @@ function estimateWindowsCommandArgChars(arg: string): number {
   if (!/[\s"]/u.test(arg)) return arg.length;
   let length = 2;
   let backslashes = 0;
-  for (const char of arg) {
+  for (let index = 0; index < arg.length; index += 1) {
+    const char = arg[index];
     if (char === "\\") {
       backslashes += 1;
       length += 1;

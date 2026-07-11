@@ -41,6 +41,9 @@ describe("runCliModel - agy provider", () => {
     expect(estimateWindowsCommandChars(["agy", 'say \\"hello"'])).toBeGreaterThan(
       'agy say \\"hello"'.length,
     );
+    expect(estimateWindowsCommandChars(["agy", "--print", "😀 "])).toBe(
+      "agy".length + 1 + "--print".length + 1 + 2 + "😀 ".length,
+    );
   });
 
   it("invokes agy with --print prompt argument, returns plain text", async () => {
@@ -281,7 +284,7 @@ describe("runCliModel - agy provider", () => {
 
     const error = await promise.catch((value: unknown) => value);
     expect(error).toBeInstanceOf(Error);
-    expect((error as Error).message).toContain("[prompt redacted]");
+    expect((error as Error).message).toMatch(/CLI command failed: agy .*--print \[prompt redacted\]/);
     expect((error as Error).message).not.toContain(prompt);
     expect((error as Error & { cause?: unknown }).cause).toBeUndefined();
   });

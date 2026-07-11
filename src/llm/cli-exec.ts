@@ -35,7 +35,7 @@ function formatErrorMessageWithStderr(
 }
 
 function redactSensitiveText(text: string, sensitiveText?: string): string {
-  if (!sensitiveText) return text;
+  if (!sensitiveText || sensitiveText.length < 4) return text;
   return text.split(sensitiveText).join("[prompt redacted]");
 }
 
@@ -71,10 +71,12 @@ function getExecCommand(
   cmd: string,
   args: string[],
   redactedCommand?: string,
+  shouldRedact = false,
 ): string {
   if (typeof redactedCommand === "string" && redactedCommand.trim().length > 0) {
     return redactedCommand.trim();
   }
+  if (shouldRedact) return `${cmd} [arguments redacted]`;
   return typeof error.cmd === "string" && error.cmd.trim().length > 0
     ? error.cmd.trim()
     : [cmd, ...args].join(" ");
@@ -86,8 +88,12 @@ function abortReason(signal: AbortSignal): Error {
     : new DOMException("This operation was aborted", "AbortError");
 }
 
-function errorOptions(error: CliExecError, redactText?: string): ErrorOptions | undefined {
-  return redactText ? undefined : { cause: error };
+function errorOptions(
+  error: CliExecError,
+  redactedCommand?: string,
+  redactText?: string,
+): ErrorOptions | undefined {
+  return redactedCommand || redactText ? undefined : { cause: error };
 }
 
 export async function execCliWithInput({
@@ -164,6 +170,7 @@ export async function execCliWithInput({
       },
       (error, stdout, stderr) => {
         cleanupSignalHandlers();
+        const shouldRedact = Boolean(redactedCommand || redactText);
         const stderrText = redactSensitiveText(toUtf8String(stderr), redactText);
         if (aborted && signal) {
           reject(abortReason(signal));
@@ -176,22 +183,28 @@ export async function execCliWithInput({
         if (error) {
           if (isExecTimeoutError(error)) {
             const timeoutMessage =
-              `CLI command timed out after ${formatTimeoutLabel(timeoutMs)}: ${getExecCommand(error, cmd, args, redactedCommand)}. ` +
+              `CLI command timed out after ${formatTimeoutLabel(timeoutMs)}: ${getExecCommand(error, cmd, args, redactedCommand, shouldRedact)}. ` +
               "Increase --timeout (e.g. 5m).";
             reject(
               new Error(formatErrorMessageWithStderr(timeoutMessage, stderrText, "\n"), {
-                ...errorOptions(error, redactText),
+                ...errorOptions(error, redactedCommand, redactText),
               }),
             );
             return;
           }
+          const errorMessage =
+            shouldRedact && redactedCommand
+              ? `CLI command failed: ${redactedCommand}`
+              : shouldRedact
+                ? "CLI command failed"
+                : getExecErrorMessage(error);
           reject(
             new Error(
               formatErrorMessageWithStderr(
-                redactSensitiveText(getExecErrorMessage(error), redactText),
+                redactSensitiveText(errorMessage, redactText),
                 stderrText,
               ),
-              errorOptions(error, redactText),
+              errorOptions(error, redactedCommand, redactText),
             ),
           );
           return;
