@@ -239,8 +239,11 @@ describe("runCliModel - agy provider", () => {
       config: null,
     });
 
-    await expect(promise).rejects.toThrow(/agy .*--print \[prompt redacted\]/);
-    await expect(promise).rejects.not.toThrow(prompt);
+    const error = await promise.catch((value: unknown) => value);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toMatch(/agy .*--print \[prompt redacted\]/);
+    expect((error as Error).message).not.toContain(prompt);
+    expect((error as Error & { cause?: unknown }).cause).toBeUndefined();
   });
 
   it("redacts the agy prompt from non-timeout errors", async () => {
@@ -269,8 +272,11 @@ describe("runCliModel - agy provider", () => {
       config: null,
     });
 
-    await expect(promise).rejects.toThrow("[prompt redacted]");
-    await expect(promise).rejects.not.toThrow(prompt);
+    const error = await promise.catch((value: unknown) => value);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain("[prompt redacted]");
+    expect((error as Error).message).not.toContain(prompt);
+    expect((error as Error & { cause?: unknown }).cause).toBeUndefined();
   });
 
   it("rejects oversized agy prompts before passing them through argv", async () => {

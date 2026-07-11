@@ -86,6 +86,10 @@ function abortReason(signal: AbortSignal): Error {
     : new DOMException("This operation was aborted", "AbortError");
 }
 
+function errorOptions(error: CliExecError, redactText?: string): ErrorOptions | undefined {
+  return redactText ? undefined : { cause: error };
+}
+
 export async function execCliWithInput({
   execFileImpl,
   cmd,
@@ -176,7 +180,7 @@ export async function execCliWithInput({
               "Increase --timeout (e.g. 5m).";
             reject(
               new Error(formatErrorMessageWithStderr(timeoutMessage, stderrText, "\n"), {
-                cause: error,
+                ...errorOptions(error, redactText),
               }),
             );
             return;
@@ -187,9 +191,7 @@ export async function execCliWithInput({
                 redactSensitiveText(getExecErrorMessage(error), redactText),
                 stderrText,
               ),
-              {
-                cause: error,
-              },
+              errorOptions(error, redactText),
             ),
           );
           return;
