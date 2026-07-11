@@ -34,7 +34,7 @@ export async function runAgyCli(options: ResolvedCliRunOptions): Promise<CliRunR
   try {
     const args = [...options.providerExtraArgs];
     if (!options.allowTools && !hasAnyFlag(args, ["--sandbox"])) args.push("--sandbox");
-    args.push("--print");
+    args.push("--print", options.prompt);
     if (
       Number.isFinite(options.timeoutMs) &&
       options.timeoutMs > 0 &&
@@ -46,7 +46,7 @@ export async function runAgyCli(options: ResolvedCliRunOptions): Promise<CliRunR
       execFileImpl: options.execFileImpl,
       cmd: options.binary,
       args,
-      input: options.prompt,
+      input: "",
       timeoutMs: options.timeoutMs,
       env: options.env,
       cwd: isolatedCwd ?? options.cwd,

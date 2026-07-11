@@ -16,7 +16,7 @@ const makeStub = (
 };
 
 describe("runCliModel - agy provider", () => {
-  it("invokes agy with --print, passes prompt via stdin, returns plain text", async () => {
+  it("invokes agy with --print prompt argument, returns plain text", async () => {
     let seenCmd = "";
     let seenCwd = "";
     let seenInput = "";
@@ -52,14 +52,16 @@ describe("runCliModel - agy provider", () => {
     expect(result.usage).toBeNull();
     expect(result.costUsd).toBeNull();
     expect(seenCmd).toBe("agy");
-    expect(seen[0]).toContain("--print");
+    const printIdx = seen[0].indexOf("--print");
+    expect(printIdx).toBeGreaterThanOrEqual(0);
+    expect(seen[0][printIdx + 1]).toBe("Summarize this.");
     expect(seen[0]).toContain("--sandbox");
     expect(seen[0]).toContain("--print-timeout");
     expect(seen[0]).toContain("1s");
     expect(seen[0]).not.toContain("--output-format");
     expect(seenCwd).toContain("summarize-agy-");
     expect(seenCwd).not.toBe("/tmp/agy-original-cwd");
-    expect(seenInput).toContain("Summarize this.");
+    expect(seenInput).toBe("");
   });
 
   it("uses the active agy session model instead of passing --model", async () => {
