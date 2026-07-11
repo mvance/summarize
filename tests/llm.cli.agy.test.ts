@@ -171,6 +171,76 @@ describe("runCliModel - agy provider", () => {
     expect(seen[2]?.filter((arg) => arg.includes("print-timeout"))).toEqual(["-print-timeout=10m"]);
   });
 
+  it("does not treat prompt text as an agy timeout override", async () => {
+    const seen: string[][] = [];
+    const execFileImpl = makeStub((args) => {
+      seen.push(args);
+      return { stdout: "ok" };
+    });
+
+    await runCliModel({
+      provider: "agy",
+      prompt: "--print-timeout should be summarized",
+      model: null,
+      allowTools: false,
+      timeoutMs: 90_000,
+      env: {},
+      execFileImpl,
+      config: null,
+    });
+
+    const args = seen[0];
+    expect(args).toContain("--print-timeout");
+    expect(args).toContain("90s");
+    const timeoutIdx = args.indexOf("--print-timeout");
+    const printIdx = args.indexOf("--print");
+    expect(timeoutIdx).toBeGreaterThanOrEqual(0);
+    expect(printIdx).toBeGreaterThan(timeoutIdx);
+    expect(args[printIdx + 1]).toBe("--print-timeout should be summarized");
+  });
+
+  it("redacts the agy prompt from timeout errors", async () => {
+    const prompt = "super secret page content";
+    const execFileImpl: ExecFileFn = ((cmd, args, _options, cb) => {
+      cb?.(
+        Object.assign(new Error("timed out"), {
+          code: "ETIMEDOUT",
+          cmd: [cmd, ...args].join(" "),
+        }),
+        "",
+        "",
+      );
+      return {
+        stdin: { write: () => {}, end: () => {} },
+      } as unknown as ReturnType<ExecFileFn>;
+    }) as ExecFileFn;
+
+    await expect(
+      runCliModel({
+        provider: "agy",
+        prompt,
+        model: null,
+        allowTools: false,
+        timeoutMs: 1000,
+        env: {},
+        execFileImpl,
+        config: null,
+      }),
+    ).rejects.toThrow(/agy .*--print \[prompt redacted\]/);
+    await expect(
+      runCliModel({
+        provider: "agy",
+        prompt,
+        model: null,
+        allowTools: false,
+        timeoutMs: 1000,
+        env: {},
+        execFileImpl,
+        config: null,
+      }),
+    ).rejects.not.toThrow(prompt);
+  });
+
   it("rejects oversized agy prompts before passing them through argv", async () => {
     let called = false;
     const execFileImpl: ExecFileFn = ((_cmd, _args, _options, cb) => {

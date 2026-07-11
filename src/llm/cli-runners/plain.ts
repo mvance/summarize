@@ -14,7 +14,7 @@ const AGY_WINDOWS_MAX_PRINT_ARG_CHARS = 25_000;
 export type AgyPrintArgLimit = { limit: number; type: "bytes" | "chars" };
 
 export function resolveAgyMaxPrintArgLimit(
-  platform: NodeJS.Platform = process.platform,
+  platform: NodeJS.Platform = typeof process !== "undefined" ? process.platform : "linux",
 ): AgyPrintArgLimit {
   return platform === "win32"
     ? { limit: AGY_WINDOWS_MAX_PRINT_ARG_CHARS, type: "chars" }
@@ -49,14 +49,13 @@ export async function runAgyCli(options: ResolvedCliRunOptions): Promise<CliRunR
     if (!options.allowTools && !hasAnyFlag(args, ["--sandbox"])) args.push("--sandbox");
     const { limit, type } = resolveAgyMaxPrintArgLimit();
     const promptSize =
-      type === "chars" ? options.prompt.length : Buffer.byteLength(options.prompt, "utf8");
+      type === "chars" ? options.prompt.length : new TextEncoder().encode(options.prompt).length;
     if (promptSize > limit) {
       throw new Error(
         `Antigravity CLI requires --print <prompt> and cannot safely receive large prompts over argv (${promptSize} ${type}). ` +
           "Use a different CLI provider for this input, reduce extracted content, or update agy to support stdin/file input.",
       );
     }
-    args.push("--print", options.prompt);
     if (
       Number.isFinite(options.timeoutMs) &&
       options.timeoutMs > 0 &&
@@ -64,6 +63,11 @@ export async function runAgyCli(options: ResolvedCliRunOptions): Promise<CliRunR
     ) {
       args.push("--print-timeout", `${Math.max(1, Math.ceil(options.timeoutMs / 1000))}s`);
     }
+    args.push("--print", options.prompt);
+    const timeoutCommand = [
+      options.binary,
+      ...args.map((arg, index) => (args[index - 1] === "--print" ? "[prompt redacted]" : arg)),
+    ].join(" ");
     const { stdout } = await execCliWithInput({
       execFileImpl: options.execFileImpl,
       cmd: options.binary,
@@ -73,6 +77,7 @@ export async function runAgyCli(options: ResolvedCliRunOptions): Promise<CliRunR
       env: options.env,
       cwd: isolatedCwd ?? options.cwd,
       signal: options.signal,
+      timeoutCommand,
     });
     const text = stdout.trim();
     if (!text) throw new Error("CLI returned empty output");

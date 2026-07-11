@@ -61,7 +61,15 @@ function getExecErrorMessage(error: CliExecError): string {
     : "CLI command failed";
 }
 
-function getExecCommand(error: CliExecError, cmd: string, args: string[]): string {
+function getExecCommand(
+  error: CliExecError,
+  cmd: string,
+  args: string[],
+  timeoutCommand?: string,
+): string {
+  if (typeof timeoutCommand === "string" && timeoutCommand.trim().length > 0) {
+    return timeoutCommand.trim();
+  }
   return typeof error.cmd === "string" && error.cmd.trim().length > 0
     ? error.cmd.trim()
     : [cmd, ...args].join(" ");
@@ -82,6 +90,7 @@ export async function execCliWithInput({
   env,
   cwd,
   signal,
+  timeoutCommand,
 }: {
   execFileImpl: ExecFileFn;
   cmd: string;
@@ -91,6 +100,7 @@ export async function execCliWithInput({
   env: Record<string, string | undefined>;
   cwd?: string;
   signal?: AbortSignal;
+  timeoutCommand?: string;
 }): Promise<{ stdout: string; stderr: string }> {
   return await new Promise((resolve, reject) => {
     let interruptedSignal: NodeJS.Signals | null = null;
@@ -155,7 +165,7 @@ export async function execCliWithInput({
         if (error) {
           if (isExecTimeoutError(error)) {
             const timeoutMessage =
-              `CLI command timed out after ${formatTimeoutLabel(timeoutMs)}: ${getExecCommand(error, cmd, args)}. ` +
+              `CLI command timed out after ${formatTimeoutLabel(timeoutMs)}: ${getExecCommand(error, cmd, args, timeoutCommand)}. ` +
               "Increase --timeout (e.g. 5m).";
             reject(
               new Error(formatErrorMessageWithStderr(timeoutMessage, stderrText, "\n"), {
