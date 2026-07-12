@@ -4,6 +4,7 @@
 
 ### Fixes
 
+- Antigravity CLI: pass prompts through the required print argument with platform-safe size limits and prompt-safe errors (#357, thanks @mvance).
 - Security: block private browser-media URLs in the extension and stop remote binary attachments from auto-enabling broad CLI tool permissions.
 - Loom: extract share/embed recording transcripts through yt-dlp with audio-capable format selection (#353, thanks @kartikkabadi).
 
