@@ -82,6 +82,14 @@ export async function runAgyCli(options: ResolvedCliRunOptions): Promise<CliRunR
           "Use a different CLI provider for this input or remove the NUL characters.",
       );
     }
+    if (
+      Number.isFinite(options.timeoutMs) &&
+      options.timeoutMs > 0 &&
+      !hasAnyFlag(args, ["--print-timeout", "-print-timeout"])
+    ) {
+      args.push("--print-timeout", `${Math.max(1, Math.ceil(options.timeoutMs / 1000))}s`);
+    }
+
     const { limit, type } = resolveAgyMaxPrintArgLimit(platform);
     const promptSize =
       type === "chars" ? options.prompt.length : Buffer.byteLength(options.prompt, "utf8");
@@ -100,13 +108,6 @@ export async function runAgyCli(options: ResolvedCliRunOptions): Promise<CliRunR
       printPrompt = `Read and summarize the content in ${promptUrl}`;
     }
 
-    if (
-      Number.isFinite(options.timeoutMs) &&
-      options.timeoutMs > 0 &&
-      !hasAnyFlag(args, ["--print-timeout", "-print-timeout"])
-    ) {
-      args.push("--print-timeout", `${Math.max(1, Math.ceil(options.timeoutMs / 1000))}s`);
-    }
     args.push("--print", printPrompt);
 
     const redactedCommand = [
