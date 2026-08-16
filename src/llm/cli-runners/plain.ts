@@ -108,6 +108,17 @@ export async function runAgyCli(options: ResolvedCliRunOptions): Promise<CliRunR
       printPrompt = `Read and summarize the content in ${promptUrl}`;
     }
 
+    const finalCommandSize = isWindows
+      ? estimateWindowsCommandChars([options.binary, ...args, "--print", printPrompt])
+      : Buffer.byteLength([options.binary, ...args, "--print", printPrompt].join(" "), "utf-8");
+
+    if (finalCommandSize > limit) {
+      throw new Error(
+        `Antigravity CLI requires --print <prompt> and cannot safely receive large prompts over argv (${finalCommandSize} ${type}). ` +
+          "Use a different CLI provider for this input, reduce extracted content, or update agy to support stdin/file input.",
+      );
+    }
+
     args.push("--print", printPrompt);
 
     const redactedCommand = [

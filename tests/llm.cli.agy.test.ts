@@ -478,4 +478,23 @@ describe("runCliModel - agy provider", () => {
     });
     expect(seen[0]?.[0]).toBe("--no-color");
   });
+
+  it("throws limit error if extraArgs alone exceed command limit after offload", async () => {
+    const execFileImpl = vi.fn() as unknown as ExecFileFn;
+    const hugeExtraArgs = ["--extra-flag=" + "x".repeat(150 * 1024)];
+
+    await expect(
+      runCliModel({
+        provider: "agy",
+        prompt: "short prompt",
+        model: null,
+        allowTools: false,
+        timeoutMs: 1000,
+        env: {},
+        execFileImpl,
+        config: { agy: { extraArgs: hugeExtraArgs } },
+      }),
+    ).rejects.toThrow(/cannot safely receive large prompts over argv/);
+    expect(execFileImpl).not.toHaveBeenCalled();
+  });
 });
