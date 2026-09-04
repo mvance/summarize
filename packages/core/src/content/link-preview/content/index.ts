@@ -438,7 +438,7 @@ export async function fetchLinkContent(
   };
 
   const syndicationResult = await attemptTwitterSyndication();
-  if (syndicationResult && !isBlockedTwitterContent(syndicationResult.content)) {
+  if (syndicationResult) {
     return syndicationResult;
   }
 
