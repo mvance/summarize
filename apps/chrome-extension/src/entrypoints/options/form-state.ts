@@ -1,7 +1,8 @@
 import { readPresetOrCustomValue, resolvePresetOrCustom } from "../../lib/combo";
-import type { DirectProvider, Settings, SlideRuntime, SummaryRuntime } from "../../lib/settings";
+import type { createModelPresetsController } from "../../lib/model-presets";
+import { normalizeSettingChoices, type DirectProvider, type Settings } from "../../lib/settings";
 import type { ColorMode, ColorScheme } from "../../lib/theme";
-import type { createModelPresetsController } from "./model-presets";
+import type { BooleanSettingsState } from "./boolean-settings";
 
 type FormElements = {
   tokenEl: HTMLInputElement;
@@ -28,20 +29,6 @@ type FormElements = {
   fontSizeEl: HTMLInputElement;
 };
 
-type BooleanFormState = {
-  autoSummarize: boolean;
-  hoverSummaries: boolean;
-  chatEnabled: boolean;
-  automationEnabled: boolean;
-  slidesParallel: boolean;
-  slideRuntime: SlideRuntime;
-  summaryRuntime: SummaryRuntime;
-  slidesOcrEnabled: boolean;
-  summaryTimestamps: boolean;
-  extendedLogging: boolean;
-  autoCliFallback: boolean;
-};
-
 export function buildSavedOptionsSettings({
   current,
   defaults,
@@ -55,13 +42,14 @@ export function buildSavedOptionsSettings({
   defaults: Settings;
   elements: FormElements;
   modelPresets: ReturnType<typeof createModelPresetsController>;
-  booleans: BooleanFormState;
+  booleans: BooleanSettingsState;
   currentScheme: ColorScheme;
   currentMode: ColorMode;
 }): Settings {
   return {
     token: elements.tokenEl.value || defaults.token,
     daemonPort: elements.daemonPortEl.value || defaults.daemonPort,
+    daemonHintDismissed: current.daemonHintDismissed,
     summaryRuntime: booleans.summaryRuntime,
     provider: elements.providerEl.value as DirectProvider,
     providerApiKeys: {
@@ -95,12 +83,14 @@ export function buildSavedOptionsSettings({
     autoCliFallback: booleans.autoCliFallback,
     autoCliOrder: elements.autoCliOrderEl.value || defaults.autoCliOrder,
     maxChars: Number(elements.maxCharsEl.value) || defaults.maxChars,
-    requestMode: elements.requestModeEl.value || defaults.requestMode,
-    firecrawlMode: elements.firecrawlModeEl.value || defaults.firecrawlMode,
-    markdownMode: elements.markdownModeEl.value || defaults.markdownMode,
-    preprocessMode: elements.preprocessModeEl.value || defaults.preprocessMode,
-    youtubeMode: elements.youtubeModeEl.value || defaults.youtubeMode,
-    transcriber: elements.transcriberEl.value || defaults.transcriber,
+    ...normalizeSettingChoices({
+      requestMode: elements.requestModeEl.value || defaults.requestMode,
+      firecrawlMode: elements.firecrawlModeEl.value || defaults.firecrawlMode,
+      markdownMode: elements.markdownModeEl.value || defaults.markdownMode,
+      preprocessMode: elements.preprocessModeEl.value || defaults.preprocessMode,
+      youtubeMode: elements.youtubeModeEl.value || defaults.youtubeMode,
+      transcriber: elements.transcriberEl.value || defaults.transcriber,
+    }),
     timeout: elements.timeoutEl.value || defaults.timeout,
     retries: (() => {
       const raw = elements.retriesEl.value.trim();
@@ -125,7 +115,7 @@ export function applyLoadedOptionsSettings({
 }: {
   settings: Settings;
   defaults: Settings;
-  languagePresets: string[];
+  languagePresets: readonly string[];
   elements: FormElements;
 }) {
   elements.tokenEl.value = settings.token;

@@ -21,6 +21,7 @@ read_when:
 
 ## CLI behavior
 
+- RSS and Atom feed URLs use the podcast/content pipeline rather than raw XML file handling. Published feed transcripts take precedence over media transcription; ordinary XML documents remain file inputs.
 - `--video-mode transcript` prefers transcript-first media handling even when a page has text.
 - Direct media URLs (mp4/webm/m4a/etc) skip HTML and transcribe.
 - Local audio/video files are routed through the same transcript-first pipeline.
@@ -37,6 +38,7 @@ read_when:
 
 ## Shared helpers
 
+- Transcription normalizes file and byte inputs into one run with shared settings and accumulated notes. Local and remote providers share dispatch and result handling; native-file providers keep lazy file access. Groq/OpenAI share decode retries, while upload limits, chunking, and preservation of full input for later providers remain explicit source-specific policies.
 - Direct media classification lives in `packages/core/src/content/direct-media.ts`.
 - Local path/`file://` normalization + mtime lookup lives in `packages/core/src/content/local-file.ts`.
 - Slides, URL extraction, and transcription should reuse those helpers instead of re-parsing extensions separately.
