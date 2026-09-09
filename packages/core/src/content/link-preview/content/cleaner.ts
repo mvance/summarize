@@ -24,16 +24,24 @@ export function normalizeWhitespace(input: string): string {
     .trim();
 }
 
+const HTML_ENTITIES: Record<string, string> = {
+  "&amp;": "&",
+  "&lt;": "<",
+  "&gt;": ">",
+  "&quot;": '"',
+  "&#39;": "'",
+  "&#x27;": "'",
+  "&#x2F;": "/",
+  "&nbsp;": " ",
+};
+
+// Decode in a single pass. Chained replaceAll calls decoded "&amp;" first, so a
+// single-escaped "&amp;lt;" became "&lt;" and the next call decoded it again to "<".
 export function decodeHtmlEntities(input: string): string {
-  return input
-    .replaceAll("&amp;", "&")
-    .replaceAll("&lt;", "<")
-    .replaceAll("&gt;", ">")
-    .replaceAll("&quot;", '"')
-    .replaceAll("&#39;", "'")
-    .replaceAll("&#x27;", "'")
-    .replaceAll("&#x2F;", "/")
-    .replaceAll("&nbsp;", " ");
+  return input.replaceAll(
+    /&(?:amp|lt|gt|quot|nbsp|#39|#x27|#x2F);/g,
+    (entity) => HTML_ENTITIES[entity] ?? entity,
+  );
 }
 
 export function stripInvisibleUnicode(input: string): string {
@@ -64,6 +72,10 @@ export function clipAtSentenceBoundary(input: string, maxLength: number): string
   );
   if (lastSentenceBreak > maxLength * 0.5) {
     return slice.slice(0, lastSentenceBreak + 1);
+  }
+  const lastCodeUnit = slice.charCodeAt(slice.length - 1);
+  if (lastCodeUnit >= 0xd800 && lastCodeUnit <= 0xdbff) {
+    return slice.slice(0, -1);
   }
   return slice;
 }

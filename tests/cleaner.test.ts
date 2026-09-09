@@ -27,6 +27,17 @@ describe("content cleaner utilities", () => {
     expect(decodeHtmlEntities("&lt;tag&gt; &amp; &#39;x&#39;")).toBe("<tag> & 'x'");
   });
 
+  it("decodes each entity once, so an escaped entity stays escaped", () => {
+    expect(decodeHtmlEntities("&amp;lt;div&amp;gt;")).toBe("&lt;div&gt;");
+    expect(decodeHtmlEntities("&amp;quot;x&amp;quot;")).toBe("&quot;x&quot;");
+    expect(decodeHtmlEntities("&amp;nbsp;")).toBe("&nbsp;");
+    expect(decodeHtmlEntities("&amp;amp;")).toBe("&amp;");
+  });
+
+  it("leaves unknown entities untouched", () => {
+    expect(decodeHtmlEntities("&copy; &unknown; 5 &lt; 6")).toBe("&copy; &unknown; 5 < 6");
+  });
+
   it("normalizes candidates", () => {
     expect(normalizeCandidate(null)).toBeNull();
     expect(normalizeCandidate("   ")).toBeNull();
@@ -40,6 +51,18 @@ describe("content cleaner utilities", () => {
     expect(clipAtSentenceBoundary(input, 200)).toBe(input);
   });
 
+  it("keeps clipped content well-formed at a surrogate pair", () => {
+    const input = `${"x".repeat(80)}\u{1F600} and more trailing text here`;
+    const result = clipAtSentenceBoundary(input, 81);
+    expect(result.isWellFormed()).toBe(true);
+    expect(result).toBe("x".repeat(80));
+    expect(clipAtSentenceBoundary(input, 82)).toBe(`${"x".repeat(80)}\u{1F600}`);
+  });
+
+  it("preserves plain BMP truncation", () => {
+    expect(clipAtSentenceBoundary("abcdefgh", 5)).toBe("abcde");
+  });
+
   it("applies a content budget and counts words", () => {
     const content = "Hello world. This is a test.";
     const result = applyContentBudget(content, 10);
@@ -47,6 +70,11 @@ describe("content cleaner utilities", () => {
     expect(result.totalCharacters).toBe(content.length);
     expect(result.content.length).toBeLessThanOrEqual(10);
     expect(result.wordCount).toBeGreaterThan(0);
+  });
+
+  it("keeps budgeted content well-formed at a surrogate pair", () => {
+    const input = `${"x".repeat(80)}\u{1F600} and more trailing text here`;
+    expect(applyContentBudget(input, 81).content.isWellFormed()).toBe(true);
   });
 
   it("keeps content when under budget and reports empty word count", () => {

@@ -1,6 +1,6 @@
 {
   "name": "@steipete/summarize",
-  "version": "0.21.11",
+  "version": "0.21.13",
   "description": "Link → clean text → summary.",
   "bin": {
     "summarize": "./dist/cli.js",
@@ -57,35 +57,35 @@
     "test:coverage": "vitest run --coverage",
     "test:coverage:build": "pnpm build && pnpm test:coverage",
     "test:extension-e2e": "pnpm -C apps/chrome-extension test:e2e",
-    "typecheck": "pnpm -C packages/core typecheck && tsc -p tsconfig.build.json --noEmit"
+    "typecheck": "pnpm -C packages/core typecheck && tsc -p tsconfig.build.json --noEmit && pnpm -C apps/chrome-extension typecheck"
   },
   "dependencies": {
-    "@earendil-works/pi-ai": "^0.83.0",
+    "@earendil-works/pi-ai": "^0.84.4",
     "@steipete/summarize-core": "workspace:*",
     "bpe-lite": "^0.5.2",
     "commander": "^15.0.0",
-    "file-type": "^22.0.1",
+    "file-type": "^22.0.2",
     "json5": "^2.2.3",
     "markdansi": "^0.3.3",
     "mime": "^4.1.0",
-    "osc-progress": "^0.3.2",
-    "tokentally": "^0.1.3",
-    "undici": "8.10.0"
+    "osc-progress": "^0.3.3",
+    "tokentally": "^0.1.4",
+    "undici": "8.10.1"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",
     "@types/sanitize-html": "^2.16.1",
-    "@vitest/coverage-v8": "^4.1.10",
-    "happy-dom": "^20.11.1",
-    "oxc-parser": "^0.143.0",
-    "oxfmt": "0.62.0",
-    "oxlint": "^1.77.0",
+    "@vitest/coverage-v8": "^4.1.11",
+    "happy-dom": "^20.12.0",
+    "oxc-parser": "^0.147.0",
+    "oxfmt": "0.65.0",
+    "oxlint": "^1.80.0",
     "oxlint-tsgolint": "^7.0.2001",
     "typescript": "^7.0.2",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   },
   "engines": {
     "node": ">=24"
   },
-  "packageManager": "pnpm@11.20.0"
+  "packageManager": "pnpm@11.25.0"
 }
