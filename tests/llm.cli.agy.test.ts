@@ -356,8 +356,7 @@ describe("runCliModel - agy provider", () => {
     await expect(
       runCliModel({
         provider: "agy",
-        // The original prompt fits; the text-only guidance pushes the sent prompt over the limit.
-        prompt: "x".repeat(resolveAgyMaxPrintArgLimit().limit - 1),
+        prompt: "x".repeat(resolveAgyMaxPrintArgLimit().limit + 1),
         model: null,
         allowTools: false,
         timeoutMs: 1000,
@@ -367,6 +366,29 @@ describe("runCliModel - agy provider", () => {
       }),
     ).rejects.toThrow(/cannot safely receive large prompts over argv/);
     expect(called).toBe(false);
+  });
+
+  it("accepts text-only prompts up to the exact max print arg limit", async () => {
+    let called = false;
+    const execFileImpl: ExecFileFn = ((_cmd, _args, _options, cb) => {
+      called = true;
+      cb?.(null, "ok", "");
+      return {
+        stdin: { write: () => {}, end: () => {} },
+      } as unknown as ReturnType<ExecFileFn>;
+    }) as ExecFileFn;
+
+    await runCliModel({
+      provider: "agy",
+      prompt: "x".repeat(resolveAgyMaxPrintArgLimit().limit),
+      model: null,
+      allowTools: false,
+      timeoutMs: 1000,
+      env: {},
+      execFileImpl,
+      config: null,
+    });
+    expect(called).toBe(true);
   });
 
   it("rejects NUL-containing agy prompts before passing them through argv", async () => {
