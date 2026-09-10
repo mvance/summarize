@@ -80,18 +80,19 @@ export async function runAgyCli(options: ResolvedCliRunOptions): Promise<CliRunR
           "Use a different CLI provider for this input or remove the NUL characters.",
       );
     }
+    const { limit, type } = resolveAgyMaxPrintArgLimit(platform);
+    const userPromptSize =
+      type === "chars" ? options.prompt.length : Buffer.byteLength(options.prompt, "utf8");
+    if (userPromptSize > limit) {
+      throw new Error(
+        `Antigravity CLI requires --print <prompt> and cannot safely receive large prompts over argv (${userPromptSize} ${type}). ` +
+          "Use a different CLI provider for this input, reduce extracted content, or update agy to support stdin/file input.",
+      );
+    }
     let prompt = options.prompt;
     if (!options.allowTools) {
       prompt +=
         "\n\nIMPORTANT: Do not use tools or create files. Do not include local file links or work-log narration. Return only the final text response.";
-    }
-    const { limit, type } = resolveAgyMaxPrintArgLimit(platform);
-    const promptSize = type === "chars" ? prompt.length : Buffer.byteLength(prompt, "utf8");
-    if (promptSize > limit) {
-      throw new Error(
-        `Antigravity CLI requires --print <prompt> and cannot safely receive large prompts over argv (${promptSize} ${type}). ` +
-          "Use a different CLI provider for this input, reduce extracted content, or update agy to support stdin/file input.",
-      );
     }
     if (
       Number.isFinite(options.timeoutMs) &&
