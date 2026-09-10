@@ -136,10 +136,10 @@ export async function runAgyCli(options: ResolvedCliRunOptions): Promise<CliRunR
       await fs.writeFile(documentPath, payloadToSave, { mode: 0o600, encoding: "utf-8" });
       const documentUrl = pathToFileURL(documentPath).href;
 
-      const fileInstruction = `Summarize the content in ${documentUrl}`;
-      printPrompt = promptInstructions
-        ? `${promptInstructions}\n\n${fileInstruction}${noToolsGuidance}`
-        : `${fileInstruction}${noToolsGuidance}`;
+      const fileInstruction = promptInstructions
+        ? `${promptInstructions}\n\nSummarize the content in ${documentUrl}`
+        : `Fulfill the request and process the content in ${documentUrl}`;
+      printPrompt = `${fileInstruction}${noToolsGuidance}`;
     }
 
     const finalCommandSize = isWindows

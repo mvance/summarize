@@ -328,7 +328,9 @@ describe("runCliModel - agy provider", () => {
     const printIdx = seenArgs.indexOf("--print");
     expect(printIdx).toBeGreaterThanOrEqual(0);
     const printVal = seenArgs[printIdx + 1];
-    expect(printVal).toMatch(/Summarize the content in file:\/\/\/.+\/document\.txt/);
+    expect(printVal).toMatch(
+      /(?:Summarize|Fulfill the request and process) the content in file:\/\/\/.+\/document\.txt/,
+    );
     expect(seenCwd).toContain("summarize-agy-");
   });
 
@@ -493,7 +495,9 @@ describe("runCliModel - agy provider", () => {
     const execFileImpl: ExecFileFn = ((_cmd, args, _options, cb) => {
       const printIdx = args.indexOf("--print");
       const printVal = args[printIdx + 1];
-      const match = printVal.match(/^Summarize the content in (file:\/\/.+?\bdocument\.txt)/);
+      const match = printVal.match(
+        /^(?:Summarize|Fulfill the request and process) the content in (file:\/\/.+?\bdocument\.txt)/,
+      );
       if (match) {
         promptFilePath = fileURLToPath(match[1]);
         fileContentReadDuringExec = fsSync.readFileSync(promptFilePath, "utf-8");
@@ -525,7 +529,9 @@ describe("runCliModel - agy provider", () => {
     const execFileImpl: ExecFileFn = ((_cmd, args, _options, cb) => {
       const printIdx = args.indexOf("--print");
       const printVal = args[printIdx + 1];
-      const match = printVal.match(/^Summarize the content in (file:\/\/.+?\bdocument\.txt)/);
+      const match = printVal.match(
+        /^(?:Summarize|Fulfill the request and process) the content in (file:\/\/.+?\bdocument\.txt)/,
+      );
       if (match) {
         promptFilePath = fileURLToPath(match[1]);
       }
@@ -556,7 +562,9 @@ describe("runCliModel - agy provider", () => {
     const execFileImpl: ExecFileFn = ((_cmd, args, _options, cb) => {
       const printIdx = args.indexOf("--print");
       const printVal = args[printIdx + 1];
-      const match = printVal.match(/^Summarize the content in (file:\/\/.+?\bdocument\.txt)/);
+      const match = printVal.match(
+        /^(?:Summarize|Fulfill the request and process) the content in (file:\/\/.+?\bdocument\.txt)/,
+      );
       if (match) {
         promptFilePath = fileURLToPath(match[1]);
       }
@@ -577,6 +585,31 @@ describe("runCliModel - agy provider", () => {
 
     expect(promptFilePath).toContain("summarize-agy-prompt-");
     expect(fsSync.existsSync(promptFilePath)).toBe(false);
+  });
+
+  it("preserves chat task instructions when offloading untagged prompts", async () => {
+    let printVal = "";
+    const largeUntaggedPrompt = "Translate the following document to Spanish: " + "X".repeat(150 * 1024);
+    const execFileImpl: ExecFileFn = ((_cmd, args, _options, cb) => {
+      const printIdx = args.indexOf("--print");
+      printVal = args[printIdx + 1];
+      cb?.(null, "ok", "");
+      return { stdin: { write: () => {}, end: () => {} } } as unknown as ReturnType<ExecFileFn>;
+    }) as ExecFileFn;
+
+    await runCliModel({
+      provider: "agy",
+      prompt: largeUntaggedPrompt,
+      model: null,
+      allowTools: false,
+      timeoutMs: 1000,
+      env: {},
+      execFileImpl,
+      config: null,
+    });
+
+    expect(printVal).toContain("Fulfill the request and process the content in file://");
+    expect(printVal).not.toContain("Summarize the content in");
   });
 
   it("throws limit error if extraArgs alone exceed command limit after offload", async () => {
