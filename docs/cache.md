@@ -10,6 +10,8 @@ read_when:
 
 Lightweight, CLI-only SQLite cache. Single DB file.
 
+`src/cache.ts` exposes cache configuration, keys, and maintenance operations. `cache-store.ts` owns SQLite rows, eviction, slide-file cleanup, and the transcript adapter; `cache-database.ts` isolates the Node/Bun database binding. Versioned key construction lives in `cache-keys.ts`.
+
 ## Goals
 
 - Avoid repeated transcripts/extractions/summaries.
@@ -96,6 +98,7 @@ Media cache eviction:
 
 ## Notes
 
-- No extension cache (daemon uses CLI cache).
+- Core owns the transcript-source inventory used by both extraction and SQLite reads, including embedded captions and native YouTube media. Cache hits retain their original source diagnostics.
+- The extension has a separate browser panel cache in `chrome.storage.local`: URL-keyed entries use a 30-day TTL and an 8 MB size limit. It shares portable row formatting with core; daemon extraction and summary caches still use SQLite.
 - No third-party SQLite deps.
 - Transcript namespace currently includes the YouTube mode (e.g. `yt:auto`, `yt:web`).

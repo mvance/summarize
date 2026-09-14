@@ -1,16 +1,15 @@
 import { buildBrowserAiSummaryMarkdown } from "../../lib/browser-summary";
 import { logExtensionEvent } from "../../lib/extension-logs";
 import type { BgToPanel } from "../../lib/panel-contracts";
+import { panelUrlsMatch } from "../../lib/panel-url";
 import type { BrowserAiRequestKey } from "./browser-ai-summary-runtime";
-import type { PanelStateAction } from "./panel-state-store";
-import { panelUrlsMatch } from "./session-policy";
 import type { PanelState } from "./types";
 
 type BrowserSummarySnapshot = Extract<BgToPanel, { type: "run:snapshot" }>;
 
 export function createBrowserAiSnapshotRuntime(options: {
   panelState: PanelState;
-  dispatchPanelState: (action: PanelStateAction) => void;
+
   browserAi: {
     cancel: (requestKey?: BrowserAiRequestKey) => void;
     summarize: (options: {
@@ -25,11 +24,12 @@ export function createBrowserAiSnapshotRuntime(options: {
       options.browserAi.cancel("summary");
       return;
     }
+    const browserAi = snapshot.browserAi;
     const runId = snapshot.run.id;
     const runUrl = snapshot.run.url;
     void options.browserAi
       .summarize({
-        input: snapshot.browserAi,
+        input: browserAi,
         context: snapshot.run.title
           ? `Summarize the page or media titled "${snapshot.run.title}".`
           : undefined,
@@ -55,19 +55,16 @@ export function createBrowserAiSnapshotRuntime(options: {
           });
           return;
         }
-        options.dispatchPanelState({
-          type: "meta",
-          meta: {
-            ...options.panelState.lastMeta,
-            model: "Gemini Nano",
-            modelLabel: "Gemini Nano",
-          },
-        });
+        options.panelState.lastMeta = {
+          ...options.panelState.lastMeta,
+          model: "Gemini Nano",
+          modelLabel: "Gemini Nano",
+        };
         options.renderMarkdown(
           buildBrowserAiSummaryMarkdown({
             title: snapshot.run.title,
             summary,
-            keyMoments: snapshot.browserAi.keyMoments,
+            keyMoments: browserAi.keyMoments,
           }),
         );
       });

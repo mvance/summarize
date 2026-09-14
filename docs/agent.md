@@ -15,7 +15,7 @@ Scope:
 - **Off (default):** chat is Q&A only (no tools).
 - **On:** chat runs a tool-capable agent for web automation.
 
-Explicit exclusions (per product direction): **no update checker**, **no tutorial/welcome flow**, **no proxy config**, **no API key dialog**. All model calls go through the **local daemon**.
+This document describes **Daemon mode**, where model calls go through the local daemon. In **Direct mode**, a configured provider can also support chat and automation without a daemon; see [the extension guide](chrome-extension.md).
 
 ## Architecture (High Level)
 
@@ -23,6 +23,10 @@ Explicit exclusions (per product direction): **no update checker**, **no tutoria
 2. **Background** handles tab data, extraction, and tool execution.
 3. **Content scripts** handle element picking and native-input bridge.
 4. **Daemon** provides `/v1/agent` (SSE stream of chunks + final assistant message).
+
+Chat-only Q&A and automation use this same endpoint and implementation. The automation flag selects the prompt and available tools; there is no separate chat execution pipeline.
+
+The daemon prepares message history, tools, prompts, model selection, and CLI execution once for both SSE and JSON responses. Native completion and streaming retain separate retry policies: streaming may retry the compatibility model only before emitting text.
 
 ### Data Flow (Agent Loop)
 
@@ -38,6 +42,8 @@ Explicit exclusions (per product direction): **no update checker**, **no tutoria
 
 The daemon **never** executes tools. It only returns the next assistant message.
 
+Service installation keeps launchd, systemd, and Scheduled Task policy in separate adapters. They share command output/error normalization in `src/daemon/command.ts`; only Windows commands request hidden windows. Executable overrides use the application environment resolver, while public JSON environment output retains its explicit whitelist.
+
 ## Settings + Permissions
 
 ### Settings
@@ -51,7 +57,7 @@ The daemon **never** executes tools. It only returns the next assistant message.
 
 Defined in `apps/chrome-extension/wxt.config.ts`:
 
-- `userScripts` – optional; requested via Options for `browserjs()` main-world script execution.
+- `userScripts` – optional; requested via Options for `browserjs()` page-context script execution.
 - `debugger` – required only in `build:automation` for **native input** and the **debugger** tool.
 
 Neither permission is needed for summarization. The standard Chrome build omits `debugger` because
@@ -59,6 +65,8 @@ Neither permission is needed for summarization. The standard Chrome build omits 
 and it hides debugger-backed tools. The separate automation build declares it as required.
 
 #### Chrome: enable User Scripts (if needed)
+
+Immediate `browserjs()` execution requires [Chrome 135+](https://developer.chrome.com/docs/extensions/reference/api/userScripts#method-execute). The extension installation minimum remains Chrome 120+.
 
 1. `chrome://extensions`
 2. Open extension details
@@ -200,7 +208,7 @@ REPL environment:
 
 - Runs in a **sandboxed iframe** (no DOM access to the panel).
 - `browserjs(fn, ...args)` runs the function **in the page context**.
-  - Uses `chrome.userScripts.execute` in the main world.
+  - Uses `chrome.userScripts.execute` (Chrome 135+) for page-context execution.
 - `navigate({ url })` available inside the REPL (always use for navigation).
 - `sleep(ms)` helper.
 - Console output is captured and returned; return values are appended as `=> value`.

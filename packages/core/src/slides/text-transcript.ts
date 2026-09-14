@@ -27,7 +27,7 @@ const SLIDE_WINDOW_SECONDS_MAX = 180;
 const clampNumber = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
 
-function parseTimestampSeconds(value: string): number | null {
+export function parseTimestampSeconds(value: string): number | null {
   const rawParts = value.split(":").map((item) => item.trim());
   if (rawParts.length !== 2 && rawParts.length !== 3) return null;
   if (rawParts.some((item) => !/^\d+$/.test(item))) return null;
@@ -38,21 +38,21 @@ function parseTimestampSeconds(value: string): number | null {
     if (seconds >= 60) return null;
     return minutes * 60 + seconds;
   }
-  if (parts.length === 3) {
-    const [hours, minutes, seconds] = parts;
-    if (minutes >= 60 || seconds >= 60) return null;
-    return hours * 3600 + minutes * 60 + seconds;
-  }
-  return null;
+  const [hours, minutes, seconds] = parts;
+  if (minutes >= 60 || seconds >= 60) return null;
+  return hours * 3600 + minutes * 60 + seconds;
 }
 
 function normalizeSlideText(value: string): string {
   return value.replace(/\s+/g, " ").trim();
 }
 
-function truncateSlideText(value: string, limit: number): string {
+export function truncateSlideText(value: string, limit: number): string {
   if (value.length <= limit) return value;
-  const truncated = value.slice(0, limit).trimEnd();
+  const prefix = value.slice(0, limit);
+  // A character budget can end between the UTF-16 units of an astral character.
+  const splitsSurrogatePair = (value.codePointAt(prefix.length - 1) ?? 0) > 0xffff;
+  const truncated = (splitsSurrogatePair ? prefix.slice(0, -1) : prefix).trimEnd();
   const clean = truncated.replace(/\s+\S*$/, "").trim();
   const result = clean.length > 0 ? clean : truncated.trim();
   return result.length > 0 ? `${result}...` : "";
