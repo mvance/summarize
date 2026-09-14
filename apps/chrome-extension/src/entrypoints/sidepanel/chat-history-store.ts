@@ -1,6 +1,6 @@
 import type { AgentMessage as Message } from "@steipete/summarize-core/runtime";
+import { normalizePanelUrl } from "../../lib/panel-url";
 import { compactChatHistory, type ChatHistoryLimits } from "./chat-state";
-import { normalizePanelUrl } from "./session-policy";
 import type { ChatMessage } from "./types";
 
 function getChatHistoryKey(tabId: number, url?: string | null) {
@@ -23,6 +23,30 @@ export function buildEmptyUsage() {
     cacheWrite: 0,
     totalTokens: 0,
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+  };
+}
+
+function normalizeNumbers<Field extends string>(
+  defaults: Record<Field, number>,
+  raw: unknown,
+): Record<Field, number> {
+  const source = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const normalized: Record<Field, number> = { ...source, ...defaults };
+  for (const field in defaults) {
+    const value = source[field];
+    if (typeof value === "number" && Number.isFinite(value)) normalized[field] = value;
+  }
+  return normalized;
+}
+
+function normalizeStoredUsage(raw: unknown) {
+  const { cost, ...counts } = buildEmptyUsage();
+  return {
+    ...normalizeNumbers(counts, raw),
+    cost: normalizeNumbers(
+      cost,
+      raw && typeof raw === "object" ? (raw as Record<string, unknown>).cost : null,
+    ),
   };
 }
 
@@ -50,8 +74,11 @@ export function normalizeStoredMessage(raw: Record<string, unknown>): ChatMessag
       api: typeof raw.api === "string" ? raw.api : "openai-completions",
       provider: typeof raw.provider === "string" ? raw.provider : "openai",
       model: typeof raw.model === "string" ? raw.model : "unknown",
-      usage: typeof raw.usage === "object" && raw.usage ? raw.usage : buildEmptyUsage(),
-      stopReason: typeof raw.stopReason === "string" ? raw.stopReason : "stop",
+      usage: normalizeStoredUsage(raw.usage),
+      stopReason:
+        (["stop", "length", "toolUse", "error", "aborted"] as const).find(
+          (reason) => reason === raw.stopReason,
+        ) ?? "stop",
       timestamp,
       id,
     };

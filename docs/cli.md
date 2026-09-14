@@ -103,6 +103,8 @@ Missing or disabled providers are omitted.
 
 ## Attachments (images/files)
 
+Asset extraction and summary preparation share text-size validation and Markdown conversion in `src/run/flows/asset/content.ts`. Summary preparation retains provider-specific native attachment selection and returns either an attachment prompt or inline text; extraction applies its character budget after conversion.
+
 When a CLI attempt is used for an image or non-text file, Summarize switches to a
 path-based prompt and enables the required tool flags:
 
@@ -175,7 +177,7 @@ Notes:
 - If a CLI call fails, auto mode falls back to the next candidate.
 - Cursor Agent CLI uses the `agent` binary and relies on Cursor CLI auth (login or `CURSOR_API_KEY`).
 - Antigravity CLI uses the active agy session model; `cli.agy.model` is ignored by runtime selection.
-- Antigravity normal text summaries run `agy --print <prompt>` in a temporary cwd with `--sandbox`. Because current agy print mode requires the prompt in argv, large prompts are rejected before launch using platform-specific argv limits; use another CLI/provider for large or sensitive extracted content. Attachment prompts keep the caller cwd so agy can inspect the requested path but do not auto-approve tools.
+- Antigravity normal text summaries run `agy --print <prompt>` in a temporary cwd with `--sandbox`. Because current agy print mode requires the prompt in argv, large prompts are rejected before launch using platform-specific argv limits; use another CLI/provider for large or sensitive extracted content. Attachment prompts keep the caller cwd so agy can inspect the requested path but do not auto-approve tools. Text-only prompts additionally append best-effort guidance not to use tools, create files, emit local file links, or narrate work. This steers the printed response; it is not a hard capability boundary.
 - pi runs in JSON mode (`--print --mode json`) with `--no-tools`, `--no-context-files`, `--no-extensions`, `--no-skills`, `--no-session` for isolated summarization. It receives the summarize system prompt via `--system-prompt`, the summarize prompt over stdin, and reports usage/cost via JSONL events. Use `PI_PATH` to override the binary path.
 - Codex CLI normal text summaries run isolated by default: `codex exec --ephemeral --ignore-user-config --ignore-rules -C <temp-dir> ...` with a sanitized temporary `CODEX_HOME` that carries auth only. Set `cli.codex.isolated` to `false` only when you intentionally need Codex to inherit local config/rules.
 - Gemini CLI is invoked in headless mode with `--prompt` for compatibility with current Gemini CLI releases.

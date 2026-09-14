@@ -19,7 +19,7 @@ export async function handlePanelSlidesContextRequest<Recovery, Status>(options:
     getCachedExtract: (tabId: number, url?: string | null) => CachedExtract | null;
     setCachedExtract: (tabId: number, payload: CachedExtract) => void;
   };
-  urlsMatch: typeof import("./panel-utils").urlsMatch;
+  urlsMatch: typeof import("../../lib/panel-url").panelUrlsMatch;
   send: (message: SlidesContextResponse) => void;
   fetchImpl?: typeof fetch;
   resolveLogLevel: (event: string) => "verbose" | "warn" | "error";
@@ -64,7 +64,8 @@ export async function handlePanelSlidesContextRequest<Recovery, Status>(options:
   }
 
   const canUseCache = Boolean(tab?.id && tabUrl && urlsMatch(tabUrl, targetUrl));
-  let cached = canUseCache ? panelSessionStore.getCachedExtract(tab.id, tabUrl ?? null) : null;
+  let cached =
+    canUseCache && tab?.id ? panelSessionStore.getCachedExtract(tab.id, tabUrl ?? null) : null;
   let transcriptTimedText = cached?.transcriptTimedText ?? null;
 
   if (!transcriptTimedText && settings.token.trim()) {

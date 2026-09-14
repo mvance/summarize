@@ -4,24 +4,23 @@ import { summarizeActiveTab as runPanelSummarize } from "./panel-summarize";
 
 export function createBackgroundPanelRuntime<
   Session extends {
-    windowId: number;
     port: chrome.runtime.Port;
-    activeSummaryRun: Parameters<typeof runPanelSummarize>[0]["session"]["activeSummaryRun"];
     daemonRecovery: { clearPending: () => void };
-  },
+  } & Parameters<typeof resolvePanelState>[0]["session"] &
+    Parameters<typeof runPanelSummarize>[0]["session"],
 >(options: {
   panelSessionStore: {
     isPanelOpen: (session: Session) => boolean;
-  } & Record<string, unknown>;
+  } & import("./extract-cache").CachedExtractStore;
   loadSettings: typeof import("../../lib/settings").loadSettings;
   getActiveTab: typeof import("./panel-utils").getActiveTab;
   daemonHealth: typeof import("./daemon-client").daemonHealth;
   daemonPing: typeof import("./daemon-client").daemonPing;
-  canSummarizeUrl: typeof import("./content-script-bridge").canSummarizeUrl;
-  urlsMatch: typeof import("./panel-utils").urlsMatch;
+  canSummarizeUrl: typeof import("../../lib/panel-url").isPanelContentUrl;
+  urlsMatch: typeof import("../../lib/panel-url").panelUrlsMatch;
   primeMediaHint: typeof import("./extract-cache").primeMediaHint;
   extractFromTab: typeof import("./content-script-bridge").extractFromTab;
-  buildSummarizeRequestBody: typeof import("../lib/daemon-payload").buildSummarizeRequestBody;
+  buildSummarizeRequestBody: typeof import("../../lib/daemon-payload").buildSummarizeRequestBody;
   friendlyFetchError: typeof import("./daemon-client").friendlyFetchError;
   isDaemonUnreachableError: typeof import("../../lib/daemon-recovery").isDaemonUnreachableError;
   fetchImpl: typeof fetch;
