@@ -1,6 +1,8 @@
 import fsSync from "node:fs";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
+import { buildTaggedPrompt } from "../packages/core/src/prompts/format.js";
 import {
   AGY_NO_TOOLS_GUIDANCE,
   estimateWindowsCommandChars,
@@ -89,7 +91,7 @@ describe("runCliModel - agy provider", () => {
     expect(printIdx).toBeGreaterThanOrEqual(0);
     const sentPrompt = seen[0][printIdx + 1];
     expect(sentPrompt).toContain("Summarize this.");
-    expect(sentPrompt).toMatch(/do not create or edit files/i);
+    expect(sentPrompt).toMatch(/do not use tools or create files/i);
     expect(sentPrompt).toMatch(/do not include local file links or work-log narration/i);
     expect(sentPrompt).toMatch(/return only the final text response/i);
     expect(seen[0]).toContain("--sandbox");
@@ -300,6 +302,56 @@ describe("runCliModel - agy provider", () => {
     expect((error as Error & { cause?: unknown }).cause).toBeUndefined();
   });
 
+  it("instructs agy not to use tools or emit file links when allowTools is false", async () => {
+    const seen: string[][] = [];
+    const execFileImpl = makeStub((args) => {
+      seen.push(args);
+      return { stdout: "ok" };
+    });
+
+    await runCliModel({
+      provider: "agy",
+      prompt: "Summarize this page.",
+      model: null,
+      allowTools: false,
+      timeoutMs: 1000,
+      env: {},
+      execFileImpl,
+      config: null,
+    });
+
+    const args = seen[0];
+    const printIdx = args.indexOf("--print");
+    const sentPrompt = args[printIdx + 1];
+    expect(sentPrompt).toContain("Summarize this page.");
+    expect(sentPrompt).toMatch(/do not use tools/i);
+    expect(sentPrompt).toMatch(/do not include local file links/i);
+    expect(sentPrompt).toMatch(/work-log narration/i);
+  });
+
+  it("does not append the no-tools instruction when allowTools is true", async () => {
+    const seen: string[][] = [];
+    const execFileImpl = makeStub((args) => {
+      seen.push(args);
+      return { stdout: "ok" };
+    });
+
+    await runCliModel({
+      provider: "agy",
+      prompt: "Summarize this page.",
+      model: null,
+      allowTools: true,
+      timeoutMs: 1000,
+      env: {},
+      execFileImpl,
+      config: null,
+    });
+
+    const args = seen[0];
+    const printIdx = args.indexOf("--print");
+    expect(args[printIdx + 1]).toBe("Summarize this page.");
+  });
+
   it("offloads oversized agy prompts (>120 KB) to a temp file with file:// reference", async () => {
     let seenArgs: string[] = [];
     let seenCwd = "";
@@ -329,9 +381,12 @@ describe("runCliModel - agy provider", () => {
     expect(printIdx).toBeGreaterThanOrEqual(0);
     const printVal = seenArgs[printIdx + 1];
     expect(printVal).toMatch(
-      /(?:Summarize|Fulfill the request and process) the content in file:\/\/\/.+\/document\.txt/,
+      /(?:Use|Fulfill the request and process) the content in file:\/\/\/.+\/document\.txt/,
     );
     expect(seenCwd).toContain("summarize-agy-");
+    expect(printVal).toContain("Only read the supplied document.");
+    expect(printVal).not.toContain("Do not use tools");
+    expect(fsSync.existsSync(seenCwd)).toBe(false);
   });
 
   it("splits XML-tagged prompt payload into document.txt while retaining instructions in --print", async () => {
@@ -368,7 +423,7 @@ describe("runCliModel - agy provider", () => {
     // Verify that instructions are retained in the --print argument
     expect(sentPrintArg).toContain("<instructions>\nSummarize carefully.\n</instructions>");
     expect(sentPrintArg).toContain("<context>\nFilename: test.txt\n</context>");
-    expect(sentPrintArg).toMatch(/Summarize the content in file:\/\/\/.+\/document\.txt/);
+    expect(sentPrintArg).toMatch(/Use the content in file:\/\/\/.+\/document\.txt/);
     // Verify that only the <content> payload is written to the file
     expect(fileContentRead).toBe(largeContent);
     expect(fileContentRead).not.toContain("<instructions>");
@@ -378,7 +433,7 @@ describe("runCliModel - agy provider", () => {
     let sentPrintArg = "";
     let fileContentRead = "";
     const instructionsWithLiteralContent =
-      "<instructions>\nRefer to the <content> tag below when summarizing.\n</instructions>\n\n<context>\nExample tag: <content>example</content>\n</context>";
+      "<instructions>\nRefer to the <content> tag below when summarizing.\n</instructions>\n\n<context>\nExample tag: &lt;content&gt;example&lt;/content&gt;\n</context>";
     const largeContent = "<content>\n" + "REAL_PAYLOAD_".repeat(10 * 1024) + "\n</content>";
     const fullTaggedPrompt = `${instructionsWithLiteralContent}\n\n${largeContent}`;
 
@@ -406,15 +461,49 @@ describe("runCliModel - agy provider", () => {
 
     expect(result.text).toBe("Summary of real payload");
     expect(sentPrintArg).toContain("Refer to the <content> tag below");
-    expect(sentPrintArg).toContain("Example tag: <content>example</content>");
+    expect(sentPrintArg).toContain("Example tag: &lt;content&gt;example&lt;/content&gt;");
     expect(fileContentRead).toBe(largeContent);
     expect(fileContentRead).not.toContain("Refer to the <content> tag");
+  });
+
+  it("offloads the real document when custom instructions contain a complete prompt example", async () => {
+    const example = buildTaggedPrompt({
+      instructions: "Example task",
+      context: "Example source",
+      content: "EXAMPLE_PAYLOAD",
+    });
+    const instructions = `Translate to Spanish. İ Example format:\n${example}`;
+    const document = "REAL_DOCUMENT_".repeat(12 * 1024);
+    const prompt = buildTaggedPrompt({ instructions, context: "Actual source", content: document });
+    let saved = "";
+    let sent = "";
+    const execFileImpl = makeStub((args) => {
+      sent = args[args.indexOf("--print") + 1];
+      saved = fsSync.readFileSync(fileURLToPath(sent.match(/file:\/\/\S+/)![0]), "utf8");
+      return { stdout: "translated" };
+    });
+    await runCliModel({
+      provider: "agy",
+      prompt,
+      model: null,
+      allowTools: false,
+      timeoutMs: 1000,
+      env: {},
+      execFileImpl,
+      config: null,
+    });
+    expect(saved).toBe(`<content>\n${document}\n</content>`);
+    expect(sent).toContain(instructions);
+    expect(sent).toContain("Use the content in");
+    expect(sent).not.toContain("REAL_DOCUMENT_");
+    expect(sent).not.toContain("Summarize the content");
   });
 
   it("preserves instructions both before and after </content> block when offloading to temp file", async () => {
     let sentPrintArg = "";
     let fileContentRead = "";
-    const prefixInstructions = "<instructions>\nHeader instruction\n</instructions>";
+    const prefixInstructions =
+      "<instructions>\nHeader instruction\n</instructions>\n\n<context>\nDocument\n</context>";
     const largeContent = "<content>\n" + "PAYLOAD_CONTENT_".repeat(10 * 1024) + "\n</content>";
     const suffixInstructions = "IMPORTANT_FOOTER: Follow formatting strictly.";
     const fullPrompt = `${prefixInstructions}\n\n${largeContent}\n\n${suffixInstructions}`;
@@ -444,7 +533,7 @@ describe("runCliModel - agy provider", () => {
     expect(result.text).toBe("Summary of full prompt");
     expect(sentPrintArg).toContain("Header instruction");
     expect(sentPrintArg).toContain("IMPORTANT_FOOTER: Follow formatting strictly.");
-    expect(sentPrintArg).toMatch(/Summarize the content in file:\/\/\/.+\/document\.txt/);
+    expect(sentPrintArg).toMatch(/Use the content in file:\/\/\/.+\/document\.txt/);
     expect(fileContentRead).toBe(largeContent);
     expect(fileContentRead).not.toContain("Header instruction");
     expect(fileContentRead).not.toContain("IMPORTANT_FOOTER");
@@ -454,7 +543,8 @@ describe("runCliModel - agy provider", () => {
     let sentPrintArg = "";
     let fileContentRead = "";
     // Dotted capital I (İ, U+0130) expands to two chars (i + combining dot) when lowercased
-    const unicodeInstructions = "<instructions>\nTurkish characters: İİİİİİİİİİ\n</instructions>";
+    const unicodeInstructions =
+      "<instructions>\nTurkish characters: İİİİİİİİİİ\n</instructions>\n\n<context>\nDocument\n</context>";
     const largeContent = "<content>\n" + "UNICODE_PAYLOAD_".repeat(10 * 1024) + "\n</content>";
     const fullPrompt = `${unicodeInstructions}\n\n${largeContent}`;
 
@@ -496,7 +586,7 @@ describe("runCliModel - agy provider", () => {
       const printIdx = args.indexOf("--print");
       const printVal = args[printIdx + 1];
       const match = printVal.match(
-        /^(?:Summarize|Fulfill the request and process) the content in (file:\/\/.+?\bdocument\.txt)/,
+        /^(?:Use|Fulfill the request and process) the content in (file:\/\/.+?\bdocument\.txt)/,
       );
       if (match) {
         promptFilePath = fileURLToPath(match[1]);
@@ -530,7 +620,7 @@ describe("runCliModel - agy provider", () => {
       const printIdx = args.indexOf("--print");
       const printVal = args[printIdx + 1];
       const match = printVal.match(
-        /^(?:Summarize|Fulfill the request and process) the content in (file:\/\/.+?\bdocument\.txt)/,
+        /^(?:Use|Fulfill the request and process) the content in (file:\/\/.+?\bdocument\.txt)/,
       );
       if (match) {
         promptFilePath = fileURLToPath(match[1]);
@@ -556,6 +646,34 @@ describe("runCliModel - agy provider", () => {
     expect(fsSync.existsSync(promptFilePath)).toBe(false);
   });
 
+  it("removes the offloaded document and its sole directory after a timeout", async () => {
+    let documentPath = "";
+    let cwd = "";
+    const execFileImpl: ExecFileFn = ((_cmd, args, options, cb) => {
+      cwd = String(options?.cwd);
+      const prompt = args[args.indexOf("--print") + 1];
+      documentPath = fileURLToPath(prompt.match(/file:\/\/\S+/)![0]);
+      expect(documentPath).toBe(path.join(cwd, "document.txt"));
+      expect(fsSync.existsSync(documentPath)).toBe(true);
+      cb?.(Object.assign(new Error("timed out"), { killed: true, signal: "SIGTERM" }), "", "");
+      return { stdin: { write: () => {}, end: () => {} } } as unknown as ReturnType<ExecFileFn>;
+    }) as ExecFileFn;
+    await expect(
+      runCliModel({
+        provider: "agy",
+        prompt: "x".repeat(150 * 1024),
+        model: null,
+        allowTools: false,
+        timeoutMs: 1000,
+        env: {},
+        execFileImpl,
+        config: null,
+      }),
+    ).rejects.toThrow(/timed out/);
+    expect(fsSync.existsSync(documentPath)).toBe(false);
+    expect(fsSync.existsSync(cwd)).toBe(false);
+  });
+
   it("offloads large agy prompts to system temp dir when allowTools is true", async () => {
     let promptFilePath = "";
     const largePrompt = "D".repeat(150 * 1024);
@@ -563,7 +681,7 @@ describe("runCliModel - agy provider", () => {
       const printIdx = args.indexOf("--print");
       const printVal = args[printIdx + 1];
       const match = printVal.match(
-        /^(?:Summarize|Fulfill the request and process) the content in (file:\/\/.+?\bdocument\.txt)/,
+        /^(?:Use|Fulfill the request and process) the content in (file:\/\/.+?\bdocument\.txt)/,
       );
       if (match) {
         promptFilePath = fileURLToPath(match[1]);
@@ -589,7 +707,8 @@ describe("runCliModel - agy provider", () => {
 
   it("preserves chat task instructions when offloading untagged prompts", async () => {
     let printVal = "";
-    const largeUntaggedPrompt = "Translate the following document to Spanish: " + "X".repeat(150 * 1024);
+    const largeUntaggedPrompt =
+      "Translate the following document to Spanish: " + "X".repeat(150 * 1024);
     const execFileImpl: ExecFileFn = ((_cmd, args, _options, cb) => {
       const printIdx = args.indexOf("--print");
       printVal = args[printIdx + 1];
@@ -610,6 +729,33 @@ describe("runCliModel - agy provider", () => {
 
     expect(printVal).toContain("Fulfill the request and process the content in file://");
     expect(printVal).not.toContain("Summarize the content in");
+  });
+
+  it.each([
+    "Translate this XML example to Spanish: <content>example</content>\n",
+    "<instructions>Translate this</instructions>\n<content>example</content>\n",
+  ])("keeps an untagged request with incidental content tags intact: %s", async (prefix) => {
+    const prompt = prefix + "DOCUMENT_".repeat(20 * 1024);
+    let saved = "";
+    let sent = "";
+    const execFileImpl = makeStub((args) => {
+      sent = args[args.indexOf("--print") + 1];
+      saved = fsSync.readFileSync(fileURLToPath(sent.match(/file:\/\/\S+/)![0]), "utf8");
+      return { stdout: "translated" };
+    });
+    await runCliModel({
+      provider: "agy",
+      prompt,
+      model: null,
+      allowTools: false,
+      timeoutMs: 1000,
+      env: {},
+      execFileImpl,
+      config: null,
+    });
+    expect(saved).toBe(prompt);
+    expect(sent).toContain("Fulfill the request and process the content in");
+    expect(sent).not.toContain("Summarize");
   });
 
   it("throws limit error if extraArgs alone exceed command limit after offload", async () => {

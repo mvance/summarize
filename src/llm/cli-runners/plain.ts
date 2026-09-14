@@ -67,26 +67,25 @@ export async function runCopilotCli(options: ResolvedCliRunOptions): Promise<Cli
   return { text, usage: null, costUsd: null };
 }
 
-function lastIndexOfCaseInsensitive(str: string, target: string): number {
-  const targetLower = target.toLowerCase();
-  for (let index = str.length - target.length; index >= 0; index -= 1) {
-    if (str.slice(index, index + target.length).toLowerCase() === targetLower) {
-      return index;
-    }
-  }
-  return -1;
-}
-
 export const AGY_NO_TOOLS_GUIDANCE =
-  "\n\nIMPORTANT: Do not create or edit files. Do not include local file links or work-log narration. Return only the final text response.";
+  "\n\nIMPORTANT: Do not use tools or create files. Do not include local file links or work-log narration. Return only the final text response.";
+
+function assembleAgyPrompt(prompt: string, allowTools: boolean, offloaded = false): string {
+  if (allowTools) return prompt;
+  return (
+    prompt +
+    (offloaded
+      ? "\n\nIMPORTANT: Only read the supplied document. Do not create or edit files. Do not include local file links or work-log narration. Return only the final text response."
+      : AGY_NO_TOOLS_GUIDANCE)
+  );
+}
 
 export async function runAgyCli(options: ResolvedCliRunOptions): Promise<CliRunResult> {
   const platform = typeof process !== "undefined" ? process.platform : "linux";
   const isWindows = platform === "win32";
-  const isolatedCwd = !options.allowTools
+  let temporaryDirectory = !options.allowTools
     ? await fs.mkdtemp(path.join(tmpdir(), "summarize-agy-"))
     : null;
-  let promptDir: string | null = null;
   try {
     const args = [...options.providerExtraArgs];
     if (!options.allowTools && !hasAnyFlag(args, ["--sandbox"])) args.push("--sandbox");
@@ -105,46 +104,37 @@ export async function runAgyCli(options: ResolvedCliRunOptions): Promise<CliRunR
       args.push("--print-timeout", `${Math.max(1, Math.ceil(options.timeoutMs / 1000))}s`);
     }
 
-    const noToolsGuidance = !options.allowTools ? AGY_NO_TOOLS_GUIDANCE : "";
+    const commandSize = (prompt: string): number => {
+      const command = [options.binary, ...args, "--print", prompt];
+      return isWindows
+        ? estimateWindowsCommandChars(command)
+        : Buffer.byteLength(command.join(" "), "utf8");
+    };
+    let printPrompt = assembleAgyPrompt(options.prompt, options.allowTools);
 
-    const fullPrompt = options.prompt + noToolsGuidance;
-    const promptSize = type === "chars" ? fullPrompt.length : Buffer.byteLength(fullPrompt, "utf8");
-    const initialCommandSize = isWindows
-      ? estimateWindowsCommandChars([options.binary, ...args, "--print", fullPrompt])
-      : Buffer.byteLength([options.binary, ...args, "--print", fullPrompt].join(" "), "utf-8");
-
-    let printPrompt = fullPrompt;
-
-    if (promptSize > limit || initialCommandSize > limit) {
-      promptDir = await fs.mkdtemp(path.join(isolatedCwd ?? tmpdir(), "summarize-agy-prompt-"));
-      const documentPath = path.join(promptDir, "document.txt");
-
-      const lastContentIdx = lastIndexOfCaseInsensitive(options.prompt, "<content");
-      const lastEndIdx = lastIndexOfCaseInsensitive(options.prompt, "</content>");
-
-      let payloadToSave = options.prompt;
-      let promptInstructions = "";
-
-      if (lastContentIdx !== -1 && lastEndIdx > lastContentIdx) {
-        const endTagLength = "</content>".length;
-        const beforeContent = options.prompt.slice(0, lastContentIdx).trim();
-        const afterContent = options.prompt.slice(lastEndIdx + endTagLength).trim();
-        promptInstructions = [beforeContent, afterContent].filter(Boolean).join("\n\n");
-        payloadToSave = options.prompt.slice(lastContentIdx, lastEndIdx + endTagLength);
-      }
+    if (commandSize(printPrompt) > limit) {
+      temporaryDirectory ??= await fs.mkdtemp(path.join(tmpdir(), "summarize-agy-prompt-"));
+      const documentPath = path.join(temporaryDirectory, "document.txt");
+      // Instructions may contain tag examples; the final context/content blocks are escaped.
+      const taggedPrompt =
+        /^(<instructions>[\s\S]*<\/instructions>\s*<context>[^<]*<\/context>\s*)(<content>[^<]*<\/content>)([\s\S]*)$/i.exec(
+          options.prompt,
+        );
+      const payloadToSave = taggedPrompt?.[2] ?? options.prompt;
+      const promptInstructions = taggedPrompt
+        ? [taggedPrompt[1].trim(), taggedPrompt[3].trim()].filter(Boolean).join("\n\n")
+        : "";
 
       await fs.writeFile(documentPath, payloadToSave, { mode: 0o600, encoding: "utf-8" });
       const documentUrl = pathToFileURL(documentPath).href;
 
       const fileInstruction = promptInstructions
-        ? `${promptInstructions}\n\nSummarize the content in ${documentUrl}`
+        ? `${promptInstructions}\n\nUse the content in ${documentUrl}`
         : `Fulfill the request and process the content in ${documentUrl}`;
-      printPrompt = `${fileInstruction}${noToolsGuidance}`;
+      printPrompt = assembleAgyPrompt(fileInstruction, options.allowTools, true);
     }
 
-    const finalCommandSize = isWindows
-      ? estimateWindowsCommandChars([options.binary, ...args, "--print", printPrompt])
-      : Buffer.byteLength([options.binary, ...args, "--print", printPrompt].join(" "), "utf-8");
+    const finalCommandSize = commandSize(printPrompt);
 
     if (finalCommandSize > limit) {
       throw new Error(
@@ -166,7 +156,7 @@ export async function runAgyCli(options: ResolvedCliRunOptions): Promise<CliRunR
       input: "",
       timeoutMs: options.timeoutMs,
       env: options.env,
-      cwd: isolatedCwd ?? options.cwd,
+      cwd: options.allowTools ? options.cwd : (temporaryDirectory ?? options.cwd),
       signal: options.signal,
       redactedCommand,
     });
@@ -174,7 +164,8 @@ export async function runAgyCli(options: ResolvedCliRunOptions): Promise<CliRunR
     if (!text) throw new Error("CLI returned empty output");
     return { text, usage: null, costUsd: null };
   } finally {
-    if (promptDir) await fs.rm(promptDir, { recursive: true, force: true }).catch(() => {});
-    if (isolatedCwd) await fs.rm(isolatedCwd, { recursive: true, force: true }).catch(() => {});
+    if (temporaryDirectory) {
+      await fs.rm(temporaryDirectory, { recursive: true, force: true }).catch(() => {});
+    }
   }
 }
