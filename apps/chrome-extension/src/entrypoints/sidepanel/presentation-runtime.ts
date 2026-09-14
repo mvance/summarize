@@ -1,6 +1,7 @@
 import MarkdownIt from "markdown-it";
 import { isGeminiNanoModel } from "../../lib/model-routing";
 import type { PanelToBg } from "../../lib/panel-contracts";
+import { panelUrlsMatch } from "../../lib/panel-url";
 import { loadSettings, patchSettings } from "../../lib/settings";
 import type { createAppearanceControls } from "./appearance-controls";
 import { createBrowserAiSummaryRuntime } from "./browser-ai-summary-runtime";
@@ -8,13 +9,12 @@ import type { SidepanelDom } from "./dom";
 import { createSidepanelFeedbackRuntime } from "./feedback-runtime";
 import type { createMetricsController } from "./metrics-controller";
 import { buildPanelCachePayload, createPanelCacheController } from "./panel-cache";
-import type { PanelStateAction } from "./panel-state-store";
+import { patchPanelState } from "./panel-state-store";
 import { createPanelPhaseRuntime } from "./phase-runtime";
 import {
   retainRenderedSlideSummary,
   selectRetainedSlideSummaryMarkdown,
 } from "./retained-slide-summary";
-import { panelUrlsMatch } from "./session-policy";
 import { friendlyFetchError } from "./setup-runtime";
 import { createSidepanelSlidesRuntime } from "./slides-runtime";
 import { createSlidesTextController } from "./slides-text-controller";
@@ -64,7 +64,7 @@ function createMarkdownRenderer() {
 export function createSidepanelPresentationRuntime({
   dom,
   panelState,
-  dispatchPanelState,
+
   appearanceControls,
   metricsController,
   resolveLocalSlides,
@@ -72,7 +72,7 @@ export function createSidepanelPresentationRuntime({
 }: {
   dom: SidepanelDom;
   panelState: PanelState;
-  dispatchPanelState: (action: PanelStateAction) => void;
+
   appearanceControls: AppearanceControls;
   metricsController: MetricsController;
   resolveLocalSlides: ResolveLocalSlides;
@@ -81,7 +81,7 @@ export function createSidepanelPresentationRuntime({
   const markdown = createMarkdownRenderer();
   const slidesTextController = createSlidesTextController({
     panelState,
-    dispatchPanelState,
+
     getSlides: () => panelState.slides?.slides ?? null,
     getLengthValue: appearanceControls.getLengthValue,
     getSlidesOcrEnabled: () => panelState.slidesSession.slidesOcrEnabled,
@@ -133,7 +133,7 @@ export function createSidepanelPresentationRuntime({
   const sendSummarize = createSummarizeCommand({
     send,
     setLastAction: (value) => {
-      dispatchPanelState({ type: "panel-session-update", value: { lastAction: value } });
+      patchPanelState(panelState, "panelSession", { lastAction: value });
     },
     clearInlineError: errorController.clearInlineError,
     getInputModeOverride: () => panelState.slidesSession.inputModeOverride,
@@ -184,12 +184,12 @@ export function createSidepanelPresentationRuntime({
     refreshSummarizeControl,
     hideSlideNotice,
     panelState,
-    dispatchPanelState,
+
     getFallbackSummaryMarkdown: () => selectRetainedSlideSummaryMarkdown(panelState),
   });
 
   const renderMarkdown = (value: string) => {
-    retainRenderedSlideSummary(panelState, dispatchPanelState, value);
+    retainRenderedSlideSummary(panelState, value);
     slidesViewRuntime.renderMarkdown(value);
   };
   let refreshBrowserAiSlides = () => {};
@@ -206,7 +206,7 @@ export function createSidepanelPresentationRuntime({
     browserAi: browserAiRuntime,
     clearSummarySource: slidesTextController.clearSummarySource,
     panelState,
-    dispatchPanelState,
+
     friendlyFetchError,
     getLengthValue: appearanceControls.getLengthValue,
     getToken: async () => (await loadSettings()).token,
@@ -236,7 +236,7 @@ export function createSidepanelPresentationRuntime({
     slidesLayoutEl: dom.slidesLayoutEl,
     slidesTextController,
     panelState,
-    dispatchPanelState,
+
     patchSettings,
     loadSettings,
     showSlideNotice,
@@ -271,7 +271,7 @@ export function createSidepanelPresentationRuntime({
 
   const phaseRuntime = createPanelPhaseRuntime({
     panelState,
-    dispatchPanelState,
+
     errorController,
     headerController,
     setSlidesBusy: slidesViewRuntime.setSlidesBusy,
@@ -281,7 +281,7 @@ export function createSidepanelPresentationRuntime({
 
   const summaryViewRuntime = createSummaryViewRuntime({
     panelState,
-    dispatchPanelState,
+
     renderEl: dom.renderEl,
     renderSlidesHostEl: dom.renderSlidesHostEl,
     renderMarkdownHostEl: dom.renderMarkdownHostEl,

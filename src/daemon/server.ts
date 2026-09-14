@@ -16,7 +16,7 @@ import { ProcessRegistry } from "./process-registry.js";
 import { handleAdminRoutes } from "./server-admin-routes.js";
 import { handleAgentRoute } from "./server-agent-route.js";
 import { authorizeDaemonRequest } from "./server-auth.js";
-import { corsHeaders, json, readCorsHeaders, text } from "./server-http.js";
+import { json, readCorsHeaders, text } from "./server-http.js";
 import { handleRefreshFreeRoute } from "./server-refresh-route.js";
 import { DaemonRuntime, resolveDaemonMaxActiveSummaries } from "./server-runtime.js";
 import { handleSessionRoutes } from "./server-session-routes.js";
@@ -33,17 +33,6 @@ export function resolveDaemonListenHost(env: Record<string, string | undefined>)
   return process.platform === "win32" && isWindowsContainerEnvironment(env)
     ? "0.0.0.0"
     : DAEMON_HOST;
-}
-
-function resolveToolPath(
-  binary: string,
-  env: Record<string, string | undefined>,
-  explicitEnvKey?: string,
-): string | null {
-  const explicit =
-    explicitEnvKey && typeof env[explicitEnvKey] === "string" ? env[explicitEnvKey]?.trim() : "";
-  if (explicit) return resolveExecutableInPath(explicit, env);
-  return resolveExecutableInPath(binary, env);
 }
 
 export function buildHealthPayload(importMetaUrl?: string) {
@@ -130,7 +119,7 @@ export async function runDaemonServer({
           daemonLogFile,
           daemonLogPaths,
           processRegistry,
-          resolveToolPath,
+          resolveToolPath: resolveExecutableInPath,
         })
       ) {
         return;
@@ -165,7 +154,7 @@ export async function runDaemonServer({
           runtime,
           port,
           daemonLogger,
-          resolveToolPath,
+          resolveToolPath: resolveExecutableInPath,
           createSessionId: randomUUID,
           onSessionEvent,
         })

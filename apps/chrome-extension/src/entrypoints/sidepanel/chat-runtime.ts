@@ -11,7 +11,7 @@ import type { ChatHistoryLimits } from "./chat-state";
 import { createChatStreamRuntime } from "./chat-stream-runtime";
 import { createChatUiRuntime } from "./chat-ui-runtime";
 import { isPanelChatAvailable } from "./panel-capabilities";
-import type { PanelStateAction } from "./panel-state-store";
+import { patchPanelState } from "./panel-state-store";
 import { parseTimestampHref } from "./timestamp-links";
 import type { ChatMessage, PanelState } from "./types";
 
@@ -28,7 +28,7 @@ type NavigationRuntime = {
 
 export function createSidepanelChatRuntime({
   panelState,
-  dispatchPanelState,
+
   markdown,
   mainEl,
   renderEl,
@@ -58,8 +58,8 @@ export function createSidepanelChatRuntime({
   seekToTimestamp,
 }: {
   panelState: PanelState;
-  dispatchPanelState: (action: PanelStateAction) => void;
-  markdown: MarkdownIt;
+
+  markdown: InstanceType<typeof MarkdownIt>;
   mainEl: HTMLElement;
   renderEl: HTMLElement;
   chatContainerEl: HTMLElement;
@@ -87,9 +87,6 @@ export function createSidepanelChatRuntime({
   renderInlineSlides: () => void;
   seekToTimestamp: (seconds: number) => void;
 }) {
-  let chatUiRuntime: ReturnType<typeof createChatUiRuntime>;
-  let automationRuntime: ReturnType<typeof createAutomationRuntime>;
-
   const wrapMessage = (message: Message): ChatMessage => ({
     ...message,
     id: crypto.randomUUID(),
@@ -104,7 +101,7 @@ export function createSidepanelChatRuntime({
     markdown,
     limits: CHAT_LIMITS,
     panelState,
-    dispatchPanelState,
+
     scrollToBottom: () => chatUiRuntime.scrollToBottom(),
     onNewContent: renderInlineSlides,
   });
@@ -126,13 +123,13 @@ export function createSidepanelChatRuntime({
 
   const chatQueueRuntime = createChatQueueRuntime({
     panelState,
-    dispatchPanelState,
+
     chatQueueEl,
     maxQueue: MAX_CHAT_QUEUE,
     setStatus,
   });
 
-  chatUiRuntime = createChatUiRuntime({
+  const chatUiRuntime = createChatUiRuntime({
     mainEl,
     chatJumpBtn,
     chatInputEl,
@@ -153,9 +150,9 @@ export function createSidepanelChatRuntime({
     resetChatSession: () => chatSession.reset(),
   });
 
-  automationRuntime = createAutomationRuntime({
+  const automationRuntime = createAutomationRuntime({
     panelState,
-    dispatchPanelState,
+
     automationNoticeActionBtn,
     automationNoticeEl,
     automationNoticeMessageEl,
@@ -172,7 +169,7 @@ export function createSidepanelChatRuntime({
     chatEnabled: () => isPanelChatAvailable(panelState),
     isChatStreaming: () => panelState.chat.streaming,
     setChatStreaming: (value) => {
-      dispatchPanelState({ type: "chat-streaming", value });
+      patchPanelState(panelState, "chat", { streaming: value });
     },
     hasUserMessages: () => chatController.hasUserMessages(),
     addUserMessage: (text) => {

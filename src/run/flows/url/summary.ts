@@ -1,8 +1,6 @@
-import { isTwitterStatusUrl, isYouTubeUrl } from "@steipete/summarize-core/content/url";
 import {
   coerceSummaryWithSlides,
   interleaveSlidesIntoTranscript,
-  normalizeSummarySlideHeadings,
 } from "@steipete/summarize-core/slides";
 import { render as renderMarkdownAnsi } from "markdansi";
 import {
@@ -19,7 +17,6 @@ import {
   resolveUrlSummaryExecution,
   type UrlSummaryResolution,
 } from "../../../engine/web-summary.js";
-import { buildRunJsonEnv } from "../../../shared/run-api-status.js";
 import { buildExtractFinishLabel, writeFinishLine } from "../../finish-line.js";
 import { writeVerbose } from "../../logging.js";
 import { prepareMarkdownForTerminal } from "../../markdown.js";
@@ -28,61 +25,23 @@ import type { UrlExtractionUi } from "./extract.js";
 import type { SlidesTerminalOutput } from "./slides-output.js";
 import { formatSourceMetricsHeader } from "./source-metrics.js";
 import { buildFinishExtras, pickModelForFinishLine } from "./summary-finish.js";
-import { buildUrlJsonInput } from "./summary-json.js";
+import { writeUrlJsonOutput } from "./summary-json.js";
 import type { UrlFlowContext } from "./types.js";
 
 type SlidesResult = Awaited<
   ReturnType<typeof import("../../../slides/index.js").extractSlidesForSource>
 >;
 
-async function writeUrlJsonOutput({
-  ctx,
-  url,
-  extracted,
-  effectiveMarkdownMode,
-  prompt,
-  slides,
-  summary,
-  llm,
-}: {
+type ExtractedUrlOutputArgs = {
   ctx: UrlFlowContext;
   url: string;
   extracted: ExtractedLinkContent;
-  effectiveMarkdownMode: "off" | "auto" | "llm" | "readability";
+  extractionUi: UrlExtractionUi;
   prompt: string;
+  effectiveMarkdownMode: "off" | "auto" | "llm" | "readability";
+  transcriptionCostLabel: string | null;
   slides?: SlidesResult | null;
-  summary: string | null;
-  llm: {
-    provider: string;
-    model: string;
-    maxCompletionTokens: number | null;
-    strategy: "single";
-  } | null;
-}): Promise<RunMetricsReport | null> {
-  const { io, flags, model, hooks } = ctx;
-  hooks.clearProgressForStdout();
-  const finishReport = flags.shouldComputeReport ? await hooks.buildReport() : null;
-  const payload = {
-    input: {
-      ...buildUrlJsonInput({
-        flags,
-        url,
-        effectiveMarkdownMode,
-        modelLabel: model.requestedModelLabel,
-      }),
-    },
-    env: buildRunJsonEnv(model.apiStatus),
-    extracted,
-    slides,
-    prompt,
-    llm,
-    metrics: flags.metricsEnabled ? finishReport : null,
-    summary,
-  };
-  io.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
-  hooks.restoreProgressAfterStdout?.();
-  return finishReport;
-}
+};
 
 async function writeUrlMetricsFinishLine({
   ctx,
@@ -137,17 +96,7 @@ async function outputSummaryFromExtractedContent({
   slides,
   footerLabel,
   verboseMessage,
-}: {
-  ctx: UrlFlowContext;
-  url: string;
-  extracted: ExtractedLinkContent;
-  extractionUi: UrlExtractionUi;
-  prompt: string;
-  effectiveMarkdownMode: "off" | "auto" | "llm" | "readability";
-  transcriptionCostLabel: string | null;
-  slides?: Awaited<
-    ReturnType<typeof import("../../../slides/index.js").extractSlidesForSource>
-  > | null;
+}: ExtractedUrlOutputArgs & {
   footerLabel?: string | null;
   verboseMessage?: string | null;
 }) {
@@ -202,17 +151,7 @@ export async function outputExtractedUrl({
   transcriptionCostLabel,
   slides,
   slidesOutput,
-}: {
-  ctx: UrlFlowContext;
-  url: string;
-  extracted: ExtractedLinkContent;
-  extractionUi: UrlExtractionUi;
-  prompt: string;
-  effectiveMarkdownMode: "off" | "auto" | "llm" | "readability";
-  transcriptionCostLabel: string | null;
-  slides?: Awaited<
-    ReturnType<typeof import("../../../slides/index.js").extractSlidesForSource>
-  > | null;
+}: ExtractedUrlOutputArgs & {
   slidesOutput?: SlidesTerminalOutput | null;
 }) {
   const { io, flags, model, hooks } = ctx;

@@ -2,9 +2,9 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { resolveExecutableInPath } from "../application/environment.js";
 import { runProcess, runWithConcurrency, type ProcessCommand } from "./process.js";
+import { calibrateSceneThreshold } from "./scene-calibration.js";
 import {
   buildSegments,
-  calibrateSceneThreshold,
   clamp,
   detectSceneTimestamps,
   parseShowinfoTimestamp,
@@ -245,9 +245,8 @@ export async function extractFramesAtTimestamps({
       ...(seekBase > 0 ? ["-ss", String(seekBase)] : []),
       "-i",
       inputPath,
-      ...(seekOffset > 0 ? ["-ss", String(seekOffset)] : []),
       "-vf",
-      "signalstats,showinfo,metadata=print",
+      `trim=start=${seekOffset},signalstats,showinfo,metadata=print`,
       "-vframes",
       "1",
       "-q:v",

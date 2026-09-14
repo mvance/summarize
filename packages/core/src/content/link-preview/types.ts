@@ -1,15 +1,17 @@
-export type TranscriptSource =
-  | "youtubei"
-  | "captionTracks"
-  | "embedded"
-  | "yt-dlp"
-  | "youtube-media"
-  | "podcastTranscript"
-  | "whisper"
-  | "apify"
-  | "html"
-  | "unavailable"
-  | "unknown";
+export const TRANSCRIPT_SOURCES = [
+  "youtubei",
+  "captionTracks",
+  "embedded",
+  "yt-dlp",
+  "youtube-media",
+  "podcastTranscript",
+  "whisper",
+  "apify",
+  "html",
+  "unavailable",
+  "unknown",
+] as const;
+export type TranscriptSource = (typeof TRANSCRIPT_SOURCES)[number];
 
 export type TranscriptSegment = {
   startMs: number;
@@ -59,7 +61,7 @@ export interface EmbeddedVideoDiagnostics {
 }
 
 export interface ContentFetchDiagnostics {
-  strategy: "bird" | "xurl" | "firecrawl" | "html" | "nitter";
+  strategy: "bird" | "xurl" | "twitter-syndication" | "nitter" | "firecrawl" | "html";
   firecrawl: FirecrawlDiagnostics;
   markdown: MarkdownDiagnostics;
   transcript: TranscriptDiagnostics;
