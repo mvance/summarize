@@ -368,27 +368,21 @@ describe("runCliModel - agy provider", () => {
     expect(called).toBe(false);
   });
 
-  it("accepts text-only prompts up to the exact max print arg limit", async () => {
-    let called = false;
-    const execFileImpl: ExecFileFn = ((_cmd, _args, _options, cb) => {
-      called = true;
-      cb?.(null, "ok", "");
-      return {
-        stdin: { write: () => {}, end: () => {} },
-      } as unknown as ReturnType<ExecFileFn>;
-    }) as ExecFileFn;
-
-    await runCliModel({
-      provider: "agy",
-      prompt: "x".repeat(resolveAgyMaxPrintArgLimit().limit),
-      model: null,
-      allowTools: false,
-      timeoutMs: 1000,
-      env: {},
-      execFileImpl,
-      config: null,
-    });
-    expect(called).toBe(true);
+  it("includes print guidance in the text-only argv size limit", async () => {
+    const execFileImpl = vi.fn() as unknown as ExecFileFn;
+    await expect(
+      runCliModel({
+        provider: "agy",
+        prompt: "x".repeat(resolveAgyMaxPrintArgLimit().limit),
+        model: null,
+        allowTools: false,
+        timeoutMs: 1000,
+        env: {},
+        execFileImpl,
+        config: null,
+      }),
+    ).rejects.toThrow(/cannot safely receive large prompts over argv/);
+    expect(execFileImpl).not.toHaveBeenCalled();
   });
 
   it("rejects NUL-containing agy prompts before passing them through argv", async () => {
